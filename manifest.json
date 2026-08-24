@@ -1,0 +1,33 @@
+{
+  "name": "Tipoff Fantasy",
+  "short_name": "Tipoff",
+  "description": "March Madness fantasy draft: pick your players, track the bracket.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#060f1c",
+  "background_color": "#060f1c",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["sports", "games"],
+  "screenshots": []
+}
