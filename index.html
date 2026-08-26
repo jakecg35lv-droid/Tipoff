@@ -81,7 +81,7 @@
         <img src="logo-icon.png" class="logo-mark" width="90" height="90" alt="Tipoff Fantasy logo" />
       </div>
       <h2 class="auth-title">Create Account</h2>
-      <p class="auth-sub">Join the madness.</p>
+      <p class="auth-sub">Join the competition.</p>
       <div class="auth-form">
         <div class="form-group">
           <label>Display Name</label>
@@ -244,7 +244,7 @@
     <div class="mm-content">
       <img class="mm-intro-logo" src="logo-icon.png" alt="Tipoff Fantasy" width="120" height="120" />
       <div class="mm-intro-title">TIPOFF FANTASY</div>
-      <div class="mm-intro-sub">Draft. Compete. Win.</div>
+      <div class="mm-intro-sub"><span>Draft.</span><span>Compete.</span><span>Win.</span></div>
     </div>
     <!-- Flash burst -->
     <div class="mm-flash"></div>
@@ -303,7 +303,7 @@
     <aside class="sidebar">
       <div class="sidebar-logo">
         <img src="logo-icon.png" class="logo-mark sidebar-logo-img" width="42" height="42" alt="Tipoff Fantasy" />
-        <span class="sidebar-logo-text">Tipoff Fantasy</span>
+        <span class="sidebar-logo-text"><strong>TIPOFF</strong><span class="slt-light">FANTASY</span></span>
       </div>
       <nav class="sidebar-nav">
         <button class="nav-btn active" data-page="home">
@@ -396,10 +396,6 @@
           </svg>
           Sign Out
         </button>
-        <div class="sidebar-theme-toggle">
-          <button class="theme-toggle-btn theme-btn-dark active" id="themeToggleDark">Dark</button>
-          <button class="theme-toggle-btn theme-btn-light" id="themeToggleLight">Light</button>
-        </div>
       </div>
     </aside>
 
@@ -449,6 +445,17 @@
 
         <!-- Tournament Banner -->
         <div id="tournamentBanner" class="tourn-banner tourn-banner--empty"></div>
+
+        <!-- Scheduled Draft Countdown -->
+        <div id="draftCountdownBanner" class="dcb" style="display:none;">
+          <div class="dcb-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="dcb-text">
+            <span class="dcb-label">Draft starts in <strong id="dcbCountdown">-</strong></span>
+            <span class="dcb-time" id="dcbTime">-</span>
+          </div>
+        </div>
 
         <!-- On the Clock hero -->
         <div class="home-hero-card">
@@ -876,7 +883,7 @@
       <section id="newsPage" class="page" style="display:none;">
         <div class="page-header news-page-header">
           <div>
-            <h2>News</h2>
+            <h2>Latest Updates</h2>
             <span class="news-subtitle" id="newsSubtitle">College Basketball</span>
           </div>
           <button class="news-refresh-btn" id="newsRefreshBtn" title="Refresh">
@@ -898,6 +905,16 @@
         <div class="page-header">
           <h2>Settings</h2>
         </div>
+
+        <!-- Account -->
+        <button class="settings-profile-row" id="settingsProfileBtn">
+          <div class="spr-avatar" id="settingsProfileAvatar"></div>
+          <div class="spr-info">
+            <span class="spr-name" id="settingsProfileName">-</span>
+            <span class="spr-sub">View and edit your profile</span>
+          </div>
+          <svg class="spr-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
 
         <!-- Scoring -->
         <div class="panel">
@@ -1039,6 +1056,34 @@
           </div>
 
           <button id="setupSaveBtn" class="btn-primary" style="margin-top:20px; width:100%;">Save Draft Setup</button>
+        </div>
+
+        <!-- Schedule Draft -->
+        <div class="panel commissioner-only">
+          <h3 class="panel-title">Schedule Draft</h3>
+          <p class="panel-sub">Set a date and time. Everyone in your league sees a countdown, and the draft room unlocks automatically when it's time.</p>
+
+          <div class="sd-current" id="sdCurrent" style="display:none;">
+            <div class="sd-current-left">
+              <span class="sd-current-label">Draft scheduled for</span>
+              <span class="sd-current-time" id="sdCurrentTime">-</span>
+              <span class="sd-countdown" id="sdCountdown"></span>
+            </div>
+            <button type="button" class="sd-clear-btn" id="sdClearBtn">Clear</button>
+          </div>
+
+          <div class="sd-inputs">
+            <div class="form-group">
+              <label>Date</label>
+              <input type="date" id="sdDateInput" />
+            </div>
+            <div class="form-group">
+              <label>Time</label>
+              <input type="time" id="sdTimeInput" />
+            </div>
+          </div>
+
+          <button id="sdSaveBtn" class="btn-primary" style="margin-top:16px; width:100%;">Schedule Draft</button>
         </div>
 
         <!-- League Management -->
@@ -1295,6 +1340,22 @@
         </button>
       </div>
       <div class="tsm-body" id="tsmBody"></div>
+    </div>
+  </div>
+
+  <!-- Bracket Preview Modal -->
+  <div id="bracketPreviewModal" class="modal-backdrop bpm-overlay" style="display:none;">
+    <div class="modal-card bpm-card">
+      <div class="bpm-header">
+        <div>
+          <h3 class="bpm-title" id="bpmTitle">Bracket</h3>
+          <p class="bpm-sub" id="bpmSub"></p>
+        </div>
+        <button class="bpm-close" id="bpmClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="bpm-body" id="bpmBody"></div>
     </div>
   </div>
 

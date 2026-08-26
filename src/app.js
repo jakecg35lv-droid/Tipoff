@@ -182,7 +182,8 @@ const defaultState = {
   prevRankings: [],
   baselineStats: {},
   selectedTournament: null,
-  maxManagers: 8
+  maxManagers: 8,
+  draftScheduledAt: null
 };
 
 let state = Object.assign({}, defaultState);
@@ -558,7 +559,7 @@ function showSplash(fromInit) {
     void intro.offsetWidth; // reflow so animations start clean
     intro.classList.add('playing');
 
-    // 2.2s = court fully drawn, baskets in, flash done
+    // 2.3s = court drawn, all three tagline words landed + brief hold
     setTimeout(function() {
       // Crisp crossfade
       intro.style.transition  = 'opacity 0.8s ease';
@@ -577,7 +578,7 @@ function showSplash(fromInit) {
         // Fire staggered element entrances now that splash is fully visible
         splash.classList.add('reveal');
       }, 850);
-    }, 2200);
+    }, 2300);
 
   } else {
     // ── No intro: fade splash in and immediately reveal elements ─
@@ -1112,6 +1113,12 @@ function renderHome() {
   if (homeUserNameEl) homeUserNameEl.textContent = session ? session.name : '-';
   const homeUserAvatarEl = document.getElementById('homeUserAvatar');
   if (homeUserAvatarEl) homeUserAvatarEl.innerHTML = makeAvatarHTML(session ? session.name : '-', 28);
+
+  // Settings profile row
+  const spName = document.getElementById('settingsProfileName');
+  if (spName) spName.textContent = session ? session.name : '-';
+  const spAvatar = document.getElementById('settingsProfileAvatar');
+  if (spAvatar) spAvatar.innerHTML = makeAvatarHTML(session ? session.name : '-', 40);
 
   // Dynamic hero label: show round/pick info
   const heroRoundLabel = document.getElementById('heroRoundLabel');
@@ -2622,11 +2629,15 @@ function renderTournaments() {
       html += '</div>';
       if (t.note) html += '<div class="tourn-card-note">' + esc(t.note) + '</div>';
       if (showTeams && t.teams && t.teams.length) {
-        html += '<div class="tourn-teams">';
-        t.teams.forEach(function(tm) {
-          html += '<span class="tourn-team-chip">' + esc(tm) + '</span>';
-        });
-        html += '</div>';
+        html += '<div class="tourn-card-actions">' +
+          '<button class="tourn-bracket-btn" data-bracket-tid="' + esc(t.id) + '">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">' +
+              '<path d="M3 5h5v5"/><path d="M3 19h5v-5"/><path d="M8 7.5h4v9h4"/><path d="M16 12h5"/>' +
+            '</svg>' +
+            ' View Bracket' +
+          '</button>' +
+          '<span class="tourn-team-count">' + t.teams.length + ' teams</span>' +
+        '</div>';
       }
       // Lock overlay for coming-soon cards
       if (t.comingSoon) {
@@ -2652,6 +2663,92 @@ function renderTournaments() {
       toast('This tournament is coming soon. Check back as the season approaches!', 'info');
     });
   });
+
+  // Wire "View Bracket" buttons
+  el.querySelectorAll('.tourn-bracket-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openBracketPreview(btn.dataset.bracketTid);
+    });
+  });
+}
+
+// ── Bracket preview modal ─────────────────────────────────
+function openBracketPreview(tid) {
+  const t = findTournamentById(tid);
+  if (!t) return;
+
+  const modal = document.getElementById('bracketPreviewModal');
+  const titleEl = document.getElementById('bpmTitle');
+  const subEl = document.getElementById('bpmSub');
+  const bodyEl = document.getElementById('bpmBody');
+  if (!modal || !bodyEl) return;
+
+  if (titleEl) titleEl.textContent = t.name;
+  if (subEl) subEl.textContent = t.dates + (t.location ? ' · ' + t.location : '');
+
+  // Seeded teams if available, else plain team list
+  const seeded = (t.seededTeams && t.seededTeams.length)
+    ? t.seededTeams
+    : (t.teams || []).map(function(name, i) { return { name: name, seed: i + 1 }; });
+
+  const n = seeded.length;
+  if (!n) {
+    bodyEl.innerHTML = '<div class="bpm-empty">Bracket not available yet.</div>';
+    modal.style.display = 'flex';
+    return;
+  }
+
+  const rounds = Math.ceil(Math.log2(n));
+  const roundNames = t.roundNames || (function() {
+    const names = [];
+    for (let r = 0; r < rounds; r++) {
+      const left = Math.pow(2, rounds - r);
+      if (left === 2) names.push('Championship');
+      else if (left === 4) names.push('Semifinals');
+      else if (left === 8) names.push('Quarterfinals');
+      else names.push('Round of ' + left);
+    }
+    return names;
+  })();
+
+  let html = '<div class="bpm-bracket">';
+  for (let r = 0; r < rounds; r++) {
+    const matches = Math.pow(2, rounds - 1 - r);
+    html += '<div class="bpm-round">';
+    html += '<div class="bpm-round-label">' + esc(roundNames[r] || ('Round ' + (r + 1))) + '</div>';
+    for (let m = 0; m < matches; m++) {
+      html += '<div class="bpm-match">';
+      for (let side = 0; side < 2; side++) {
+        if (r === 0) {
+          const idx = m * 2 + side;
+          const tm = seeded[idx];
+          if (tm) {
+            html += '<div class="bpm-team">' +
+              '<span class="bpm-seed">' + (tm.seed || '') + '</span>' +
+              getSchoolLogoHTML(tm.name, 18) +
+              '<span class="bpm-name">' + esc(tm.name) + '</span>' +
+            '</div>';
+          } else {
+            html += '<div class="bpm-team bpm-tbd"><span class="bpm-seed">-</span><span class="bpm-name">TBD</span></div>';
+          }
+        } else {
+          html += '<div class="bpm-team bpm-tbd"><span class="bpm-seed">-</span><span class="bpm-name">TBD</span></div>';
+        }
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+
+  bodyEl.innerHTML = html;
+  modal.style.display = 'flex';
+}
+
+function closeBracketPreview() {
+  const modal = document.getElementById('bracketPreviewModal');
+  if (modal) modal.style.display = 'none';
 }
 
 function renderBracket() {
@@ -2728,7 +2825,7 @@ function renderRegionSimple(content, regData, bracketData, region, customRoundNa
     html += '<div class="br-round-label">' + roundNames[rnd] + '</div>';
 
     if (!unlocked) {
-      html += '<div class="br-round-pending">Complete ' + roundNames[rnd - 1] + ' to unlock</div>';
+      html += '<div class="br-round-pending">Waiting on ' + roundNames[rnd - 1] + ' results</div>';
     } else {
       for (let m = 0; m < matchCount; m++) {
         let topTeam, botTeam;
@@ -3363,6 +3460,105 @@ function esc(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ── SCHEDULED DRAFT ───────────────────────────────────────
+function formatScheduledTime(ms) {
+  const d = new Date(ms);
+  return d.toLocaleString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit'
+  });
+}
+
+function countdownText(ms) {
+  let diff = ms - Date.now();
+  if (diff <= 0) return 'Starting now';
+  const d = Math.floor(diff / 86400000); diff -= d * 86400000;
+  const h = Math.floor(diff / 3600000);  diff -= h * 3600000;
+  const m = Math.floor(diff / 60000);    diff -= m * 60000;
+  const s = Math.floor(diff / 1000);
+  if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
+  if (h > 0) return h + 'h ' + m + 'm ' + s + 's';
+  if (m > 0) return m + 'm ' + s + 's';
+  return s + 's';
+}
+
+function renderDraftSchedule() {
+  const cur = document.getElementById('sdCurrent');
+  const timeEl = document.getElementById('sdCurrentTime');
+  const cdEl = document.getElementById('sdCountdown');
+  const saveBtn = document.getElementById('sdSaveBtn');
+  if (!cur) return;
+
+  const at = state.draftScheduledAt;
+  if (at) {
+    cur.style.display = 'flex';
+    if (timeEl) timeEl.textContent = formatScheduledTime(at);
+    if (cdEl) cdEl.textContent = countdownText(at);
+    if (saveBtn) saveBtn.textContent = 'Update Schedule';
+
+    // Prefill the inputs with the current schedule (only when untouched)
+    const dIn = document.getElementById('sdDateInput');
+    const tIn = document.getElementById('sdTimeInput');
+    const d = new Date(at);
+    const pad = function(n) { return String(n).padStart(2, '0'); };
+    if (dIn && !dIn.value) dIn.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    if (tIn && !tIn.value) tIn.value = pad(d.getHours()) + ':' + pad(d.getMinutes());
+  } else {
+    cur.style.display = 'none';
+    if (saveBtn) saveBtn.textContent = 'Schedule Draft';
+  }
+
+  // Home banner countdown
+  const banner = document.getElementById('draftCountdownBanner');
+  if (banner) {
+    if (at && !state.timerRunning && !isDraftComplete()) {
+      banner.style.display = 'flex';
+      const bt = document.getElementById('dcbTime');
+      const bc = document.getElementById('dcbCountdown');
+      if (bt) bt.textContent = formatScheduledTime(at);
+      if (bc) bc.textContent = countdownText(at);
+      banner.classList.toggle('dcb-live', Date.now() >= at);
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+}
+
+function saveDraftSchedule() {
+  const dateEl = document.getElementById('sdDateInput');
+  const timeEl = document.getElementById('sdTimeInput');
+  if (!dateEl || !timeEl) return;
+  if (!dateEl.value || !timeEl.value) {
+    toast('Pick both a date and a time.', 'error');
+    return;
+  }
+  const ms = new Date(dateEl.value + 'T' + timeEl.value).getTime();
+  if (isNaN(ms)) { toast('That date/time looks invalid.', 'error'); return; }
+  if (ms <= Date.now()) { toast('Pick a time in the future.', 'error'); return; }
+
+  state.draftScheduledAt = ms;
+  saveState();
+  renderDraftSchedule();
+  addActivity('Draft scheduled for ' + formatScheduledTime(ms));
+  toast('Draft scheduled for ' + formatScheduledTime(ms), 'success');
+}
+
+function clearDraftSchedule() {
+  state.draftScheduledAt = null;
+  saveState();
+  renderDraftSchedule();
+  toast('Draft schedule cleared.', 'info');
+}
+
+// Tick the countdowns once per second
+let _scheduleTick = null;
+function startScheduleTicker() {
+  if (_scheduleTick) return;
+  _scheduleTick = setInterval(function() {
+    if (state.draftScheduledAt) renderDraftSchedule();
+  }, 1000);
+}
+
 // ── NEWS ──────────────────────────────────────────────────
 const NEWS_API = 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/news?limit=50';
 
@@ -3407,24 +3603,43 @@ function articleTeamTag(article) {
   return 'CBB';
 }
 
-function renderNewsCard(article) {
+function renderFeaturedCard(article) {
   const title = esc(article.headline || 'Untitled');
   const desc = article.description || '';
-  const body = esc(desc.slice(0, 200)) + (desc.length > 200 ? '…' : '');
+  const body = esc(desc.slice(0, 220)) + (desc.length > 220 ? '…' : '');
+  const tag = esc(articleTeamTag(article));
+  const time = relativeTime(article.lastModified || article.published);
+  const url = (article.links && article.links.web && article.links.web.href) || '#';
+  const img = article.images && article.images[0] && article.images[0].url;
+
+  return '<a class="news-featured" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' +
+    (img ? '<div class="news-featured-img-wrap"><img class="news-featured-img" src="' + esc(img) + '" alt="" loading="lazy"><span class="news-featured-badge">Top Story</span></div>' : '') +
+    '<div class="news-featured-content">' +
+      '<div class="news-card-meta">' +
+        '<span class="news-card-tag">' + tag + '</span>' +
+        '<span class="news-card-time">' + time + '</span>' +
+      '</div>' +
+      '<div class="news-featured-title">' + title + '</div>' +
+      '<div class="news-featured-body">' + body + '</div>' +
+    '</div>' +
+  '</a>';
+}
+
+function renderNewsCard(article) {
+  const title = esc(article.headline || 'Untitled');
   const tag = esc(articleTeamTag(article));
   const time = relativeTime(article.lastModified || article.published);
   const url = (article.links && article.links.web && article.links.web.href) || '#';
   const img = article.images && article.images[0] && article.images[0].url;
 
   return '<a class="news-card" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' +
-    (img ? '<img class="news-card-img" src="' + esc(img) + '" alt="" loading="lazy">' : '') +
+    (img ? '<img class="news-card-img" src="' + esc(img) + '" alt="" loading="lazy">' : '<div class="news-card-img news-card-img--placeholder"></div>') +
     '<div class="news-card-content">' +
       '<div class="news-card-meta">' +
         '<span class="news-card-tag">' + tag + '</span>' +
         '<span class="news-card-time">' + time + '</span>' +
       '</div>' +
       '<div class="news-card-title">' + title + '</div>' +
-      '<div class="news-card-body">' + body + '</div>' +
     '</div>' +
   '</a>';
 }
@@ -3499,7 +3714,12 @@ function displayNewsArticles(articles, feed) {
     return;
   }
 
-  feed.innerHTML = filtered.map(renderNewsCard).join('');
+  // First article is featured, the rest are compact rows
+  var html = renderFeaturedCard(filtered[0]);
+  if (filtered.length > 1) {
+    html += '<div class="news-list">' + filtered.slice(1).map(renderNewsCard).join('') + '</div>';
+  }
+  feed.innerHTML = html;
 }
 
 // ── INIT ──────────────────────────────────────────────────
@@ -3777,6 +3997,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target === this) this.style.display = 'none';
   });
 
+  // Bracket preview modal
+  document.getElementById('bpmClose')?.addEventListener('click', closeBracketPreview);
+  document.getElementById('bracketPreviewModal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeBracketPreview();
+  });
+
   // Settings
   document.getElementById('saveScoringBtn')?.addEventListener('click', () => {
     const draftStarted = state.currentPickIndex > 0;
@@ -3942,21 +4168,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('homeUserChip')?.addEventListener('click', () => navigateTo('profile'));
   document.getElementById('homeNotifBtn')?.addEventListener('click', () => navigateTo('settings'));
 
-  // Sidebar theme toggle
-  const darkBtn = document.getElementById('themeToggleDark');
-  const lightBtn = document.getElementById('themeToggleLight');
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    darkBtn?.classList.toggle('active', theme === 'dark');
-    lightBtn?.classList.toggle('active', theme === 'light');
-    try { localStorage.setItem('mm_theme', theme); } catch(e) {}
-  }
-  darkBtn?.addEventListener('click', () => applyTheme('dark'));
-  lightBtn?.addEventListener('click', () => applyTheme('light'));
-  // Restore saved theme
+  // Dark theme only: clear any previously saved light-mode preference
   try {
-    const saved = localStorage.getItem('mm_theme');
-    if (saved === 'light') applyTheme('light');
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.removeItem('mm_theme');
   } catch(e) {}
 
   // Init unread badge on load
@@ -4013,6 +4228,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Mobile clock bar profile avatar → profile page
   document.getElementById('mcbProfileBtn')?.addEventListener('click', () => navigateTo('profile'));
+  document.getElementById('settingsProfileBtn')?.addEventListener('click', () => navigateTo('profile'));
+
+  // Schedule draft
+  document.getElementById('sdSaveBtn')?.addEventListener('click', saveDraftSchedule);
+  document.getElementById('sdClearBtn')?.addEventListener('click', clearDraftSchedule);
+  renderDraftSchedule();
+  startScheduleTicker();
 
   // On the clock banner → jump to draft
   document.getElementById('otcDraftBtn')?.addEventListener('click', () => navigateTo('players'));
@@ -4123,14 +4345,17 @@ function updateMobileClockBar() {
   if (!bar) return;
   const pick = currentPick();
   const mgr = document.getElementById('mcbManager');
-  if (pick) {
+
+  // Only show while a draft is actually live and someone is on the clock
+  const draftLive = state.timerRunning || !!state.pickTimerStartedAt;
+  if (pick && draftLive && !isDraftComplete()) {
     if (mgr) mgr.textContent = pick.manager;
     bar.classList.remove('mcb-idle');
+    bar.style.display = 'flex';
   } else {
-    if (mgr) mgr.textContent = isDraftComplete() ? 'Draft Complete' : 'No Draft';
-    bar.classList.add('mcb-idle');
+    bar.style.display = 'none';
   }
-  bar.style.display = 'flex'; // always visible so profile avatar is accessible
+
   updateOTCBanner(pick);
 }
 
