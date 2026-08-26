@@ -1241,7 +1241,7 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   font-family: 'Bebas Neue', sans-serif;
   font-size: 28px;
   font-weight: 900;
-  color: var(--gold);
+  color: #fff;
   letter-spacing: -0.5px;
   line-height: 1;
 }
@@ -1477,9 +1477,9 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 .hero-timer {
   font-family: 'Bebas Neue', sans-serif;
   font-size: 88px; font-weight: 900;
-  color: var(--gold); letter-spacing: -3px; line-height: 1;
+  color: #fff; letter-spacing: -3px; line-height: 1;
   margin: 16px 0 20px;
-  text-shadow: 0 0 40px rgba(246,197,78,0.35);
+  text-shadow: 0 0 40px rgba(255,255,255,0.25);
 }
 .hero-timer.urgency { animation: timer-urgent 0.6s ease-in-out infinite; }
 .hero-timer-controls { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1530,14 +1530,51 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
    DRAFT PAGE
 ═══════════════════════════════════════════════════════════ */
 /* ── Draft inner tabs (Draft Room / Player Pool) ── */
+.draft-tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
 .draft-inner-tabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 20px;
   background: var(--surface);
   border-radius: 12px;
   padding: 4px;
   width: fit-content;
+}
+.dit-autopick-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 9px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--orange);
+  background: rgba(242,107,33,0.10);
+  border: 1px solid rgba(242,107,33,0.3);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.16s, border-color 0.16s, transform 0.14s;
+}
+.dit-autopick-btn:hover {
+  background: rgba(242,107,33,0.18);
+  border-color: rgba(242,107,33,0.55);
+}
+.dit-autopick-btn:active { transform: scale(0.97); }
+@media (max-width: 560px) {
+  .draft-tabs-row { gap: 10px; }
+  .draft-inner-tabs { flex: 1; }
+  .dit-btn { flex: 1; padding: 8px 12px; }
+  .dit-autopick-btn { padding: 9px 13px; }
 }
 .dit-btn {
   padding: 8px 20px;
@@ -1573,24 +1610,45 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 .draft-hero-title { font-family: 'Inter', sans-serif; font-size: 26px; font-weight: 900; margin-bottom: 6px; letter-spacing: -0.3px; }
 .draft-hero-sub { color: var(--muted); font-size: 14px; }
 .draft-pick-card {
-  background: var(--grad-hero); border: 1px solid rgba(79,143,247,0.25);
-  border-radius: var(--radius-sm); padding: 16px 20px; min-width: 180px; text-align: right; flex-shrink: 0;
+  display: flex; align-items: center; gap: 20px;
+  background: var(--grad-hero);
+  border: 1px solid rgba(242,107,33,0.3);
+  border-radius: var(--radius-sm);
+  padding: 14px 22px; min-width: 260px; flex-shrink: 0;
 }
+.dpc-info { text-align: right; flex: 1; min-width: 0; }
 .dpc-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 4px; }
 .dpc-manager { font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 800; }
 .dpc-round { font-size: 12px; color: var(--muted); margin-top: 2px; }
-
-.draft-clock-banner {
-  display: flex; align-items: center; gap: 14px;
-  background: rgba(246,197,78,0.08); border: 1px solid rgba(246,197,78,0.2);
-  border-radius: var(--radius-sm); padding: 14px 22px; margin-bottom: 16px;
+.dpc-timer {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 40px; font-weight: 900; color: #fff;
+  letter-spacing: -1px; line-height: 1; flex-shrink: 0;
+  padding-left: 20px;
+  border-left: 1px solid rgba(255,255,255,0.1);
 }
-.dcb-name { font-weight: 700; font-size: 16px; }
-.dcb-sep { color: var(--muted); }
-.dcb-timer { font-family: 'Bebas Neue', sans-serif; font-size: 36px; font-weight: 900; color: var(--text); letter-spacing: -1px; line-height: 1; }
 
-.draft-order-strip-wrap { overflow-x: auto; margin-bottom: 20px; padding-bottom: 4px; scrollbar-width: thin; }
-.draft-order-strip { display: flex; gap: 8px; padding: 4px 2px; width: max-content; }
+.draft-order-row {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.draft-order-strip-wrap {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  display: flex;
+  align-items: stretch;
+}
+.draft-order-strip {
+  display: flex; gap: 8px; padding: 4px 2px;
+  width: max-content;
+  align-items: stretch;
+}
+.draft-order-row .draft-pick-card { align-self: stretch; }
 .doc-chip {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
   padding: 10px 14px; border-radius: var(--radius-xs);
@@ -3077,18 +3135,6 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 .toast-info    { border-left: 3px solid var(--blue); }
 .toast.toast-out { animation: toast-out 0.25s ease both; }
 
-/* ── FAB ────────────────────────────────────────────────── */
-.fab-draft {
-  position: fixed; bottom: 24px; right: 20px; z-index: 100;
-  width: 56px; height: 56px; border-radius: 50%;
-  background: var(--grad-orange); border: none; font-size: 24px;
-  display: none; align-items: center; justify-content: center; cursor: pointer;
-  box-shadow: 0 8px 24px rgba(255,107,53,0.4);
-  transition: transform 0.2s, box-shadow 0.2s;
-  animation: ball-float 4s ease-in-out infinite;
-}
-.fab-draft:hover { transform: scale(1.1); box-shadow: 0 12px 32px rgba(255,107,53,0.55); }
-
 /* ── CONFETTI ───────────────────────────────────────────── */
 #confettiContainer { position: fixed; inset: 0; pointer-events: none; z-index: 7000; overflow: hidden; }
 .confetti-piece { position: absolute; top: -20px; animation: confetti-fall linear both; }
@@ -3096,7 +3142,7 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 /* ════════════════════════════════════════════════════════
    BARLOW CONDENSED overrides (numbers/timers)
 ═══════════════════════════════════════════════════════════ */
-.hero-timer, .dcb-timer, .mcb-timer,
+.hero-timer, .dpc-timer, .dcb-timer, .mcb-timer,
 .splash-title, .st-val, .pool-fpts,
 .pc-fpts, .tc-fpts, .sr-fpts, .sr-rank,
 .pdc-stat-val, .slc-pct, .league-code-badge,
@@ -3153,8 +3199,6 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   .mobile-clock-bar { display: flex; }
   .mobile-clock-bar { padding: 12px 20px; }
   .mcb-manager { font-size: 16px; }
-
-  .fab-draft { display: flex; bottom: calc(68px + env(safe-area-inset-bottom)); right: 16px; width: 52px; height: 52px; font-size: 20px; }
   /* Bottom padding keeps content above the fixed nav bar + home indicator */
   .page { padding: 16px 16px calc(80px + env(safe-area-inset-bottom)); }
   .chat-send-btn { padding: 10px 14px; }
@@ -3184,9 +3228,10 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   /* ── Draft ── */
   .draft-recent-strip { gap: 10px; padding: 8px 12px; }
   .draft-hero { flex-direction: column; gap: 12px; }
-  .draft-pick-card { text-align: left; min-width: unset; width: 100%; }
-  .draft-clock-banner { padding: 12px 16px; }
-  .dcb-timer { font-size: 28px; }
+  .draft-order-row { flex-direction: column; gap: 12px; }
+  .draft-pick-card { min-width: unset; width: 100%; }
+  .dpc-info { text-align: left; }
+  .dpc-timer { font-size: 32px; padding-left: 16px; }
   .draft-commissioner-controls { padding: 12px 14px; gap: 6px; }
 
   /* ── Teams ── */
@@ -3605,10 +3650,17 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   animation: rp-slide-in 0.3s ease both;
 }
 .rp-section {
-  padding: 24px 20px;
-  border-bottom: 1px solid var(--border);
+  position: relative;
+  margin: 0 14px 14px;
+  padding: 16px 16px 18px;
+  background: rgba(242,107,33,0.035);
+  border: 1px solid rgba(242,107,33,0.22);
+  border-radius: 14px;
+  transition: border-color 0.2s;
 }
-.rp-section:last-child { border-bottom: none; flex: 1; }
+.rp-section:first-child { margin-top: 14px; }
+.rp-section:hover { border-color: rgba(242,107,33,0.38); }
+.rp-section:last-child { flex: 1; margin-bottom: 14px; }
 .rp-section-header {
   display: flex;
   align-items: center;
@@ -3620,8 +3672,8 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 16px;
+  color: rgba(242,107,33,0.85);
+  margin-bottom: 14px;
 }
 .rp-section-header .rp-section-title { margin-bottom: 0; }
 .rp-link-btn {
@@ -3667,11 +3719,17 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 .rp-un-timer {
   font-family: 'Bebas Neue', sans-serif;
   font-size: 24px; font-weight: 900;
-  color: var(--gold);
+  color: #fff;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .rp-empty { font-size: 13px; color: var(--muted); text-align: center; padding: 12px 0; }
+/* Chat empty state centers in the available space instead of hugging the top */
+.rp-chat-msgs .rp-empty {
+  margin: auto 0;
+  padding: 0 8px;
+  line-height: 1.5;
+}
 
 /* Standings */
 .rp-standing-row {
@@ -3684,7 +3742,7 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 .rp-sr-name { flex: 1; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rp-sr-score {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 17px; font-weight: 900; color: var(--gold);
+  font-size: 17px; font-weight: 900; color: #fff;
   flex-shrink: 0;
 }
 .rp-you-badge {
@@ -3702,7 +3760,7 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 .rp-section-chat { display: flex; flex-direction: column; }
 .rp-chat-msgs {
   display: flex; flex-direction: column; gap: 14px;
-  max-height: 220px; overflow-y: auto;
+  overflow-y: auto;
   padding-right: 2px;
 }
 .rp-chat-msg { display: flex; gap: 9px; align-items: flex-start; }
@@ -3711,7 +3769,12 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 .rp-chat-name { font-size: 12px; font-weight: 700; }
 .rp-chat-time { font-size: 11px; color: var(--muted); }
 .rp-chat-text { font-size: 13px; color: var(--text-2); line-height: 1.4; word-break: break-word; }
-.rp-chat-input-row { display: flex; gap: 8px; margin-top: 14px; align-items: center; }
+.rp-chat-input-row {
+  display: flex; gap: 8px; align-items: center;
+  margin-top: auto;
+  padding-top: 14px;
+  flex-shrink: 0;
+}
 .rp-chat-input {
   flex: 1;
   background: rgba(255,255,255,0.05);
@@ -3780,25 +3843,14 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   background: radial-gradient(ellipse, rgba(79,143,247,0.18) 0%, transparent 65%);
 }
 
-/* Right panel section titles get a left accent */
+/* Right panel section titles */
 .rp-section-title {
   display: flex;
   align-items: center;
   gap: 7px;
 }
-.rp-section-title::before {
-  content: '';
-  display: inline-block;
-  width: 3px; height: 12px;
-  background: var(--blue);
-  border-radius: 2px;
-  flex-shrink: 0;
-}
 
 /* Right panel Up Next card: accented border on top */
-.rp-up-next-card {
-  border-top: 2px solid var(--blue);
-}
 
 /* Right panel chat section fills remaining height */
 .rp-section-chat {
@@ -3808,8 +3860,8 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   min-height: 0;
 }
 .rp-chat-msgs {
-  flex: 1;
-  min-height: 80px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Stat tile: gold accent for rank tile */
@@ -3980,13 +4032,6 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   font-size: 9px; font-weight: 800; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--blue-light);
   background: var(--bg); padding: 0 8px;
-}
-
-/* ── Draft clock banner: elevated ── */
-.draft-clock-banner {
-  background: linear-gradient(135deg, rgba(246,197,78,0.1) 0%, rgba(246,197,78,0.03) 100%) !important;
-  border: 1px solid rgba(246,197,78,0.28) !important;
-  box-shadow: 0 4px 20px rgba(246,197,78,0.06), inset 0 1px 0 rgba(246,197,78,0.1);
 }
 
 /* ── Section title: left accent bar on all section headers ── */
@@ -4492,7 +4537,7 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   color: rgba(255,255,255,0.65) !important;
   -webkit-text-fill-color: rgba(255,255,255,0.65) !important;
 }
-.home-hero-card .hero-timer { color: var(--gold) !important; -webkit-text-fill-color: var(--gold) !important; }
+.home-hero-card .hero-timer { color: #fff !important; -webkit-text-fill-color: #fff !important; }
 
 
 /* Mobile clock bar - light bg, dark text */
@@ -4529,12 +4574,11 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   .hc-arrow { display: none; }
 }
 
-/* ── Right panel UP NEXT card: gradient blue ── */
+/* ── Right panel UP NEXT card ── */
 .rp-up-next-card {
-  background: linear-gradient(135deg, #0d2060 0%, #0a1540 100%) !important;
-  border: 1px solid rgba(79,143,247,0.3) !important;
-  border-top: 2px solid var(--blue) !important;
-  box-shadow: 0 4px 20px rgba(79,143,247,0.12) !important;
+  background: linear-gradient(135deg, #12233f 0%, #0a1424 100%) !important;
+  border: 1px solid rgba(242,107,33,0.32) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.28) !important;
 }
 .rp-up-next-card .rp-un-manager { color: var(--text); font-weight: 700; }
 

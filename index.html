@@ -603,9 +603,15 @@
       <section id="playersPage" class="page" style="display:none;">
 
         <!-- Inner tab toggle -->
-        <div class="draft-inner-tabs">
-          <button class="dit-btn active" data-tab="room">Draft Room</button>
-          <button class="dit-btn" data-tab="pool">Player Pool</button>
+        <div class="draft-tabs-row">
+          <div class="draft-inner-tabs">
+            <button class="dit-btn active" data-tab="room">Draft Room</button>
+            <button class="dit-btn" data-tab="pool">Player Pool</button>
+          </div>
+          <button class="dit-autopick-btn commissioner-only" id="draftAutopickBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Autopick
+          </button>
         </div>
 
         <!-- ── DRAFT ROOM TAB ── -->
@@ -615,21 +621,20 @@
               <h2 class="draft-hero-title">Snake Draft Room</h2>
               <p class="draft-hero-sub" id="draftHeroSub">Waiting for draft to begin…</p>
             </div>
-            <div class="draft-pick-card" id="draftPickCard">
-              <div class="dpc-label">On the Clock</div>
-              <div class="dpc-manager" id="draftPickManager">-</div>
-              <div class="dpc-round" id="draftPickLabel">-</div>
+          </div>
+
+          <div class="draft-order-row">
+            <div class="draft-order-strip-wrap">
+              <div class="draft-order-strip" id="draftOrderStrip"></div>
             </div>
-          </div>
-
-          <div class="draft-clock-banner" id="draftClockBanner">
-            <span class="dcb-name" id="dcbManagerName">-</span>
-            <span class="dcb-sep">·</span>
-            <span class="dcb-timer" id="dcbTimer">-</span>
-          </div>
-
-          <div class="draft-order-strip-wrap">
-            <div class="draft-order-strip" id="draftOrderStrip"></div>
+            <div class="draft-pick-card" id="draftPickCard">
+              <div class="dpc-info">
+                <div class="dpc-label">On the Clock</div>
+                <div class="dpc-manager" id="draftPickManager">-</div>
+                <div class="dpc-round" id="draftPickLabel">-</div>
+              </div>
+              <div class="dpc-timer" id="dcbTimer">-</div>
+            </div>
           </div>
 
           <!-- Recent picks - horizontal strip below order -->
@@ -1379,11 +1384,6 @@
       </div>
     </div>
   </div>
-
-  <!-- FAB: jump to draft on mobile -->
-  <button class="fab fab-draft commissioner-only" id="draftFab" style="display:none;">
-    Draft
-  </button>
 
   <!-- Firebase (compat CDN) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>

@@ -621,22 +621,40 @@ function enterLeague() {
       leoEl.style.display = 'flex';
       setTimeout(() => {
         leoEl.style.display = 'none';
-        document.getElementById('mainApp').style.display = 'flex';
-        if (state.selectedTournament) generateBracketData(state.selectedTournament);
-        render();
-        navigateTo('home');
-        updateCommissionerVisibility();
-        resumeTimerIfRunning();
+        showMainApp();
       }, 1150);
     } else {
-      document.getElementById('mainApp').style.display = 'flex';
-      if (state.selectedTournament) generateBracketData(state.selectedTournament);
-      render();
-      navigateTo('home');
-      updateCommissionerVisibility();
-      resumeTimerIfRunning();
+      showMainApp();
     }
   }, 300);
+}
+
+// Single entry point into the app shell.
+// Home is navigated to FIRST and each subsequent step is isolated, so a failure
+// in bracket generation or render can never leave the user on the wrong page.
+function showMainApp() {
+  document.getElementById('mainApp').style.display = 'flex';
+
+  // Landing page is always Home - do this before anything that can throw.
+  try { navigateTo('home'); } catch (e) { console.error('navigateTo(home)', e); }
+
+  try {
+    if (state.selectedTournament) generateBracketData(state.selectedTournament);
+  } catch (e) { console.error('generateBracketData', e); }
+
+  try { render(); } catch (e) { console.error('render', e); }
+  try { updateCommissionerVisibility(); } catch (e) { console.error('updateCommissionerVisibility', e); }
+  try { resumeTimerIfRunning(); } catch (e) { console.error('resumeTimerIfRunning', e); }
+
+  // render() re-renders page content but must not change which page is showing.
+  // Re-assert Home in case any render path navigated away.
+  try {
+    const homeEl = document.getElementById('homePage');
+    if (homeEl && !homeEl.classList.contains('active-page')) navigateTo('home');
+  } catch (e) { console.error('home re-assert', e); }
+
+  // Startup is finished - deep links / notification jumps may act from here on.
+  window._appReady = true;
 }
 
 function resumeTimerIfRunning() {
@@ -1395,9 +1413,7 @@ function renderDraft() {
   if (dPickMgr) dPickMgr.textContent = pick ? pick.manager : (complete ? 'Done' : '-');
   if (dPickLabel) dPickLabel.textContent = pick ? pick.label : '';
 
-  const dcbMgr = document.getElementById('dcbManagerName');
   const dcbTimer = document.getElementById('dcbTimer');
-  if (dcbMgr) dcbMgr.textContent = pick ? pick.manager + ' is on the clock' : (complete ? 'Draft complete' : 'Waiting…');
   if (dcbTimer) dcbTimer.textContent = pick ? formatTimer(getRemainingSeconds()) : '';
 
   renderDraftOrderStrip();
@@ -2076,7 +2092,7 @@ function renderChat() {
   const me = session ? session.name : '';
 
   if (!messages.length) {
-    container.innerHTML = '<div class="chat-empty">No messages yet. Say something to the league! 💬</div>';
+    container.innerHTML = '<div class="chat-empty">No messages yet. Say something to the league.</div>';
     return;
   }
 
@@ -3241,7 +3257,7 @@ function renderRpChat() {
   if (!el) return;
   const msgs = getChatMessages();
   if (!msgs.length) {
-    el.innerHTML = '<div class="rp-empty">No messages yet. Say something! 💬</div>';
+    el.innerHTML = '<div class="rp-empty">No messages yet. Say something!</div>';
     return;
   }
   el.innerHTML = msgs.slice(-4).map(m => {
@@ -3314,7 +3330,7 @@ function tutNext() {
     hideTutorial();
     saveState();
     render();
-    navigateTo('players');
+    navigateTo('home');
     toast('League created! Time to draft.', 'success');
   }
 }
@@ -4402,10 +4418,14 @@ async function showOTCNotification(pick) {
   }
 }
 
-// Listen for SW telling us to jump to draft (notification tap when tab was open)
+// Listen for SW telling us to jump to draft (notification tap when tab was open).
+// Ignored during startup so a queued message can never override the Home landing page.
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', e => {
-    if (e.data && e.data.type === 'OTC_FOCUS_DRAFT') navigateTo('players');
+    if (e.data && e.data.type === 'OTC_FOCUS_DRAFT') {
+      if (!window._appReady) return;
+      navigateTo('players');
+    }
   });
 }
 
@@ -4830,31 +4850,15 @@ function renderProjectionPanel() {
 }
 
 // ══════════════════════════════════════════════════════════
-// FAB DRAFT: floating action button visibility
+// DRAFT AUTOPICK: header button beside the Draft Room / Player Pool tabs
 // ══════════════════════════════════════════════════════════
 function initFABDraft() {
-  const fab = document.getElementById('draftFab');
-  if (!fab) return;
+  const btn = document.getElementById('draftAutopickBtn');
+  if (!btn) return;
 
-  function syncFab() {
-    const onDraft = document.getElementById('playersPage')?.classList.contains('active-page');
-    if (onDraft && isCommissioner()) {
-      fab.style.display = 'flex';
-    } else {
-      fab.style.display = 'none';
-    }
-  }
-
-  // Autopick on tap: most useful single-tap action on mobile
-  fab.addEventListener('click', () => {
-    const btn = document.getElementById('autopickBtn');
-    if (btn) btn.click();
+  btn.addEventListener('click', () => {
+    const src = document.getElementById('autopickBtn');
+    if (src) src.click();
+    else { autoPickForCurrent(); toast('Autopick triggered', 'info'); }
   });
-
-  // Sync when navigating between pages
-  document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => setTimeout(syncFab, 50));
-  });
-
-  syncFab();
 }
