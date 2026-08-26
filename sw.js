@@ -3,7 +3,7 @@
    Cache-first for static assets, network-first for data
 ══════════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'tipoff-v112';
+const CACHE_NAME = 'tipoff-v113';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -13,6 +13,13 @@ const STATIC_ASSETS = [
   './data/players.js',
   './logo-icon.png',
   './logo-wordmark.png',
+  './favicon.ico',
+  './favicon-16.png',
+  './favicon-32.png',
+  './favicon-48.png',
+  './apple-touch-icon.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Bebas+Neue&display=swap'
 ];
 
