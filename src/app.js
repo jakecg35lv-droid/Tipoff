@@ -1961,6 +1961,9 @@ function renderStandings() {
       '</div>';
   }).join('');
 
+  // Hide the Simulate tool once the live feed is producing real stats
+  try { updateStatToolsVisibility(); } catch (e) { console.warn('updateStatToolsVisibility', e); }
+
   // Render projection breakdown panel below
   try { renderProjectionPanel(); } catch (e) { console.warn('renderProjectionPanel', e); }
 }
@@ -1976,7 +1979,37 @@ function calcManagerCat(manager, cat) {
   return Math.round(total * 10) / 10;
 }
 
+// ── Simulate Stats gating ─────────────────────────────────
+// Simulate is a pre-season testing tool. It permanently mutates player stats
+// and saves to Firestore, so it must be unreachable once the live SportsDataIO
+// feed is writing real numbers for the selected tournament.
+function liveStatsAreFlowing() {
+  if (window._hasLiveStatData) return true;
+  // Fallback: any player currently flagged as live-updated
+  return (state.players || []).some(p => p._liveUpdated);
+}
+
+function updateStatToolsVisibility() {
+  const simBtn   = document.getElementById('simulateBtn');
+  const resetBtn = document.getElementById('resetStatsBtn');
+  const live     = liveStatsAreFlowing();
+
+  if (simBtn) simBtn.style.display = live ? 'none' : '';
+
+  // Reset stays available only if a baseline exists AND we're not on live data
+  const hasBaseline = state.baselineStats && Object.keys(state.baselineStats).length > 0;
+  if (resetBtn) resetBtn.style.display = (!live && hasBaseline) ? '' : 'none';
+}
+
 function simulateScores() {
+  // Hard stop: never let simulated numbers land on top of real feed data
+  if (liveStatsAreFlowing()) {
+    toast('Live stats are active. Simulate is disabled.', 'error');
+    updateStatToolsVisibility();
+    return;
+  }
+  if (!confirm('Simulate adds random stats to every drafted player and saves to the league.\n\nThis is a testing tool. Continue?')) return;
+
   // Save current rankings for delta display (persisted)
   const currentRanked = state.managers.slice().sort((a, b) => managerFPTS(b) - managerFPTS(a));
   state.prevRankings = currentRanked.slice();
@@ -1988,8 +2021,7 @@ function simulateScores() {
     (state.players || []).forEach(p => {
       state.baselineStats[p.id] = { points: p.stats.points, rebounds: p.stats.rebounds, assists: p.stats.assists, steals: p.stats.steals, blocks: p.stats.blocks };
     });
-    const resetBtn = document.getElementById('resetStatsBtn');
-    if (resetBtn) resetBtn.style.display = '';
+    updateStatToolsVisibility();
   }
 
   // Randomly increment stats for drafted players only
@@ -2048,8 +2080,7 @@ function resetStats() {
   state.baselineStats = {};
   state.prevRankings = [];
   simPrevRankings = [];
-  const resetBtn = document.getElementById('resetStatsBtn');
-  if (resetBtn) resetBtn.style.display = 'none';
+  updateStatToolsVisibility();
   addActivity('Commissioner reset stats to baseline');
   saveState();
   renderStandings();
@@ -2383,6 +2414,14 @@ function listenToLiveStats() {
     .doc(tournId)
     .collection('players')
     .onSnapshot(snapshot => {
+      // Any player doc means the live feed is producing real stats for this
+      // tournament. Once that's true the Simulate tool must disappear so it
+      // can't overwrite real numbers.
+      if (!snapshot.empty) {
+        window._hasLiveStatData = true;
+        try { updateStatToolsVisibility(); } catch (e) {}
+      }
+
       snapshot.docChanges().forEach(change => {
         if (change.type === 'removed') return;
         const data = change.doc.data();
@@ -3965,11 +4004,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Standings simulate + reset
   document.getElementById('simulateBtn')?.addEventListener('click', simulateScores);
   document.getElementById('resetStatsBtn')?.addEventListener('click', resetStats);
-  // Show reset button if baseline exists on load
-  if (state.baselineStats && Object.keys(state.baselineStats).length > 0) {
-    const resetBtn = document.getElementById('resetStatsBtn');
-    if (resetBtn) resetBtn.style.display = '';
-  }
+  // Show/hide simulate + reset based on whether live stats are flowing
+  updateStatToolsVisibility();
 
   // Draft undo
   document.getElementById('undoPickBtn')?.addEventListener('click', undoLastPick);
