@@ -1,7 +1,7 @@
 {
   "name": "tipoff-fantasy-functions",
-  "description": "Tipoff Fantasy Cloud Functions — ESPN live stat sync",
-  "engines": { "node": "18" },
+  "description": "Tipoff Fantasy Cloud Functions — SportsDataIO live stat sync",
+  "engines": { "node": "20" },
   "main": "index.js",
   "dependencies": {
     "firebase-admin": "^12.0.0",

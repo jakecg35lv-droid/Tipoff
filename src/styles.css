@@ -3203,12 +3203,19 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
   .page { padding: 16px 16px calc(80px + env(safe-area-inset-bottom)); }
   .chat-send-btn { padding: 10px 14px; }
 
-  /* ── Pool table ── */
+  /* ── Pool table ──
+     Header and rows must expose the SAME 4 cells or the grid misaligns.
+     NOTE: `.pool-header span` (0,1,1) out-specifies a bare `.ph-seed`
+     (0,1,0), so these hide rules must be scoped to .pool-header to win. */
   .pool-row,
-  .pool-header { grid-template-columns: 28px 1fr 60px 90px; min-width: 0; }
-  .pool-seed-cell, .ph-seed { display: none; }
-  .pool-stat { display: none; }
-  .ph-stat:not([data-col="fpts"]) { display: none; }
+  .pool-header { grid-template-columns: 28px minmax(0,1fr) 58px 86px; min-width: 0; }
+
+  .pool-row .pool-seed-cell,
+  .pool-header .ph-seed { display: none; }
+
+  .pool-row .pool-stat,
+  .pool-header .ph-stat:not([data-col="fpts"]) { display: none; }
+
   .pool-player-name { font-size: 14px; }
   .pool-fpts { font-size: 14px; }
 
