@@ -30,9 +30,12 @@
 //    stat.School silently yields '' and matches everything.
 // ═══════════════════════════════════════════════════════════════
 
-const functions = require('firebase-functions');
-const admin     = require('firebase-admin');
-const fetch     = require('node-fetch');
+// firebase-functions v2 API (SDK >= 6). The old v1 style
+// `functions.pubsub.schedule().onRun()` is gone in v6.
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onRequest }  = require('firebase-functions/v2/https');
+const admin          = require('firebase-admin');
+const fetch          = require('node-fetch');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -121,30 +124,92 @@ function normSchool(s) {
 // ═══════════════════════════════════════════════════════════════
 //  MAIN SCHEDULED FUNCTION
 // ═══════════════════════════════════════════════════════════════
-exports.syncTournamentStats = functions.pubsub
-  .schedule('every 5 minutes')
-  .onRun(async () => {
+exports.syncTournamentStats = onSchedule(
+  {
+    schedule: 'every 5 minutes',
+    timeZone: 'America/New_York',
+    timeoutSeconds: 120,
+    memory: '256MiB',
+  },
+  async () => {
     await runSync();
-    return null;
-  });
+  }
+);
 
 // ── Manual trigger for testing / backfill ──────────────────────
 //  GET https://<region>-<project>.cloudfunctions.net/syncNow
 //  Optional query params:
 //    ?date=2026-MAR-20   run against a specific past date
 //    ?dry=1              resolve + report only, write nothing
-exports.syncNow = functions.https.onRequest(async (req, res) => {
-  try {
-    const report = await runSync({
-      dateOverride: req.query.date || null,
-      dryRun: req.query.dry === '1',
-    });
-    res.status(200).json(report);
-  } catch (err) {
-    console.error('[Tipoff] syncNow error:', err);
-    res.status(500).json({ error: err.message });
+exports.syncNow = onRequest(
+  { timeoutSeconds: 120, memory: '256MiB' },
+  async (req, res) => {
+    try {
+      const report = await runSync({
+        dateOverride: req.query.date || null,
+        dryRun: req.query.dry === '1',
+      });
+      res.status(200).json(report);
+    } catch (err) {
+      console.error('[Tipoff] syncNow error:', err);
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
+
+// ── Endpoint probe ────────────────────────────────────────────
+//  Reports which SportsDataIO endpoints this API key can actually reach.
+//  Needed to answer: can we generate players.js from the API, or do the
+//  rosters have to be maintained by hand?
+//    GET .../probe
+exports.probe = onRequest(
+  { timeoutSeconds: 120, memory: '256MiB' },
+  async (req, res) => {
+    const season = req.query.season || '2027';
+    const team   = req.query.team || 'ARZ';
+
+    const candidates = [
+      ['teams (control)',        `${SCORES}/teams`],
+      ['Players (all)',          `${SCORES}/Players`],
+      ['PlayersByTeam',          `${SCORES}/PlayersByTeam/${team}`],
+      ['PlayerDetailsByTeam',    `${SCORES}/PlayerDetailsByTeam/${team}`],
+      ['PlayerSeasonStats',      `${STATS}/PlayerSeasonStats/${season}`],
+      ['PlayerSeasonStatsByTeam',`${STATS}/PlayerSeasonStatsByTeam/${season}/${team}`],
+      ['CurrentSeason',          `${SCORES}/CurrentSeason`],
+      ['News',                   `${SCORES}/News`],
+    ];
+
+    const results = {};
+    for (const [label, url] of candidates) {
+      try {
+        const r = await fetch(`${url}?key=${API_KEY}`);
+        const entry = { status: r.status, ok: r.ok };
+        if (r.ok) {
+          const body = await r.json();
+          if (Array.isArray(body)) {
+            entry.count = body.length;
+            entry.sampleKeys = body.length ? Object.keys(body[0]).slice(0, 14) : [];
+            if (body.length) {
+              const s = body[0];
+              entry.sample = {
+                Name: s.Name, FirstName: s.FirstName, LastName: s.LastName,
+                Team: s.Team, TeamID: s.TeamID, Position: s.Position,
+                Points: s.Points, Rebounds: s.Rebounds, Games: s.Games,
+              };
+            }
+          } else {
+            entry.type = typeof body;
+            entry.value = body;
+          }
+        }
+        results[label] = entry;
+      } catch (e) {
+        results[label] = { error: e.message };
+      }
+    }
+    res.status(200).json({ season, team, results });
+  }
+);
 
 // ═══════════════════════════════════════════════════════════════
 //  CORE SYNC
@@ -234,14 +299,22 @@ async function runSync(opts) {
 
     // 6. Resolve + filter
     const unresolved = new Set();
-    const liveFiltered = filterByActiveTeams(liveStats, teamToTournId, dir, unresolved);
+    const tally = {};
+    const liveFiltered = filterByActiveTeams(liveStats, teamToTournId, dir, unresolved, tally);
     report.liveMatched = liveFiltered.length;
 
     const completedStats = finalStats.filter(s => s.IsGameOver === true || s.IsClosed === true);
     report.finalClosed = completedStats.length;
-    const completedFiltered = filterByActiveTeams(completedStats, teamToTournId, dir, unresolved);
+    const completedFiltered = filterByActiveTeams(completedStats, teamToTournId, dir, unresolved, tally);
     report.finalMatched = completedFiltered.length;
     report.unresolvedSample = Array.from(unresolved).slice(0, 25);
+
+    // Which schools actually matched, and how many rows each.
+    // This is the check that catches a wrong-team attribution.
+    const skipped = tally._skipped || {};
+    delete tally._skipped;
+    report.matchedBySchool = tally;
+    report.skippedSchoolsSample = Object.keys(skipped).sort().slice(0, 40);
 
     console.log(`[Tipoff] live ${liveStats.length}→${liveFiltered.length} matched | ` +
                 `final ${finalStats.length}→${completedStats.length} closed→${completedFiltered.length} matched`);
@@ -271,7 +344,7 @@ async function runSync(opts) {
 }
 
 // ── Filter player stat rows to only active tournament teams ────
-function filterByActiveTeams(stats, teamToTournId, dir, unresolved) {
+function filterByActiveTeams(stats, teamToTournId, dir, unresolved, tally) {
   const results = [];
   for (const stat of stats) {
     const school = schoolForStat(stat, dir);
@@ -281,7 +354,13 @@ function filterByActiveTeams(stats, teamToTournId, dir, unresolved) {
     }
     const tournId = resolveTeam(school, teamToTournId);
     if (tournId) {
+      if (tally) tally[school] = (tally[school] || 0) + 1;
       results.push({ ...stat, _tournId: tournId, _school: canonicalSchool(school, teamToTournId) });
+    } else if (tally) {
+      // Track schools we saw but did NOT match, so a genuine miss
+      // (e.g. a naming variant) is visible instead of silent.
+      tally._skipped = tally._skipped || {};
+      tally._skipped[school] = (tally._skipped[school] || 0) + 1;
     }
   }
   return results;
@@ -299,14 +378,12 @@ function resolveTeam(school, teamToTournId) {
     return teamToTournId[normSchool(mapped)];
   }
 
-  // Guarded substring match — both sides must be substantial.
-  // Without the length guard, '' matches every team.
-  for (const [team, tournId] of Object.entries(teamToTournId)) {
-    if (!team || team.length < 4 || raw.length < 4) continue;
-    if (raw === team) return tournId;
-    if (raw.includes(team) || team.includes(raw)) return tournId;
-  }
-
+  // NO substring matching. It looks helpful and is actively dangerous:
+  //   'washington state'.includes('washington')  -> true
+  //   'arizona state'.includes('arizona')        -> true
+  // That silently credits Washington State's box score to Washington.
+  // Anything the directory + SCHOOL_MAP can't resolve exactly is reported
+  // as unmatched so it can be fixed deliberately.
   return null;
 }
 

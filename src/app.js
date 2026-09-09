@@ -2176,6 +2176,61 @@ function saveBracketState(data) {
   localStorage.setItem('mmfantasy-bracket-' + state.leagueId, JSON.stringify(data));
 }
 
+// ── PLAYER POOL SELECTION ──────────────────────────────────
+// players.js holds a SEPARATE entry per player per event, tagged by `region`
+// ('East'/'South'/'Midwest'/'West' for the NCAA field, 'Maui', 'Atlantis'...).
+//
+// Filtering on college alone is not enough: Clemson is in both Maui and the
+// NCAA field, so a college-only filter returns PJ Hall twice and two managers
+// can draft the same player. Always constrain by region as well.
+const NCAA_REGIONS = ['East', 'South', 'Midwest', 'West'];
+
+function playersForTournament(tournament) {
+  const all = (window.MM_PLAYERS || []);
+  if (!tournament) return dedupePlayers(all.slice());
+
+  // NCAA field: the four bracket regions only, never in-season event entries
+  if (tournament.bracketFormat === 'ncaa64') {
+    return dedupePlayers(all.filter(function(p) {
+      return NCAA_REGIONS.indexOf(p.region) !== -1;
+    }));
+  }
+
+  const teamNames = (tournament.seededTeams && tournament.seededTeams.length)
+    ? tournament.seededTeams.map(function(t) { return t.name; })
+    : (tournament.teams || []);
+  if (!teamNames.length) return [];
+
+  const region = tournament.playerRegion || null;
+
+  let pool = all.filter(function(p) {
+    if (teamNames.indexOf(p.college) === -1) return false;
+    if (region && p.region !== region) return false;
+    return true;
+  });
+
+  // If an event has no region-tagged entries yet, fall back to college-only
+  // rather than handing back an empty draft pool.
+  if (pool.length === 0 && region) {
+    pool = all.filter(function(p) { return teamNames.indexOf(p.college) !== -1; });
+  }
+
+  return dedupePlayers(pool);
+}
+
+// Safety net: one entry per name+college, whatever the data says.
+function dedupePlayers(list) {
+  const seen = {};
+  const out  = [];
+  for (const p of list) {
+    const key = (p.name || '').toLowerCase().trim() + '|' + (p.college || '').toLowerCase().trim();
+    if (seen[key]) continue;
+    seen[key] = true;
+    out.push(p);
+  }
+  return out;
+}
+
 // ── TOURNAMENT DATA ────────────────────────────────────────
 // bracketFormat: 'single8' | 'single16' | 'ncaa64'
 // seededTeams: [{seed, name}] - source of truth for bracket generation
@@ -2193,6 +2248,10 @@ const TOURNAMENTS = {
       bracketFormat: 'single8',
       roundNames: ['Quarterfinals', 'Semifinals', 'Championship'],
       canSelect: true,
+      // Must match the `region` field on this event's entries in players.js.
+      // Without it, teams that also appear in the NCAA field (e.g. Clemson)
+      // would pull BOTH roster entries into the pool - the same player twice.
+      playerRegion: 'Maui',
       teams: ['Arizona', 'BYU', 'Clemson', 'Colorado State', 'Ole Miss', 'Providence', 'VCU', 'Washington'],
       seededTeams: [
         { seed: 1, name: 'Arizona' },
@@ -2215,6 +2274,7 @@ const TOURNAMENTS = {
       bracketFormat: 'single8',
       roundNames: ['Quarterfinals', 'Semifinals', 'Championship'],
       canSelect: true,
+      playerRegion: 'Atlantis',
       teams: ['Penn State', 'Marquette', 'Memphis', 'Mississippi State', 'Texas A&M', 'Virginia', 'Wake Forest', 'Xavier'],
       seededTeams: [
         { seed: 1, name: 'Marquette' },
@@ -2462,13 +2522,9 @@ function setSelectedTournament(tournament) {
 
   generateBracketData(tournament);
 
-  // Filter player pool to only the tournament's teams (use full pool for ncaa64)
-  if (tournament.bracketFormat !== 'ncaa64' && tournament.seededTeams && tournament.seededTeams.length) {
-    const teamNames = tournament.seededTeams.map(function(t) { return t.name; });
-    state.players = (window.MM_PLAYERS || []).filter(function(p) { return teamNames.includes(p.college); });
-  } else {
-    state.players = (window.MM_PLAYERS || []).slice();
-  }
+  // Filter player pool to this tournament's teams AND region (see
+  // playersForTournament - college alone double-counts shared teams)
+  state.players = playersForTournament(tournament);
 
   saveState();
   addActivity('Tournament selected: ' + tournament.name);
@@ -3394,12 +3450,7 @@ function applyTutData() {
     if (chosen) {
       state.selectedTournament = chosen;
       generateBracketData(chosen);
-      if (chosen.bracketFormat !== 'ncaa64' && chosen.seededTeams && chosen.seededTeams.length) {
-        const teamNames = chosen.seededTeams.map(function(t) { return t.name; });
-        state.players = (window.MM_PLAYERS || []).filter(function(p) { return teamNames.includes(p.college); });
-      } else {
-        state.players = (window.MM_PLAYERS || []).slice();
-      }
+      state.players = playersForTournament(chosen);
       addActivity('Tournament selected: ' + chosen.name);
     }
   }

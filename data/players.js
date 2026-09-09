@@ -63,7 +63,7 @@ window.MM_PLAYERS = [
   { id: 'p038', name: 'Nolan Winter', college: 'Wisconsin', position: 'C', seed: 3, region: 'South', stats: { points: 10.3, rebounds: 8.8, assists: 1.5, steals: 0.5, blocks: 2.4 } },
   // 4 Arizona
   { id: 'p039', name: 'Caleb Love', college: 'Arizona', position: 'G', seed: 4, region: 'South', stats: { points: 17.9, rebounds: 4.2, assists: 4.5, steals: 1.1, blocks: 0.3 } },
-  { id: 'p040', name: 'Oumar Ballo', college: 'Arizona', position: 'C', seed: 4, region: 'South', stats: { points: 14.2, rebounds: 9.1, assists: 1.3, steals: 0.6, blocks: 1.9 } },
+  { id: 'p040', name: 'Motiejus Krivas', college: 'Arizona', position: 'C', seed: 4, region: 'South', stats: { points: 8.4, rebounds: 6.2, assists: 0.8, steals: 0.4, blocks: 1.5 } },
   // 5 Ohio State
   { id: 'p041', name: 'Bruce Thornton', college: 'Ohio State', position: 'G', seed: 5, region: 'South', stats: { points: 18.4, rebounds: 3.6, assists: 5.1, steals: 1.5, blocks: 0.2 } },
   { id: 'p042', name: 'Zed Key', college: 'Ohio State', position: 'F', seed: 5, region: 'South', stats: { points: 12.9, rebounds: 7.8, assists: 1.6, steals: 0.7, blocks: 1.0 } },
