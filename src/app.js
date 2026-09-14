@@ -7,120 +7,120 @@
 
 // ── SCHOOL COLORS (primary color per school, no logos for copyright) ────
 const SCHOOL_COLORS = {
-  'Auburn':           '#E87722',
-  'Michigan State':   '#18453B',
-  'Iowa State':       '#C8102E',
-  'Texas A&M':        '#500000',
-  'Michigan':         '#00274C',
-  'Mississippi':      '#CE1126',
-  'Marquette':        '#003082',
-  'Louisville':       '#AD0000',
-  'Creighton':        '#005CA9',
-  'New Mexico':       '#BA0C2F',
-  'San Diego State':  '#CC0033',
-  'UC San Diego':     '#182B49',
-  'Yale':             '#00356B',
-  'Lipscomb':         '#4F2D7F',
-  'Bryant':           '#C8102E',
-  'High Point':       '#4F2D7F',
-  'Duke':             '#001A57',
-  'Alabama':          '#9E1B32',
-  'Wisconsin':        '#C5050C',
-  'Arizona':          '#0C234B',
-  'Ohio State':       '#BB0000',
-  'Illinois':         '#E84A27',
-  'Xavier':           '#002F6C',
-  'Indiana':          '#990000',
-  'Iowa':             '#FFCD00',
-  'Vanderbilt':       '#866D4B',
-  'McNeese State':    '#005DAA',
-  'Liberty':          '#002868',
-  'Morehead State':   '#002F6C',
-  'Winthrop':         '#990000',
+  'Auburn': '#E87722',
+  'Michigan State': '#18453B',
+  'Iowa State': '#C8102E',
+  'Texas A&M': '#500000',
+  'Michigan': '#00274C',
+  'Mississippi': '#CE1126',
+  'Marquette': '#003082',
+  'Louisville': '#AD0000',
+  'Creighton': '#005CA9',
+  'New Mexico': '#BA0C2F',
+  'San Diego State': '#CC0033',
+  'UC San Diego': '#182B49',
+  'Yale': '#00356B',
+  'Lipscomb': '#4F2D7F',
+  'Bryant': '#C8102E',
+  'High Point': '#4F2D7F',
+  'Duke': '#001A57',
+  'Alabama': '#9E1B32',
+  'Wisconsin': '#C5050C',
+  'Arizona': '#0C234B',
+  'Ohio State': '#BB0000',
+  'Illinois': '#E84A27',
+  'Xavier': '#002F6C',
+  'Indiana': '#990000',
+  'Iowa': '#FFCD00',
+  'Vanderbilt': '#866D4B',
+  'McNeese State': '#005DAA',
+  'Liberty': '#002868',
+  'Morehead State': '#002F6C',
+  'Winthrop': '#990000',
   'SIU Edwardsville': '#C8102E',
-  'Houston':          '#C8102E',
-  'Tennessee':        '#FF8200',
-  'Kentucky':         '#0033A0',
-  'Purdue':           '#CEB888',
-  'Gonzaga':          '#002967',
-  'Baylor':           '#003015',
-  "St. John's":       '#C8102E',
-  'Georgia':          '#BA0C2F',
-  'Florida':          '#003087',
-  'Oregon':           '#154733',
-  'Texas':            '#BF5700',
-  'UCLA':             '#2D68C4',
-  'Akron':            '#005EB8',
+  'Houston': '#C8102E',
+  'Tennessee': '#FF8200',
+  'Kentucky': '#0033A0',
+  'Purdue': '#CEB888',
+  'Gonzaga': '#002967',
+  'Baylor': '#003015',
+  "St. John's": '#C8102E',
+  'Georgia': '#BA0C2F',
+  'Florida': '#003087',
+  'Oregon': '#154733',
+  'Texas': '#BF5700',
+  'UCLA': '#2D68C4',
+  'Akron': '#005EB8',
   'Long Beach State': '#231F20',
-  'Texas Southern':   '#002147',
-  'Kansas':           '#0051A5',
-  'UConn':            '#000E2F',
-  'Arkansas':         '#9D2235',
-  'North Carolina':   '#4B9CD3',
-  'Villanova':        '#003366',
-  'Clemson':          '#F66733',
-  'Georgetown':       '#041E42',
-  'Syracuse':         '#D44500',
-  'Virginia':         '#232D4B',
-  'Pittsburgh':       '#003594',
-  'Penn State':       '#001E44',
-  'Grand Canyon':     '#522498',
-  'Vermont':          '#007A53',
-  'Samford':          '#003087',
-  'Montana State':    '#003B71',
-  'Longwood':         '#003B71',
-  'Louisiana State':  '#461D7C',
-  'LSU':              '#461D7C',
-  'Notre Dame':       '#0C2340',
-  'Miami':            '#005030',
-  'Florida State':    '#782F40',
-  'Missouri':         '#F1B82D',
-  'Oklahoma':         '#841617',
-  'Oklahoma State':   '#FF6600',
-  'TCU':              '#4D1979',
-  'West Virginia':    '#002855',
-  'NC State':         '#CC0000',
-  'Wake Forest':      '#9E7E38',
-  'Memphis':          '#003087',
-  'Cincinnati':       '#E00122',
-  'Temple':           '#9D2235',
-  'Connecticut':      '#000E2F',
-  'Dayton':           '#C8102E',
-  'Richmond':         '#003366',
-  'VCU':              '#FDBD10',
-  'St. Mary\'s':      '#002366',
-  'BYU':              '#002E5D',
-  'Utah State':       '#00263A',
-  'Nevada':           '#003366',
-  'Boise State':      '#0033A0',
-  'Colorado State':   '#1E4D2B',
-  'Colorado':         '#CFB87C',
-  'Arizona State':    '#8C1D40',
-  'Utah':             '#CC0000',
-  'Washington':       '#4B2E83',
-  'Stanford':         '#8C1515',
-  'California':       '#003262',
-  'USC':              '#990000',
-  'Saint Louis':      '#003DA5',
-  'Davidson':         '#CC0000',
-  'Wichita State':    '#000000',
+  'Texas Southern': '#002147',
+  'Kansas': '#0051A5',
+  'UConn': '#000E2F',
+  'Arkansas': '#9D2235',
+  'North Carolina': '#4B9CD3',
+  'Villanova': '#003366',
+  'Clemson': '#F66733',
+  'Georgetown': '#041E42',
+  'Syracuse': '#D44500',
+  'Virginia': '#232D4B',
+  'Pittsburgh': '#003594',
+  'Penn State': '#001E44',
+  'Grand Canyon': '#522498',
+  'Vermont': '#007A53',
+  'Samford': '#003087',
+  'Montana State': '#003B71',
+  'Longwood': '#003B71',
+  'Louisiana State': '#461D7C',
+  'LSU': '#461D7C',
+  'Notre Dame': '#0C2340',
+  'Miami': '#005030',
+  'Florida State': '#782F40',
+  'Missouri': '#F1B82D',
+  'Oklahoma': '#841617',
+  'Oklahoma State': '#FF6600',
+  'TCU': '#4D1979',
+  'West Virginia': '#002855',
+  'NC State': '#CC0000',
+  'Wake Forest': '#9E7E38',
+  'Memphis': '#003087',
+  'Cincinnati': '#E00122',
+  'Temple': '#9D2235',
+  'Connecticut': '#000E2F',
+  'Dayton': '#C8102E',
+  'Richmond': '#003366',
+  'VCU': '#FDBD10',
+  'St. Mary\'s': '#002366',
+  'BYU': '#002E5D',
+  'Utah State': '#00263A',
+  'Nevada': '#003366',
+  'Boise State': '#0033A0',
+  'Colorado State': '#1E4D2B',
+  'Colorado': '#CFB87C',
+  'Arizona State': '#8C1D40',
+  'Utah': '#CC0000',
+  'Washington': '#4B2E83',
+  'Stanford': '#8C1515',
+  'California': '#003262',
+  'USC': '#990000',
+  'Saint Louis': '#003DA5',
+  'Davidson': '#CC0000',
+  'Wichita State': '#000000',
   'Middle Tennessee': '#0066CC',
-  'Belmont':          '#003087',
-  'Murray State':     '#002147',
-  'Eastern Washington':'#A10022',
-  'Oral Roberts':     '#002868',
-  'Abilene Christian':'#582C83',
-  'Drake':            '#004B8D',
-  'Colgate':          '#821019',
-  'North Texas':      '#00853E',
-  'James Madison':    '#450084',
-  'UAB':              '#1E6B52',
-  'Chattanooga':      '#002855',
-  'Furman':           '#582C83',
-  'Howard':           '#003A63',
-  'Kennesaw State':   '#FDBB30',
-  'UNC Asheville':    '#003366',
-  'Montana':          '#990000',
+  'Belmont': '#003087',
+  'Murray State': '#002147',
+  'Eastern Washington': '#A10022',
+  'Oral Roberts': '#002868',
+  'Abilene Christian': '#582C83',
+  'Drake': '#004B8D',
+  'Colgate': '#821019',
+  'North Texas': '#00853E',
+  'James Madison': '#450084',
+  'UAB': '#1E6B52',
+  'Chattanooga': '#002855',
+  'Furman': '#582C83',
+  'Howard': '#003A63',
+  'Kennesaw State': '#FDBB30',
+  'UNC Asheville': '#003366',
+  'Montana': '#990000',
 };
 
 function normalizeName(name) {
@@ -259,7 +259,7 @@ function getSession() {
   } catch (e) { return null; }
 }
 function setSession(name, email, uid) {
-  try { localStorage.setItem('mmfantasy-session', JSON.stringify({ name, email, uid: uid || null })); } catch (e) {}
+  try { localStorage.setItem('mmfantasy-session', JSON.stringify({ name, email, uid: uid || null })); } catch (e) { }
 }
 function clearSession() {
   localStorage.removeItem('mmfantasy-session');
@@ -272,12 +272,12 @@ let _leagueUnsubscribe = null;
 function _fbErrorMsg(code) {
   const msgs = {
     'auth/email-already-in-use': 'An account with this email already exists.',
-    'auth/invalid-email':        'Invalid email address.',
-    'auth/weak-password':        'Password must be at least 6 characters.',
-    'auth/user-not-found':       'No account found with this email.',
-    'auth/wrong-password':       'Incorrect password.',
-    'auth/too-many-requests':    'Too many attempts. Try again later.',
-    'auth/invalid-credential':   'Invalid email or password.',
+    'auth/invalid-email': 'Invalid email address.',
+    'auth/weak-password': 'Password must be at least 6 characters.',
+    'auth/user-not-found': 'No account found with this email.',
+    'auth/wrong-password': 'Incorrect password.',
+    'auth/too-many-requests': 'Too many attempts. Try again later.',
+    'auth/invalid-credential': 'Invalid email or password.',
     'auth/network-request-failed': 'Network error. Check your connection.',
   };
   return msgs[code] || 'Something went wrong. Please try again.';
@@ -302,10 +302,10 @@ function _subscribeLeague(code) {
       const data = doc.data();
       // Only apply remote data if it's newer than what we have locally
       const remoteTs = data.lastSaved || 0;
-      const localTs  = state.lastSaved || 0;
+      const localTs = state.lastSaved || 0;
       if (remoteTs > localTs + 1000) { // 1s buffer to avoid echo
         _applyLeagueState(data);
-        try { localStorage.setItem('mmfantasy-league-' + state.leagueId, JSON.stringify(state)); } catch (e) {}
+        try { localStorage.setItem('mmfantasy-league-' + state.leagueId, JSON.stringify(state)); } catch (e) { }
         render();
         toast('League updated.', 'info');
       }
@@ -387,11 +387,11 @@ function managerProjectedFPTS(managerName) {
       const base = state.baselineStats[pid];
       if (!base) return;
       let pts = 0;
-      if (active.includes('points'))   pts += (base.points   || 0) * (w.points   || 1);
+      if (active.includes('points')) pts += (base.points || 0) * (w.points || 1);
       if (active.includes('rebounds')) pts += (base.rebounds || 0) * (w.rebounds || 1);
-      if (active.includes('assists'))  pts += (base.assists  || 0) * (w.assists  || 1);
-      if (active.includes('steals'))   pts += (base.steals   || 0) * (w.steals   || 1);
-      if (active.includes('blocks'))   pts += (base.blocks   || 0) * (w.blocks   || 1);
+      if (active.includes('assists')) pts += (base.assists || 0) * (w.assists || 1);
+      if (active.includes('steals')) pts += (base.steals || 0) * (w.steals || 1);
+      if (active.includes('blocks')) pts += (base.blocks || 0) * (w.blocks || 1);
       total += pts;
     }
   });
@@ -479,8 +479,14 @@ function navigateTo(page) {
     setTimeout(() => { const inp = document.getElementById('chatInput'); if (inp) inp.focus(); }, 100);
   }
   if (page === 'standings') { try { renderStandings(); } catch (e) { console.error('renderStandings', e); } }
-  if (page === 'profile') { try { renderProfile(); } catch (e) { console.error('renderProfile', e); } }
-  if (page === 'settings') { try { syncNotifUI(); } catch (e) {} }
+  if (page === 'profile') {
+    try { renderProfile(); } catch (e) { console.error('renderProfile', e); }
+    try { refreshProfilePage(); } catch (e) { console.error('refreshProfilePage', e); }
+  }
+  if (page === 'settings') {
+    try { syncNotifUI(); } catch (e) { }
+    try { refreshSettingsPage(); } catch (e) { console.error('refreshSettingsPage', e); }
+  }
   if (page === 'news') { try { renderNews(); } catch (e) { console.error('renderNews', e); } }
   // Keep right panel fresh on every navigation
   try { renderRightPanel(); } catch (e) { }
@@ -498,8 +504,8 @@ function showLanding() {
   var mmIntro = document.getElementById('mmIntro');
   if (mmIntro) mmIntro.style.display = 'none';
   // Double-rAF so the opacity:0 base state is painted before animation fires
-  requestAnimationFrame(function() {
-    requestAnimationFrame(function() {
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
       landing.classList.add('reveal');
     });
   });
@@ -535,13 +541,13 @@ function showSplash(fromInit) {
   document.getElementById('mainApp').style.display = 'none';
 
   var splash = document.getElementById('splashScreen');
-  var intro  = document.getElementById('mmIntro');
+  var intro = document.getElementById('mmIntro');
 
   // Reset reveal & opacity so entrances always replay cleanly
   splash.classList.remove('reveal');
-  splash.style.opacity   = '0';
+  splash.style.opacity = '0';
   splash.style.transition = '';
-  splash.style.display   = 'flex';
+  splash.style.display = 'flex';
 
   renderSavedLeagues();
   checkInviteURL();
@@ -550,7 +556,7 @@ function showSplash(fromInit) {
     // ── Bracket intro → crossfade → element entrances ────────
     // Reset any leftover intro state from a previous run
     intro.classList.remove('playing');
-    intro.style.opacity    = '';
+    intro.style.opacity = '';
     intro.style.transition = '';
     void intro.offsetWidth; // flush pending styles
 
@@ -560,17 +566,17 @@ function showSplash(fromInit) {
     intro.classList.add('playing');
 
     // 2.3s = court drawn, all three tagline words landed + brief hold
-    setTimeout(function() {
+    setTimeout(function () {
       // Crisp crossfade
-      intro.style.transition  = 'opacity 0.8s ease';
-      intro.style.opacity     = '0';
+      intro.style.transition = 'opacity 0.8s ease';
+      intro.style.opacity = '0';
       splash.style.transition = 'opacity 0.8s ease';
-      splash.style.opacity    = '1';
+      splash.style.opacity = '1';
 
-      setTimeout(function() {
+      setTimeout(function () {
         // Cleanup intro
-        intro.style.display    = 'none';
-        intro.style.opacity    = '';
+        intro.style.display = 'none';
+        intro.style.opacity = '';
         intro.style.transition = '';
         intro.classList.remove('playing');
         splash.style.transition = '';
@@ -585,12 +591,12 @@ function showSplash(fromInit) {
     if (intro) { intro.style.display = 'none'; }
 
     // Double-rAF ensures opacity:0 is painted before we start the transition
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() {
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
         splash.style.transition = 'opacity 0.3s ease';
-        splash.style.opacity    = '1';
+        splash.style.opacity = '1';
         splash.classList.add('reveal');
-        setTimeout(function() { splash.style.transition = ''; }, 350);
+        setTimeout(function () { splash.style.transition = ''; }, 350);
       });
     });
   }
@@ -601,6 +607,11 @@ function enterLeague() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('signupScreen').style.display = 'none';
 
+  // Remember this league against the signed-in user so it shows up in
+  // My Leagues later. Fire and forget: it must never block entry.
+  try { recordLeagueMembership(state.leagueCode, state.leagueName); } catch (e) { }
+  try { applyAccent(getAccent()); } catch (e) { }
+
   // Resume live stat listener if a tournament was already selected
   listenToLiveStats();
 
@@ -609,7 +620,7 @@ function enterLeague() {
   splash.style.transition = 'opacity 0.3s ease';
   splash.style.opacity = '0';
 
-  setTimeout(function() {
+  setTimeout(function () {
     splash.style.display = 'none';
     splash.style.opacity = '';
     splash.style.transition = '';
@@ -686,13 +697,13 @@ function _afterLoginNav() {
 }
 
 function handleLogin() {
-  const email    = (document.getElementById('loginEmail').value || '').trim();
+  const email = (document.getElementById('loginEmail').value || '').trim();
   const password = (document.getElementById('loginPassword').value || '');
-  const errEl    = document.getElementById('loginError');
+  const errEl = document.getElementById('loginError');
   errEl.style.display = 'none';
 
   if (!email.includes('@')) { errEl.textContent = 'Enter a valid email.'; errEl.style.display = 'block'; return; }
-  if (password.length < 6)  { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+  if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
 
   if (window._auth) {
     const btn = document.getElementById('loginSubmitBtn');
@@ -702,8 +713,8 @@ function handleLogin() {
         window._fbUser = cred.user;
         const namePromise = window._db
           ? window._db.collection('users').doc(cred.user.uid).get()
-              .then(doc => (doc.exists && doc.data().displayName) || email.split('@')[0])
-              .catch(() => email.split('@')[0])
+            .then(doc => (doc.exists && doc.data().displayName) || email.split('@')[0])
+            .catch(() => email.split('@')[0])
           : Promise.resolve(email.split('@')[0]);
         return namePromise;
       })
@@ -738,19 +749,19 @@ function handleLogin() {
 
 function handleSignup() {
   const username = (document.getElementById('signupUsername').value || '').trim();
-  const email    = (document.getElementById('signupEmail').value || '').trim();
+  const email = (document.getElementById('signupEmail').value || '').trim();
   const password = (document.getElementById('signupPassword').value || '');
-  const confirm  = (document.getElementById('signupConfirm').value || '');
-  const errEl    = document.getElementById('signupError');
+  const confirm = (document.getElementById('signupConfirm').value || '');
+  const errEl = document.getElementById('signupError');
   errEl.style.display = 'none';
 
   const tosChecked = document.getElementById('tosCheckbox') && document.getElementById('tosCheckbox').checked;
-  if (!username)                     { errEl.textContent = 'Display name required.'; errEl.style.display = 'block'; return; }
+  if (!username) { errEl.textContent = 'Display name required.'; errEl.style.display = 'block'; return; }
   if (containsBlockedTerm(username)) { errEl.textContent = 'Please choose a different display name.'; errEl.style.display = 'block'; return; }
-  if (!email.includes('@'))          { errEl.textContent = 'Enter a valid email.'; errEl.style.display = 'block'; return; }
-  if (password.length < 6)          { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
-  if (password !== confirm)          { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; return; }
-  if (!tosChecked)                   { errEl.textContent = 'You must accept the Terms of Service to create an account.'; errEl.style.display = 'block'; return; }
+  if (!email.includes('@')) { errEl.textContent = 'Enter a valid email.'; errEl.style.display = 'block'; return; }
+  if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+  if (password !== confirm) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; return; }
+  if (!tosChecked) { errEl.textContent = 'You must accept the Terms of Service to create an account.'; errEl.style.display = 'block'; return; }
 
   function _afterSignupNav() {
     const signupScreen = document.getElementById('signupScreen');
@@ -770,10 +781,10 @@ function handleSignup() {
         window._fbUser = cred.user;
         const writeProfile = window._db
           ? window._db.collection('users').doc(cred.user.uid).set({
-              displayName: username,
-              email: email,
-              createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            })
+            displayName: username,
+            email: email,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          })
           : Promise.resolve();
         return writeProfile;
       })
@@ -804,7 +815,7 @@ function _applyLeagueState(saved) {
 
 function _leagueCardHTML(l) {
   const displayCode = l.leagueCode || l.leagueId || '--';
-  const lookupId    = l.leagueId   || l.leagueCode || '--';
+  const lookupId = l.leagueId || l.leagueCode || '--';
   const tournLine = l.tournamentName
     ? '<span class="slc-tournament">' + esc(l.tournamentName) + '</span>'
     : '<span class="slc-tournament slc-tournament--none">No tournament set</span>';
@@ -817,8 +828,8 @@ function _leagueCardHTML(l) {
 }
 
 function _attachLeagueCardListeners(container) {
-  container.querySelectorAll('.saved-league-card').forEach(function(card) {
-    card.addEventListener('click', function() {
+  container.querySelectorAll('.saved-league-card').forEach(function (card) {
+    card.addEventListener('click', function () {
       _loadAndEnterLeague(card.dataset.code);
     });
   });
@@ -852,7 +863,7 @@ function _loadAndEnterLeague(code) {
 function _loadAndEnterLeagueLocal(code) {
   try {
     const raw = localStorage.getItem('mmfantasy-league-' + code) ||
-                localStorage.getItem('mmfantasy-league-league_' + code);
+      localStorage.getItem('mmfantasy-league-league_' + code);
     if (raw) {
       _applyLeagueState(JSON.parse(raw));
       saveState();
@@ -872,7 +883,7 @@ function renderSavedLeagues() {
       container.innerHTML = '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
       return;
     }
-    const sorted = leagues.slice().sort(function(a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
+    const sorted = leagues.slice().sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
     container.innerHTML = sorted.map(_leagueCardHTML).join('');
     _attachLeagueCardListeners(container);
   } catch (e) { container.innerHTML = '<p class="no-leagues">Could not load leagues.</p>'; }
@@ -884,9 +895,9 @@ function createLeague() {
   state.leagueId = 'league_' + Date.now();
   state.leagueCode = Math.random().toString(36).toUpperCase().slice(2, 8);
   const session = getSession();
-  state.commissioner      = session ? session.name  : 'Commissioner';
+  state.commissioner = session ? session.name : 'Commissioner';
   state.commissionerEmail = session ? session.email : '';
-  state.managers          = session ? [session.name] : ['Commissioner'];
+  state.managers = session ? [session.name] : ['Commissioner'];
   state.leagueName = 'My League';
   try { localStorage.setItem('mmfantasy-code-' + state.leagueCode, state.leagueId); } catch (e) { }
   addActivity((state.commissioner || 'Commissioner') + ' created the league');
@@ -951,14 +962,14 @@ function checkInviteURL() {
     // Strip param and save it so it survives a login redirect
     const clean = window.location.pathname + (window.location.hash || '');
     history.replaceState(null, '', clean);
-    try { sessionStorage.setItem('mmfantasy-pending-join', code); } catch (e) {}
+    try { sessionStorage.setItem('mmfantasy-pending-join', code); } catch (e) { }
   } else {
     // Check if we saved one before login
-    try { code = (sessionStorage.getItem('mmfantasy-pending-join') || '').trim().toUpperCase(); } catch (e) {}
+    try { code = (sessionStorage.getItem('mmfantasy-pending-join') || '').trim().toUpperCase(); } catch (e) { }
   }
   if (!code) return;
   // Clear the pending join
-  try { sessionStorage.removeItem('mmfantasy-pending-join'); } catch (e) {}
+  try { sessionStorage.removeItem('mmfantasy-pending-join'); } catch (e) { }
   // Open join modal pre-filled
   const input = document.getElementById('joinCodeInput');
   if (input) input.value = code;
@@ -969,7 +980,7 @@ function checkInviteURL() {
 
 // ── JOIN LEAGUE ───────────────────────────────────────────
 function handleJoin() {
-  const code  = (document.getElementById('joinCodeInput').value || '').trim().toUpperCase();
+  const code = (document.getElementById('joinCodeInput').value || '').trim().toUpperCase();
   const errEl = document.getElementById('joinError');
   errEl.style.display = 'none';
   if (code.length !== 6) { errEl.textContent = 'Code must be 6 characters.'; errEl.style.display = 'block'; return; }
@@ -1213,7 +1224,7 @@ function renderHome() {
 }
 
 // ── AVATAR / PROFILE UTILS ────────────────────────────────
-const AVATAR_COLORS = ['#4f8ff7','#ff6b35','#34d399','#9b7fff','#f6c54e','#f04040','#06b6d4'];
+const AVATAR_COLORS = ['#4f8ff7', '#ff6b35', '#34d399', '#9b7fff', '#f6c54e', '#f04040', '#06b6d4'];
 function getAvatarColor(name) {
   let hash = 0;
   for (let i = 0; i < (name || '').length; i++) hash = (name.charCodeAt(i) + ((hash << 5) - hash)) | 0;
@@ -1240,13 +1251,13 @@ function saveStoredAvatar(dataURL) {
 }
 function compressAndSaveAvatar(file) {
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = function (e) {
     const img = new Image();
-    img.onload = function() {
+    img.onload = function () {
       const canvas = document.createElement('canvas');
       const MAX = 200;
       const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-      canvas.width  = Math.round(img.width  * scale);
+      canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
       const dataURL = canvas.toDataURL('image/jpeg', 0.82);
@@ -1345,23 +1356,23 @@ function renderProfile() {
     // FPTS card: show actual + projected sub-line if real stats exist
     const fptsCard =
       '<div class="profile-stat">' +
-        '<div class="profile-stat-val">' + (fpts || '0') + '</div>' +
-        '<div class="profile-stat-label">' + (real ? 'Actual FPTS' : 'Proj. FPTS') + '</div>' +
-        (real && projFpts !== null
-          ? '<div class="profile-stat-proj">Proj: ' + projFpts + '</div>'
-          : '') +
+      '<div class="profile-stat-val">' + (fpts || '0') + '</div>' +
+      '<div class="profile-stat-label">' + (real ? 'Actual FPTS' : 'Proj. FPTS') + '</div>' +
+      (real && projFpts !== null
+        ? '<div class="profile-stat-proj">Proj: ' + projFpts + '</div>'
+        : '') +
       '</div>';
 
     const rankCard =
       '<div class="profile-stat">' +
-        '<div class="profile-stat-val">' + (rank ? '#' + rank : '-') + '</div>' +
-        '<div class="profile-stat-label">League Rank</div>' +
+      '<div class="profile-stat-val">' + (rank ? '#' + rank : '-') + '</div>' +
+      '<div class="profile-stat-label">League Rank</div>' +
       '</div>';
 
     const draftCard =
       '<div class="profile-stat">' +
-        '<div class="profile-stat-val">' + drafted + '</div>' +
-        '<div class="profile-stat-label">Drafted</div>' +
+      '<div class="profile-stat-val">' + drafted + '</div>' +
+      '<div class="profile-stat-label">Drafted</div>' +
       '</div>';
 
     statsEl.innerHTML = rankCard + fptsCard + draftCard;
@@ -1371,7 +1382,7 @@ function renderProfile() {
 // ── DRAFT ─────────────────────────────────────────────────
 function updateDraftTabLock() {
   const locked = !state.selectedTournament;
-  document.querySelectorAll('.dit-btn').forEach(function(btn) {
+  document.querySelectorAll('.dit-btn').forEach(function (btn) {
     btn.classList.toggle('locked', locked);
   });
 }
@@ -1584,8 +1595,8 @@ function renderRecentPicks() {
     return '<div class="rp-chip">' +
       '<span class="rp-chip-num">#' + o.pickNumber + '</span>' +
       '<div class="rp-chip-info">' +
-        '<div class="rp-chip-player">' + esc(p.name) + '</div>' +
-        '<div class="rp-chip-mgr">' + esc(o.manager) + '</div>' +
+      '<div class="rp-chip-player">' + esc(p.name) + '</div>' +
+      '<div class="rp-chip-mgr">' + esc(o.manager) + '</div>' +
       '</div>' +
       '</div>';
   }).filter(Boolean).join('');
@@ -1878,8 +1889,8 @@ function renderTeams() {
       }).join('') +
       (roster.length > 12
         ? '<button class="tc-expand-btn" data-manager="' + esc(m) + '">' +
-          (expandedTeams.has(m) ? '▲ Show less' : '▼ +' + (roster.length - 12) + ' more') +
-          '</button>'
+        (expandedTeams.has(m) ? '▲ Show less' : '▼ +' + (roster.length - 12) + ' more') +
+        '</button>'
         : '') +
       '</div></div>';
   }).join('');
@@ -1990,9 +2001,9 @@ function liveStatsAreFlowing() {
 }
 
 function updateStatToolsVisibility() {
-  const simBtn   = document.getElementById('simulateBtn');
+  const simBtn = document.getElementById('simulateBtn');
   const resetBtn = document.getElementById('resetStatsBtn');
-  const live     = liveStatsAreFlowing();
+  const live = liveStatsAreFlowing();
 
   if (simBtn) simBtn.style.display = live ? 'none' : '';
 
@@ -2028,11 +2039,11 @@ function simulateScores() {
   Object.keys(state.drafted).forEach(pid => {
     const p = (state.players || []).find(x => x.id === pid);
     if (!p) return;
-    p.stats.points    = Math.round((p.stats.points    + Math.random() * 8)   * 10) / 10;
-    p.stats.rebounds  = Math.round((p.stats.rebounds  + Math.random() * 4)   * 10) / 10;
-    p.stats.assists   = Math.round((p.stats.assists   + Math.random() * 2)   * 10) / 10;
-    p.stats.steals    = Math.round((p.stats.steals    + Math.random() * 1)   * 10) / 10;
-    p.stats.blocks    = Math.round((p.stats.blocks    + Math.random() * 0.8) * 10) / 10;
+    p.stats.points = Math.round((p.stats.points + Math.random() * 8) * 10) / 10;
+    p.stats.rebounds = Math.round((p.stats.rebounds + Math.random() * 4) * 10) / 10;
+    p.stats.assists = Math.round((p.stats.assists + Math.random() * 2) * 10) / 10;
+    p.stats.steals = Math.round((p.stats.steals + Math.random() * 1) * 10) / 10;
+    p.stats.blocks = Math.round((p.stats.blocks + Math.random() * 0.8) * 10) / 10;
   });
   addActivity('Commissioner simulated tournament stats');
   saveState();
@@ -2070,11 +2081,11 @@ function resetStats() {
   (state.players || []).forEach(p => {
     const base = state.baselineStats[p.id];
     if (base) {
-      p.stats.points   = base.points;
+      p.stats.points = base.points;
       p.stats.rebounds = base.rebounds;
-      p.stats.assists  = base.assists;
-      p.stats.steals   = base.steals;
-      p.stats.blocks   = base.blocks;
+      p.stats.assists = base.assists;
+      p.stats.steals = base.steals;
+      p.stats.blocks = base.blocks;
     }
   });
   state.baselineStats = {};
@@ -2191,19 +2202,19 @@ function playersForTournament(tournament) {
 
   // NCAA field: the four bracket regions only, never in-season event entries
   if (tournament.bracketFormat === 'ncaa64') {
-    return dedupePlayers(all.filter(function(p) {
+    return dedupePlayers(all.filter(function (p) {
       return NCAA_REGIONS.indexOf(p.region) !== -1;
     }));
   }
 
   const teamNames = (tournament.seededTeams && tournament.seededTeams.length)
-    ? tournament.seededTeams.map(function(t) { return t.name; })
+    ? tournament.seededTeams.map(function (t) { return t.name; })
     : (tournament.teams || []);
   if (!teamNames.length) return [];
 
   const region = tournament.playerRegion || null;
 
-  let pool = all.filter(function(p) {
+  let pool = all.filter(function (p) {
     if (teamNames.indexOf(p.college) === -1) return false;
     if (region && p.region !== region) return false;
     return true;
@@ -2212,7 +2223,7 @@ function playersForTournament(tournament) {
   // If an event has no region-tagged entries yet, fall back to college-only
   // rather than handing back an empty draft pool.
   if (pool.length === 0 && region) {
-    pool = all.filter(function(p) { return teamNames.indexOf(p.college) !== -1; });
+    pool = all.filter(function (p) { return teamNames.indexOf(p.college) !== -1; });
   }
 
   return dedupePlayers(pool);
@@ -2221,7 +2232,7 @@ function playersForTournament(tournament) {
 // Safety net: one entry per name+college, whatever the data says.
 function dedupePlayers(list) {
   const seen = {};
-  const out  = [];
+  const out = [];
   for (const p of list) {
     const key = (p.name || '').toLowerCase().trim() + '|' + (p.college || '').toLowerCase().trim();
     if (seen[key]) continue;
@@ -2411,14 +2422,14 @@ function generateBracketData(tournament) {
     // bracket.js already loaded as window.MM_BRACKET_DATA - keep it,
     // but tag it with format metadata for the renderer.
     if (window.MM_BRACKET_DATA) {
-      window.MM_BRACKET_DATA.format    = 'ncaa64';
+      window.MM_BRACKET_DATA.format = 'ncaa64';
       window.MM_BRACKET_DATA.numRounds = 4;
     }
     return;
   }
 
   const sorted = (tournament.seededTeams || []).slice().sort((a, b) => a.seed - b.seed);
-  const n      = sorted.length;
+  const n = sorted.length;
   const numRounds = (tournament.roundNames || []).length;
 
   let matchups = [];
@@ -2433,23 +2444,23 @@ function generateBracketData(tournament) {
   } else if (n >= 16) {
     // Standard 16-seed bracket
     matchups = [
-      { top: sorted[0],  bot: sorted[15] },
-      { top: sorted[7],  bot: sorted[8]  },
-      { top: sorted[4],  bot: sorted[11] },
-      { top: sorted[3],  bot: sorted[12] },
-      { top: sorted[5],  bot: sorted[10] },
-      { top: sorted[2],  bot: sorted[13] },
-      { top: sorted[6],  bot: sorted[9]  },
-      { top: sorted[1],  bot: sorted[14] }
+      { top: sorted[0], bot: sorted[15] },
+      { top: sorted[7], bot: sorted[8] },
+      { top: sorted[4], bot: sorted[11] },
+      { top: sorted[3], bot: sorted[12] },
+      { top: sorted[5], bot: sorted[10] },
+      { top: sorted[2], bot: sorted[13] },
+      { top: sorted[6], bot: sorted[9] },
+      { top: sorted[1], bot: sorted[14] }
     ];
   }
 
   window.MM_BRACKET_DATA = {
-    format:     tournament.bracketFormat,
-    numRounds:  numRounds,
+    format: tournament.bracketFormat,
+    numRounds: numRounds,
     roundNames: tournament.roundNames || [],
     regions: [{ name: tournament.name, matchups: matchups }],
-    finalFour:    null,
+    finalFour: null,
     championship: null
   };
 }
@@ -2479,7 +2490,7 @@ function listenToLiveStats() {
       // can't overwrite real numbers.
       if (!snapshot.empty) {
         window._hasLiveStatData = true;
-        try { updateStatToolsVisibility(); } catch (e) {}
+        try { updateStatToolsVisibility(); } catch (e) { }
       }
 
       snapshot.docChanges().forEach(change => {
@@ -2494,15 +2505,15 @@ function listenToLiveStats() {
         if (!player) return;
 
         const totals = data.totals || {};
-        const live   = data.live   || {};
+        const live = data.live || {};
 
         // Fantasy score = committed tournament totals + current live game
-        player.stats.points   = (totals.pts || 0) + (live.pts || 0);
+        player.stats.points = (totals.pts || 0) + (live.pts || 0);
         player.stats.rebounds = (totals.reb || 0) + (live.reb || 0);
-        player.stats.assists  = (totals.ast || 0) + (live.ast || 0);
-        player.stats.steals   = (totals.stl || 0) + (live.stl || 0);
-        player.stats.blocks   = (totals.blk || 0) + (live.blk || 0);
-        player._liveUpdated   = !!(live.gameId); // flag for UI indicators
+        player.stats.assists = (totals.ast || 0) + (live.ast || 0);
+        player.stats.steals = (totals.stl || 0) + (live.stl || 0);
+        player.stats.blocks = (totals.blk || 0) + (live.blk || 0);
+        player._liveUpdated = !!(live.gameId); // flag for UI indicators
       });
 
       // Refresh standings and projections with new data
@@ -2534,12 +2545,12 @@ function setSelectedTournament(tournament) {
   if (window._db && tournament.teams && tournament.teams.length > 0) {
     window._db.collection('meta').doc('activeTournaments').set({
       [tournament.id]: {
-        name:   tournament.name,
-        teams:  tournament.teams,
+        name: tournament.name,
+        teams: tournament.teams,
         active: true,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       }
-    }, { merge: true }).catch(function(e) {
+    }, { merge: true }).catch(function (e) {
       console.warn('[Meta] Could not write active tournament:', e.message);
     });
   }
@@ -2553,10 +2564,10 @@ function setSelectedTournament(tournament) {
   // Refresh UI
   updateBracketTabs();
   renderTournamentBanner();
-  try { renderHome(); } catch (e) {}
-  try { renderBracket(); } catch (e) {}
-  try { renderDraft(); } catch (e) {}
-  try { renderStandings(); } catch (e) {}
+  try { renderHome(); } catch (e) { }
+  try { renderBracket(); } catch (e) { }
+  try { renderDraft(); } catch (e) { }
+  try { renderStandings(); } catch (e) { }
 
   // Start live stat sync for this tournament
   listenToLiveStats();
@@ -2585,7 +2596,7 @@ function updateBracketTabs() {
 
   // Re-wire tab click events
   container.querySelectorAll('.bracket-tab').forEach(tab => {
-    tab.addEventListener('click', function() {
+    tab.addEventListener('click', function () {
       container.querySelectorAll('.bracket-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       renderBracket();
@@ -2616,16 +2627,16 @@ function getLockHtml(page) {
 function openTournamentSelector() {
   const modal = document.getElementById('tournamentSelectModal');
   if (!modal) return;
-  const body  = document.getElementById('tsmBody');
-  if (!body)  return;
+  const body = document.getElementById('tsmBody');
+  if (!body) return;
 
   function sectionHtml(label, items) {
     let html = '<div class="tsm-section"><div class="tsm-section-label">' + label + '</div>';
-    items.forEach(function(t) {
-      const selected   = state.selectedTournament && state.selectedTournament.id === t.id;
+    items.forEach(function (t) {
+      const selected = state.selectedTournament && state.selectedTournament.id === t.id;
       const selectable = t.canSelect !== false;
       html += '<div class="tsm-item' +
-        (selected   ? ' tsm-item--selected'  : '') +
+        (selected ? ' tsm-item--selected' : '') +
         (!selectable ? ' tsm-item--disabled' : '') + '">';
       html += '<div class="tsm-item-main">';
       html += '<div class="tsm-item-name">' + esc(t.name) + '</div>';
@@ -2653,8 +2664,8 @@ function openTournamentSelector() {
     sectionHtml('Conference Tournaments', TOURNAMENTS.conference) +
     sectionHtml('Postseason', TOURNAMENTS.postseason);
 
-  body.querySelectorAll('.tsm-select-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
+  body.querySelectorAll('.tsm-select-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
       const t = findTournamentById(btn.dataset.tid);
       if (t) setSelectedTournament(t);
     });
@@ -2666,9 +2677,9 @@ function openTournamentSelector() {
 function renderTournamentBanner() {
   const banner = document.getElementById('tournamentBanner');
   if (!banner) return;
-  const t     = state.selectedTournament;
+  const t = state.selectedTournament;
   const isCom = isCommissioner();
-  const away  = t ? _tournDaysAway(t.startMs) : null;
+  const away = t ? _tournDaysAway(t.startMs) : null;
 
   if (!t) {
     banner.className = 'tourn-banner tourn-banner--empty';
@@ -2684,12 +2695,12 @@ function renderTournamentBanner() {
     banner.className = 'tourn-banner tourn-banner--active';
     banner.innerHTML =
       '<div class="tb-left">' +
-        '<div class="tb-name">' + esc(t.name) + '</div>' +
-        '<div class="tb-meta">' + esc(t.dates) + (t.location ? ' · ' + esc(t.location) : '') + '</div>' +
+      '<div class="tb-name">' + esc(t.name) + '</div>' +
+      '<div class="tb-meta">' + esc(t.dates) + (t.location ? ' · ' + esc(t.location) : '') + '</div>' +
       '</div>' +
       '<div class="tb-right">' +
-        (away ? '<span class="tb-countdown">' + away + '</span>' : '<span class="tb-countdown tb-live">Underway</span>') +
-        (isCom ? '<button class="tb-action-btn tb-change" id="tbSelectBtn">Change</button>' : '') +
+      (away ? '<span class="tb-countdown">' + away + '</span>' : '<span class="tb-countdown tb-live">Underway</span>') +
+      (isCom ? '<button class="tb-action-btn tb-change" id="tbSelectBtn">Change</button>' : '') +
       '</div>';
   }
 
@@ -2718,7 +2729,7 @@ function renderTournaments() {
   function sectionHtml(label, items, showTeams, accentClass) {
     let html = '<div class="tourn-section">';
     html += '<h3 class="tourn-section-label">' + label + '</h3>';
-    items.forEach(function(t) {
+    items.forEach(function (t) {
       const away = _tournDaysAway(t.startMs);
       var classes = 'tourn-card ' + accentClass;
       if (t.highlight) classes += ' tourn-card--featured';
@@ -2742,13 +2753,13 @@ function renderTournaments() {
       if (showTeams && t.teams && t.teams.length) {
         html += '<div class="tourn-card-actions">' +
           '<button class="tourn-bracket-btn" data-bracket-tid="' + esc(t.id) + '">' +
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">' +
-              '<path d="M3 5h5v5"/><path d="M3 19h5v-5"/><path d="M8 7.5h4v9h4"/><path d="M16 12h5"/>' +
-            '</svg>' +
-            ' View Bracket' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">' +
+          '<path d="M3 5h5v5"/><path d="M3 19h5v-5"/><path d="M8 7.5h4v9h4"/><path d="M16 12h5"/>' +
+          '</svg>' +
+          ' View Bracket' +
           '</button>' +
           '<span class="tourn-team-count">' + t.teams.length + ' teams</span>' +
-        '</div>';
+          '</div>';
       }
       // Lock overlay for coming-soon cards
       if (t.comingSoon) {
@@ -2769,15 +2780,15 @@ function renderTournaments() {
     sectionHtml('Postseason', TOURNAMENTS.postseason, false, 'tourn-card--gold');
 
   // Wire click on locked cards
-  el.querySelectorAll('.tourn-card--locked').forEach(function(card) {
-    card.addEventListener('click', function() {
+  el.querySelectorAll('.tourn-card--locked').forEach(function (card) {
+    card.addEventListener('click', function () {
       toast('This tournament is coming soon. Check back as the season approaches!', 'info');
     });
   });
 
   // Wire "View Bracket" buttons
-  el.querySelectorAll('.tourn-bracket-btn').forEach(function(btn) {
-    btn.addEventListener('click', function(e) {
+  el.querySelectorAll('.tourn-bracket-btn').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
       e.stopPropagation();
       openBracketPreview(btn.dataset.bracketTid);
     });
@@ -2801,7 +2812,7 @@ function openBracketPreview(tid) {
   // Seeded teams if available, else plain team list
   const seeded = (t.seededTeams && t.seededTeams.length)
     ? t.seededTeams
-    : (t.teams || []).map(function(name, i) { return { name: name, seed: i + 1 }; });
+    : (t.teams || []).map(function (name, i) { return { name: name, seed: i + 1 }; });
 
   const n = seeded.length;
   if (!n) {
@@ -2811,7 +2822,7 @@ function openBracketPreview(tid) {
   }
 
   const rounds = Math.ceil(Math.log2(n));
-  const roundNames = t.roundNames || (function() {
+  const roundNames = t.roundNames || (function () {
     const names = [];
     for (let r = 0; r < rounds; r++) {
       const left = Math.pow(2, rounds - r);
@@ -2839,7 +2850,7 @@ function openBracketPreview(tid) {
               '<span class="bpm-seed">' + (tm.seed || '') + '</span>' +
               getSchoolLogoHTML(tm.name, 18) +
               '<span class="bpm-name">' + esc(tm.name) + '</span>' +
-            '</div>';
+              '</div>';
           } else {
             html += '<div class="bpm-team bpm-tbd"><span class="bpm-seed">-</span><span class="bpm-name">TBD</span></div>';
           }
@@ -2896,8 +2907,8 @@ function renderBracket() {
 
 function renderRegionSimple(content, regData, bracketData, region, customRoundNames) {
   const defaultRoundNames = ['Round of 64', 'Round of 32', 'Sweet 16', 'Elite 8'];
-  const roundNames  = customRoundNames || defaultRoundNames;
-  const numRounds   = roundNames.length;
+  const roundNames = customRoundNames || defaultRoundNames;
+  const numRounds = roundNames.length;
   const roundWinners = bracketData.regions[region] || Array(numRounds).fill(null).map(() => []);
   const canEdit = false; // Bracket is read-only; winners are set by live data feed
 
@@ -2913,8 +2924,8 @@ function renderRegionSimple(content, regData, bracketData, region, customRoundNa
     const clickable = canEdit && !matchWinner;
     const editAttr = clickable ? ' data-team="' + esc(team.name) + '" data-rnd="' + rnd + '" data-match="' + m + '"' : '';
     let cls = 'br-team';
-    if (won)       cls += ' br-winner';
-    if (lost)      cls += ' br-loser';
+    if (won) cls += ' br-winner';
+    if (lost) cls += ' br-loser';
     if (clickable) cls += ' br-clickable';
     const owner = getOwnerInitials(team.name);
     return '<div class="' + cls + '"' + editAttr + '>' +
@@ -2929,8 +2940,8 @@ function renderRegionSimple(content, regData, bracketData, region, customRoundNa
   let html = '<div class="br-region">';
   for (let rnd = 0; rnd < numRounds; rnd++) {
     const matchCount = Math.pow(2, numRounds - 1 - rnd);
-    const prev       = rnd === 0 ? null : (roundWinners[rnd - 1] || []);
-    const unlocked   = rnd === 0 || (prev && prev.filter(Boolean).length >= matchCount * 2);
+    const prev = rnd === 0 ? null : (roundWinners[rnd - 1] || []);
+    const unlocked = rnd === 0 || (prev && prev.filter(Boolean).length >= matchCount * 2);
 
     html += '<div class="br-round' + (!unlocked ? ' br-locked' : '') + '">';
     html += '<div class="br-round-label">' + roundNames[rnd] + '</div>';
@@ -2968,8 +2979,8 @@ function renderRegionSimple(content, regData, bracketData, region, customRoundNa
   html += '</div>';
   content.innerHTML = html;
 
-  content.querySelectorAll('.br-stats-btn').forEach(function(btn) {
-    btn.addEventListener('click', function(e) {
+  content.querySelectorAll('.br-stats-btn').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
       e.stopPropagation();
       openGameModal(btn.dataset.top, btn.dataset.bot, btn.dataset.round);
     });
@@ -3010,8 +3021,8 @@ function renderFinalFour(content, bracketData, readOnly) {
       makeFinalFourTeam(topName, semifinal.topRegion, ffWinner === topName, ffWinner && ffWinner !== topName, 'ff', i, 'top', canEdit) +
       '<div class="br-vs-row"><span class="bracket-vs">vs</span>' + ffStatsBtn + '</div>' +
       makeFinalFourTeam(botName, semifinal.botRegion, ffWinner === botName, ffWinner && ffWinner !== botName, 'ff', i, 'bot', canEdit);
-    mu.querySelectorAll('.br-stats-btn').forEach(function(btn) {
-      btn.addEventListener('click', function(e) { e.stopPropagation(); openGameModal(btn.dataset.top, btn.dataset.bot, btn.dataset.round); });
+    mu.querySelectorAll('.br-stats-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) { e.stopPropagation(); openGameModal(btn.dataset.top, btn.dataset.bot, btn.dataset.round); });
     });
     view.appendChild(mu);
   });
@@ -3034,8 +3045,8 @@ function renderFinalFour(content, bracketData, readOnly) {
     makeFinalFourTeam(c1, 'East/West', champ === c1, champ && champ !== c1, 'champ', 0, 'top', canEdit) +
     '<div class="br-vs-row"><span class="bracket-vs">vs</span>' + champStatsBtn + '</div>' +
     makeFinalFourTeam(c2, 'South/Midwest', champ === c2, champ && champ !== c2, 'champ', 1, 'bot', canEdit);
-  champMu.querySelectorAll('.br-stats-btn').forEach(function(btn) {
-    btn.addEventListener('click', function(e) { e.stopPropagation(); openGameModal(btn.dataset.top, btn.dataset.bot, btn.dataset.round); });
+  champMu.querySelectorAll('.br-stats-btn').forEach(function (btn) {
+    btn.addEventListener('click', function (e) { e.stopPropagation(); openGameModal(btn.dataset.top, btn.dataset.bot, btn.dataset.round); });
   });
   view.appendChild(champMu);
 
@@ -3061,25 +3072,25 @@ function openGameModal(topName, botName, roundLabel) {
   if (!modal) return;
 
   // Scoreboard header
-  const topLogo   = document.getElementById('gmTopLogo');
-  const botLogo   = document.getElementById('gmBotLogo');
+  const topLogo = document.getElementById('gmTopLogo');
+  const botLogo = document.getElementById('gmBotLogo');
   const topNameEl = document.getElementById('gmTopName');
   const botNameEl = document.getElementById('gmBotName');
-  const roundEl   = document.getElementById('gmRoundLabel');
+  const roundEl = document.getElementById('gmRoundLabel');
 
-  if (topLogo)   topLogo.innerHTML  = topName ? getSchoolLogoHTML(topName, 36) : '';
-  if (botLogo)   botLogo.innerHTML  = botName ? getSchoolLogoHTML(botName, 36) : '';
+  if (topLogo) topLogo.innerHTML = topName ? getSchoolLogoHTML(topName, 36) : '';
+  if (botLogo) botLogo.innerHTML = botName ? getSchoolLogoHTML(botName, 36) : '';
   if (topNameEl) topNameEl.textContent = topName || 'TBD';
   if (botNameEl) botNameEl.textContent = botName || 'TBD';
-  if (roundEl)   roundEl.textContent  = roundLabel || '';
+  if (roundEl) roundEl.textContent = roundLabel || '';
 
   // Score + status: empty until live data arrives
   const topScore = document.getElementById('gmTopScore');
   const botScore = document.getElementById('gmBotScore');
-  const period   = document.getElementById('gmPeriod');
+  const period = document.getElementById('gmPeriod');
   if (topScore) topScore.textContent = '-';
   if (botScore) botScore.textContent = '-';
-  if (period)   period.textContent   = '';
+  if (period) period.textContent = '';
 
   // Stats labels
   const topLabel = document.getElementById('gmTopStatsLabel');
@@ -3091,14 +3102,14 @@ function openGameModal(topName, botName, roundLabel) {
   function buildRows(college, containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    const players = (state.players || window.MM_PLAYERS || []).filter(function(p) {
+    const players = (state.players || window.MM_PLAYERS || []).filter(function (p) {
       return p.college && p.college.toLowerCase() === (college || '').toLowerCase();
     });
     if (!players.length) {
       container.innerHTML = '<div class="gm-no-players">No player data yet</div>';
       return;
     }
-    container.innerHTML = players.map(function(p) {
+    container.innerHTML = players.map(function (p) {
       return '<div class="gm-stats-row">' +
         '<span class="gst-player">' + esc(p.name) + ' <span class="gst-pos">' + esc(p.position) + '</span></span>' +
         '<span class="gst-stat gst-live">-</span>' +
@@ -3383,15 +3394,15 @@ function sendRpChatMessage() {
 
 // ── TUTORIAL ──────────────────────────────────────────────
 const TUT_STEPS = [
-  { type: 'welcome',    title: 'Welcome, Commissioner', body: "You're setting up a Tipoff Fantasy league. This takes about 60 seconds." },
-  { type: 'name',       title: 'League Name', body: 'What do you want to call your league?', input: [{ id: 'tut-league-name', label: 'League Name', placeholder: 'e.g. March Madness 2026', default: 'My League', key: 'leagueName' }] },
+  { type: 'welcome', title: 'Welcome, Commissioner', body: "You're setting up a Tipoff Fantasy league. This takes about 60 seconds." },
+  { type: 'name', title: 'League Name', body: 'What do you want to call your league?', input: [{ id: 'tut-league-name', label: 'League Name', placeholder: 'e.g. March Madness 2026', default: 'My League', key: 'leagueName' }] },
   { type: 'tournament', title: 'Choose Tournament', body: "Which tournament is this league drafting for? This sets your player pool and bracket format." },
-  { type: 'size',       title: 'League Size', body: 'How many managers will join? Once the league is full, no one else can join with the code.', size: true },
-  { type: 'rounds',     title: 'Draft Rounds', body: 'How many rounds in the snake draft? Each round, every manager picks one player.', input: [{ id: 'tut-rounds', label: 'Number of Rounds', placeholder: '8', default: 8, type: 'number', key: 'rounds' }] },
-  { type: 'timer',    title: 'Pick Timer', body: 'How long does each manager have to make their selection before auto-pick kicks in?', input: [{ id: 'tut-timer-min', label: 'Minutes', placeholder: '1', default: 1, type: 'number', key: 'timerMin' }, { id: 'tut-timer-sec', label: 'Seconds', placeholder: '30', default: 30, type: 'number', key: 'timerSec' }] },
-  { type: 'code',     title: 'Your League Code', body: 'Share this code with your managers. They join from the home screen. No account needed..', code: true },
-  { type: 'scoring',  title: 'How Scoring Works', body: 'Points are earned from real tournament stats. Default weights: PTS 1× · REB 1.2× · AST 1.5× · STL 2× · BLK 2×. Adjust anytime in Settings.' },
-  { type: 'ready',    title: "You're All Set", body: 'Your league is live. Share the code, wait for your managers to join, then choose a tournament and start the draft.' }
+  { type: 'size', title: 'League Size', body: 'How many managers will join? Once the league is full, no one else can join with the code.', size: true },
+  { type: 'rounds', title: 'Draft Rounds', body: 'How many rounds in the snake draft? Each round, every manager picks one player.', input: [{ id: 'tut-rounds', label: 'Number of Rounds', placeholder: '8', default: 8, type: 'number', key: 'rounds' }] },
+  { type: 'timer', title: 'Pick Timer', body: 'How long does each manager have to make their selection before auto-pick kicks in?', input: [{ id: 'tut-timer-min', label: 'Minutes', placeholder: '1', default: 1, type: 'number', key: 'timerMin' }, { id: 'tut-timer-sec', label: 'Seconds', placeholder: '30', default: 30, type: 'number', key: 'timerSec' }] },
+  { type: 'code', title: 'Your League Code', body: 'Share this code with your managers. They join from the home screen. No account needed..', code: true },
+  { type: 'scoring', title: 'How Scoring Works', body: 'Points are earned from real tournament stats. Default weights: PTS 1× · REB 1.2× · AST 1.5× · STL 2× · BLK 2×. Adjust anytime in Settings.' },
+  { type: 'ready', title: "You're All Set", body: 'Your league is live. Share the code, wait for your managers to join, then choose a tournament and start the draft.' }
 ];
 
 let tutData = {};
@@ -3445,8 +3456,8 @@ function applyTutData() {
   }
   if (tutData.tournamentId) {
     const allT = [];
-    Object.values(TOURNAMENTS).forEach(function(g) { g.forEach(function(t) { allT.push(t); }); });
-    const chosen = allT.find(function(t) { return t.id === tutData.tournamentId; });
+    Object.values(TOURNAMENTS).forEach(function (g) { g.forEach(function (t) { allT.push(t); }); });
+    const chosen = allT.find(function (t) { return t.id === tutData.tournamentId; });
     if (chosen) {
       state.selectedTournament = chosen;
       generateBracketData(chosen);
@@ -3458,8 +3469,8 @@ function applyTutData() {
 
 function renderTutStep() {
   const step = TUT_STEPS[tutStep];
-  const bodyEl  = document.getElementById('tutBody');
-  const fillEl  = document.getElementById('tutBarFill');
+  const bodyEl = document.getElementById('tutBody');
+  const fillEl = document.getElementById('tutBarFill');
   const backBtn = document.getElementById('tutBackBtn');
   const nextBtn = document.getElementById('tutNextBtn');
   const stepNumEl = document.getElementById('tutStepNum');
@@ -3478,7 +3489,7 @@ function renderTutStep() {
   if (step.input) {
     const isTimer = step.type === 'timer';
     html += '<div class="tut-inputs' + (isTimer ? ' tut-inputs--row' : '') + '">';
-    step.input.forEach(function(inp) {
+    step.input.forEach(function (inp) {
       const val = tutData[inp.key] !== undefined ? tutData[inp.key] : inp.default;
       html += '<div class="tut-input-group">' +
         '<label class="tut-label">' + inp.label + '</label>' +
@@ -3490,7 +3501,7 @@ function renderTutStep() {
   if (step.size) {
     const cur = parseInt(tutData.maxManagers) || state.maxManagers || 8;
     html += '<div class="tut-size-grid">';
-    [4, 6, 8, 10, 12].forEach(function(n) {
+    [4, 6, 8, 10, 12].forEach(function (n) {
       html += '<button class="tut-size-pill' + (cur === n ? ' tut-size-pill--active' : '') + '" data-size="' + n + '">' +
         '<span class="tut-size-num">' + n + '</span>' +
         '<span class="tut-size-label">players</span>' +
@@ -3501,12 +3512,12 @@ function renderTutStep() {
 
   if (step.type === 'tournament') {
     const available = [];
-    Object.values(TOURNAMENTS).forEach(function(group) {
-      group.forEach(function(t) { if (!t.comingSoon && t.canSelect !== false) available.push(t); });
+    Object.values(TOURNAMENTS).forEach(function (group) {
+      group.forEach(function (t) { if (!t.comingSoon && t.canSelect !== false) available.push(t); });
     });
     const selId = tutData.tournamentId;
     html += '<div class="tut-tourn-list">';
-    available.forEach(function(t) {
+    available.forEach(function (t) {
       const active = selId === t.id ? ' tut-tourn-card--active' : '';
       html += '<button class="tut-tourn-card' + active + '" data-tid="' + esc(t.id) + '">' +
         '<div class="ttc-name">' + esc(t.name) + '</div>' +
@@ -3529,19 +3540,19 @@ function renderTutStep() {
   bodyEl.innerHTML = html;
 
   // Wire tournament cards
-  bodyEl.querySelectorAll('.tut-tourn-card').forEach(function(card) {
-    card.addEventListener('click', function() {
+  bodyEl.querySelectorAll('.tut-tourn-card').forEach(function (card) {
+    card.addEventListener('click', function () {
       tutData.tournamentId = card.dataset.tid;
-      bodyEl.querySelectorAll('.tut-tourn-card').forEach(function(c) { c.classList.remove('tut-tourn-card--active'); });
+      bodyEl.querySelectorAll('.tut-tourn-card').forEach(function (c) { c.classList.remove('tut-tourn-card--active'); });
       card.classList.add('tut-tourn-card--active');
     });
   });
 
   // Wire size pills
-  bodyEl.querySelectorAll('.tut-size-pill').forEach(function(pill) {
-    pill.addEventListener('click', function() {
+  bodyEl.querySelectorAll('.tut-size-pill').forEach(function (pill) {
+    pill.addEventListener('click', function () {
       tutData.maxManagers = pill.dataset.size;
-      bodyEl.querySelectorAll('.tut-size-pill').forEach(function(p) { p.classList.remove('tut-size-pill--active'); });
+      bodyEl.querySelectorAll('.tut-size-pill').forEach(function (p) { p.classList.remove('tut-size-pill--active'); });
       pill.classList.add('tut-size-pill--active');
     });
   });
@@ -3549,10 +3560,10 @@ function renderTutStep() {
   // Wire copy button
   const copyBtn = document.getElementById('tutCopyBtn');
   if (copyBtn) {
-    copyBtn.addEventListener('click', function() {
+    copyBtn.addEventListener('click', function () {
       const code = state.leagueCode || '';
       if (navigator.clipboard) {
-        navigator.clipboard.writeText(code).then(function() { copyBtn.textContent = 'Copied!'; setTimeout(function() { copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy Code'; }, 2000); });
+        navigator.clipboard.writeText(code).then(function () { copyBtn.textContent = 'Copied!'; setTimeout(function () { copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy Code'; }, 2000); });
       }
     });
   }
@@ -3579,8 +3590,8 @@ function countdownText(ms) {
   let diff = ms - Date.now();
   if (diff <= 0) return 'Starting now';
   const d = Math.floor(diff / 86400000); diff -= d * 86400000;
-  const h = Math.floor(diff / 3600000);  diff -= h * 3600000;
-  const m = Math.floor(diff / 60000);    diff -= m * 60000;
+  const h = Math.floor(diff / 3600000); diff -= h * 3600000;
+  const m = Math.floor(diff / 60000); diff -= m * 60000;
   const s = Math.floor(diff / 1000);
   if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
   if (h > 0) return h + 'h ' + m + 'm ' + s + 's';
@@ -3606,7 +3617,7 @@ function renderDraftSchedule() {
     const dIn = document.getElementById('sdDateInput');
     const tIn = document.getElementById('sdTimeInput');
     const d = new Date(at);
-    const pad = function(n) { return String(n).padStart(2, '0'); };
+    const pad = function (n) { return String(n).padStart(2, '0'); };
     if (dIn && !dIn.value) dIn.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
     if (tIn && !tIn.value) tIn.value = pad(d.getHours()) + ':' + pad(d.getMinutes());
   } else {
@@ -3660,7 +3671,7 @@ function clearDraftSchedule() {
 let _scheduleTick = null;
 function startScheduleTicker() {
   if (_scheduleTick) return;
-  _scheduleTick = setInterval(function() {
+  _scheduleTick = setInterval(function () {
     if (state.draftScheduledAt) renderDraftSchedule();
   }, 1000);
 }
@@ -3683,28 +3694,28 @@ function relativeTime(dateStr) {
 function getActiveTeamNames() {
   const t = state.selectedTournament;
   if (!t || !t.teams || t.teams.length === 0) return null;
-  return t.teams.map(function(name) { return name.toLowerCase(); });
+  return t.teams.map(function (name) { return name.toLowerCase(); });
 }
 
 function articleMatchesTournament(article, teamNames) {
   if (!teamNames) return true;
   // Build a haystack from headline, description, and category descriptions
-  const cats = (article.categories || []).map(function(c) { return c.description || ''; }).join(' ');
+  const cats = (article.categories || []).map(function (c) { return c.description || ''; }).join(' ');
   const haystack = [
     article.headline || '',
     article.description || '',
     cats
   ].join(' ').toLowerCase();
-  return teamNames.some(function(t) { return haystack.includes(t); });
+  return teamNames.some(function (t) { return haystack.includes(t); });
 }
 
 function articleTeamTag(article) {
   // Pick the first "team" category if available, else first category, else "CBB"
   var cats = article.categories || [];
-  var teamCat = cats.find(function(c) { return c.type === 'team'; });
+  var teamCat = cats.find(function (c) { return c.type === 'team'; });
   if (teamCat && teamCat.shortName) return teamCat.shortName;
   if (teamCat && teamCat.description) return teamCat.description.split(' ').slice(-1)[0]; // last word = school name
-  var leagueCat = cats.find(function(c) { return c.type === 'league'; });
+  var leagueCat = cats.find(function (c) { return c.type === 'league'; });
   if (leagueCat && leagueCat.shortName) return leagueCat.shortName;
   return 'CBB';
 }
@@ -3721,14 +3732,14 @@ function renderFeaturedCard(article) {
   return '<a class="news-featured" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' +
     (img ? '<div class="news-featured-img-wrap"><img class="news-featured-img" src="' + esc(img) + '" alt="" loading="lazy"><span class="news-featured-badge">Top Story</span></div>' : '') +
     '<div class="news-featured-content">' +
-      '<div class="news-card-meta">' +
-        '<span class="news-card-tag">' + tag + '</span>' +
-        '<span class="news-card-time">' + time + '</span>' +
-      '</div>' +
-      '<div class="news-featured-title">' + title + '</div>' +
-      '<div class="news-featured-body">' + body + '</div>' +
+    '<div class="news-card-meta">' +
+    '<span class="news-card-tag">' + tag + '</span>' +
+    '<span class="news-card-time">' + time + '</span>' +
     '</div>' +
-  '</a>';
+    '<div class="news-featured-title">' + title + '</div>' +
+    '<div class="news-featured-body">' + body + '</div>' +
+    '</div>' +
+    '</a>';
 }
 
 function renderNewsCard(article) {
@@ -3741,13 +3752,13 @@ function renderNewsCard(article) {
   return '<a class="news-card" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' +
     (img ? '<img class="news-card-img" src="' + esc(img) + '" alt="" loading="lazy">' : '<div class="news-card-img news-card-img--placeholder"></div>') +
     '<div class="news-card-content">' +
-      '<div class="news-card-meta">' +
-        '<span class="news-card-tag">' + tag + '</span>' +
-        '<span class="news-card-time">' + time + '</span>' +
-      '</div>' +
-      '<div class="news-card-title">' + title + '</div>' +
+    '<div class="news-card-meta">' +
+    '<span class="news-card-tag">' + tag + '</span>' +
+    '<span class="news-card-time">' + time + '</span>' +
     '</div>' +
-  '</a>';
+    '<div class="news-card-title">' + title + '</div>' +
+    '</div>' +
+    '</a>';
 }
 
 var _newsCache = null;
@@ -3763,7 +3774,7 @@ function renderNews(forceRefresh) {
   // Wire refresh button (idempotent)
   if (refreshBtn && !refreshBtn._newsWired) {
     refreshBtn._newsWired = true;
-    refreshBtn.addEventListener('click', function() { renderNews(true); });
+    refreshBtn.addEventListener('click', function () { renderNews(true); });
   }
 
   // Update subtitle
@@ -3785,17 +3796,17 @@ function renderNews(forceRefresh) {
   feed.innerHTML = '<div class="news-loading"><div class="news-spinner"></div><span>Loading news…</span></div>';
 
   fetch(NEWS_API)
-    .then(function(res) {
+    .then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     })
-    .then(function(data) {
+    .then(function (data) {
       _newsFetching = false;
       var articles = data.articles || [];
       _newsCache = articles;
       displayNewsArticles(articles, feed);
     })
-    .catch(function(err) {
+    .catch(function (err) {
       _newsFetching = false;
       feed.innerHTML = '<div class="news-empty"><p>Could not load news.</p><p style="font-size:0.8em;opacity:0.6;">' + esc(err.message) + '</p></div>';
     });
@@ -3803,12 +3814,12 @@ function renderNews(forceRefresh) {
 
 function displayNewsArticles(articles, feed) {
   var teamNames = getActiveTeamNames();
-  var filtered = articles.filter(function(a) {
+  var filtered = articles.filter(function (a) {
     return articleMatchesTournament(a, teamNames);
   });
 
   // Sort newest first
-  filtered.sort(function(a, b) {
+  filtered.sort(function (a, b) {
     return new Date(b.lastModified || b.published || 0) - new Date(a.lastModified || a.published || 0);
   });
 
@@ -3851,39 +3862,39 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!input) return;
       const showing = input.type === 'text';
       input.type = showing ? 'password' : 'text';
-      btn.querySelector('.eye-open').style.display  = showing ? 'block' : 'none';
-      btn.querySelector('.eye-closed').style.display = showing ? 'none'  : 'block';
+      btn.querySelector('.eye-open').style.display = showing ? 'block' : 'none';
+      btn.querySelector('.eye-closed').style.display = showing ? 'none' : 'block';
       btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
     });
   });
 
   // ── TERMS OF SERVICE ──────────────────────────────────────
-  const tosCheckbox   = document.getElementById('tosCheckbox');
-  const tosSubmitBtn  = document.getElementById('signupSubmitBtn');
-  const tosModal      = document.getElementById('tosModal');
+  const tosCheckbox = document.getElementById('tosCheckbox');
+  const tosSubmitBtn = document.getElementById('signupSubmitBtn');
+  const tosModal = document.getElementById('tosModal');
   if (tosCheckbox && tosSubmitBtn) {
-    tosCheckbox.addEventListener('change', function() {
+    tosCheckbox.addEventListener('change', function () {
       tosSubmitBtn.disabled = !this.checked;
     });
   }
-  document.getElementById('openTosBtn')?.addEventListener('click', function(e) {
+  document.getElementById('openTosBtn')?.addEventListener('click', function (e) {
     e.preventDefault();
     if (tosModal) tosModal.style.display = 'flex';
   });
-  document.getElementById('closeTosBtn')?.addEventListener('click', function() {
+  document.getElementById('closeTosBtn')?.addEventListener('click', function () {
     if (tosModal) tosModal.style.display = 'none';
   });
-  document.getElementById('tosDeclineBtn')?.addEventListener('click', function() {
+  document.getElementById('tosDeclineBtn')?.addEventListener('click', function () {
     if (tosCheckbox) tosCheckbox.checked = false;
     if (tosSubmitBtn) tosSubmitBtn.disabled = true;
     if (tosModal) tosModal.style.display = 'none';
   });
-  document.getElementById('tosAcceptBtn')?.addEventListener('click', function() {
+  document.getElementById('tosAcceptBtn')?.addEventListener('click', function () {
     if (tosCheckbox) { tosCheckbox.checked = true; tosSubmitBtn.disabled = false; }
     if (tosModal) tosModal.style.display = 'none';
   });
   // Close on backdrop click
-  tosModal?.addEventListener('click', function(e) {
+  tosModal?.addEventListener('click', function (e) {
     if (e.target === tosModal) tosModal.style.display = 'none';
   });
   function doSignOut() {
@@ -4050,7 +4061,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // PDC close
   document.getElementById('pdcClose')?.addEventListener('click', closePDC);
   document.getElementById('gmClose')?.addEventListener('click', closeGameModal);
-  document.getElementById('gameModal')?.addEventListener('click', function(e) { if (e.target.id === 'gameModal') closeGameModal(); });
+  document.getElementById('gameModal')?.addEventListener('click', function (e) { if (e.target.id === 'gameModal') closeGameModal(); });
   document.getElementById('pdcOverlay')?.addEventListener('click', e => { if (e.target.id === 'pdcOverlay') closePDC(); });
   // Standings simulate + reset
   document.getElementById('simulateBtn')?.addEventListener('click', simulateScores);
@@ -4067,13 +4078,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const yourBracketView = document.getElementById('yourBracketView');
   const tournamentsView = document.getElementById('tournamentsView');
   if (bvtYour && bvtTourn) {
-    bvtYour.addEventListener('click', function() {
+    bvtYour.addEventListener('click', function () {
       bvtYour.classList.add('active');
       bvtTourn.classList.remove('active');
       yourBracketView.style.display = '';
       tournamentsView.style.display = 'none';
     });
-    bvtTourn.addEventListener('click', function() {
+    bvtTourn.addEventListener('click', function () {
       bvtTourn.classList.add('active');
       bvtYour.classList.remove('active');
       tournamentsView.style.display = '';
@@ -4092,17 +4103,17 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Tournament selector modal
-  document.getElementById('tsmClose')?.addEventListener('click', function() {
+  document.getElementById('tsmClose')?.addEventListener('click', function () {
     const modal = document.getElementById('tournamentSelectModal');
     if (modal) modal.style.display = 'none';
   });
-  document.getElementById('tournamentSelectModal')?.addEventListener('click', function(e) {
+  document.getElementById('tournamentSelectModal')?.addEventListener('click', function (e) {
     if (e.target === this) this.style.display = 'none';
   });
 
   // Bracket preview modal
   document.getElementById('bpmClose')?.addEventListener('click', closeBracketPreview);
-  document.getElementById('bracketPreviewModal')?.addEventListener('click', function(e) {
+  document.getElementById('bracketPreviewModal')?.addEventListener('click', function (e) {
     if (e.target === this) closeBracketPreview();
   });
 
@@ -4212,7 +4223,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     const urlCode = (params.get('join') || '').trim().toUpperCase();
     if (urlCode) {
-      try { sessionStorage.setItem('mmfantasy-pending-join', urlCode); } catch (e) {}
+      try { sessionStorage.setItem('mmfantasy-pending-join', urlCode); } catch (e) { }
       history.replaceState(null, '', window.location.pathname + (window.location.hash || ''));
     }
   })();
@@ -4220,7 +4231,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── BOOT ──────────────────────────────────────────────────
   let _authBootFired = false;
   if (window._auth) {
-    window._auth.onAuthStateChanged(function(user) {
+    window._auth.onAuthStateChanged(function (user) {
       if (_authBootFired) { window._fbUser = user; return; } // ignore post-login/logout re-fires here
       _authBootFired = true;
       window._fbUser = user;
@@ -4275,7 +4286,7 @@ document.addEventListener('DOMContentLoaded', () => {
   try {
     document.documentElement.removeAttribute('data-theme');
     localStorage.removeItem('mm_theme');
-  } catch(e) {}
+  } catch (e) { }
 
   // Init unread badge on load
   updateChatBadge();
@@ -4472,7 +4483,7 @@ function getNotifPref() {
   try { return localStorage.getItem('mmfantasy-notif') === '1'; } catch (e) { return false; }
 }
 function setNotifPref(v) {
-  try { localStorage.setItem('mmfantasy-notif', v ? '1' : '0'); } catch (e) {}
+  try { localStorage.setItem('mmfantasy-notif', v ? '1' : '0'); } catch (e) { }
 }
 
 async function requestNotifPermission() {
@@ -4501,7 +4512,7 @@ async function showOTCNotification(pick) {
     });
   } catch (e) {
     // Fallback for browsers without SW notification support
-    try { new Notification("⏰ You're on the clock!", { body, icon: './icons/icon-192.png' }); } catch (_) {}
+    try { new Notification("⏰ You're on the clock!", { body, icon: './icons/icon-192.png' }); } catch (_) { }
   }
 }
 
@@ -4539,6 +4550,460 @@ function syncNotifUI() {
     else desc.textContent = 'Get a browser notification when it\'s your pick, even if the app is in the background.';
   }
   if (btn) btn.style.display = (perm === 'default') ? '' : 'none';
+
+  syncNotifPrefsUI(enabled);
+}
+
+// ══════════════════════════════════════════════════════════
+// 🔔 GRANULAR NOTIFICATION PREFERENCES
+//   The master toggle above controls whether we may notify at
+//   all. These decide which events are worth interrupting for.
+// ══════════════════════════════════════════════════════════
+const NOTIF_PREF_DEFAULTS = {
+  draftSoon: true, pickMade: false, playerScored: true,
+  eliminated: true, rankChange: false, managerJoined: true,
+};
+
+function getNotifPrefs() {
+  try {
+    const raw = localStorage.getItem('mmfantasy-notif-prefs');
+    return Object.assign({}, NOTIF_PREF_DEFAULTS, raw ? JSON.parse(raw) : {});
+  } catch (e) { return Object.assign({}, NOTIF_PREF_DEFAULTS); }
+}
+
+function setNotifPrefs(prefs) {
+  try { localStorage.setItem('mmfantasy-notif-prefs', JSON.stringify(prefs)); } catch (e) { }
+}
+
+// Single place to ask "should I fire this notification?"
+function shouldNotify(kind) {
+  if (!notifSupported()) return false;
+  if (Notification.permission !== 'granted' || !getNotifPref()) return false;
+  return !!getNotifPrefs()[kind];
+}
+
+function syncNotifPrefsUI(masterOn) {
+  const group = document.getElementById('notifPrefsGroup');
+  if (!group) return;
+  // Greyed out and inert when the master switch is off, rather than
+  // hidden, so it is obvious the controls exist.
+  group.dataset.locked = masterOn ? '0' : '1';
+
+  const prefs = getNotifPrefs();
+  group.querySelectorAll('.np-switch').forEach(function (cb) {
+    const key = cb.dataset.notif;
+    if (key in prefs) cb.checked = !!prefs[key];
+  });
+}
+
+function wireNotifPrefs() {
+  const group = document.getElementById('notifPrefsGroup');
+  if (!group || group.dataset.wired === '1') return;
+  group.dataset.wired = '1';
+
+  group.querySelectorAll('.np-switch').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      const prefs = getNotifPrefs();
+      prefs[cb.dataset.notif] = cb.checked;
+      setNotifPrefs(prefs);
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// 👤 USER RECORD  (users/{uid})
+//   Previously nothing tracked a person across leagues: the
+//   single leagueCode in localStorage WAS the membership. This
+//   doc is the groundwork for belonging to more than one.
+//     { displayName, accent, leagues: [{code, name, joinedAt}] }
+// ══════════════════════════════════════════════════════════
+function _uid() {
+  return (window._auth && window._auth.currentUser) ? window._auth.currentUser.uid : null;
+}
+
+function userDocRef() {
+  const uid = _uid();
+  if (!uid || !window._db) return null;
+  return window._db.collection('users').doc(uid);
+}
+
+async function recordLeagueMembership(code, name) {
+  const ref = userDocRef();
+  if (!ref || !code) return;
+  try {
+    const snap = await ref.get();
+    const data = snap.exists ? (snap.data() || {}) : {};
+    const leagues = Array.isArray(data.leagues) ? data.leagues.slice() : [];
+
+    const i = leagues.findIndex(l => l && l.code === code);
+    if (i >= 0) {
+      leagues[i] = Object.assign({}, leagues[i], { name: name || leagues[i].name, lastOpened: Date.now() });
+    } else {
+      leagues.push({ code: code, name: name || 'League', joinedAt: Date.now(), lastOpened: Date.now() });
+    }
+    await ref.set({ leagues: leagues }, { merge: true });
+  } catch (e) {
+    console.warn('[Leagues] membership write failed:', e.message);
+  }
+}
+
+async function forgetLeagueMembership(code) {
+  const ref = userDocRef();
+  if (!ref || !code) return;
+  try {
+    const snap = await ref.get();
+    const leagues = (snap.exists && Array.isArray(snap.data().leagues)) ? snap.data().leagues : [];
+    await ref.set({ leagues: leagues.filter(l => l && l.code !== code) }, { merge: true });
+  } catch (e) {
+    console.warn('[Leagues] membership remove failed:', e.message);
+  }
+}
+
+// ── My Leagues list ───────────────────────────────────────
+async function renderMyLeagues() {
+  const host = document.getElementById('myLeaguesList');
+  if (!host) return;
+
+  const ref = userDocRef();
+  if (!ref) { host.innerHTML = ''; return; }
+
+  let leagues = [];
+  try {
+    const snap = await ref.get();
+    if (snap.exists && Array.isArray(snap.data().leagues)) leagues = snap.data().leagues;
+  } catch (e) {
+    console.warn('[Leagues] read failed:', e.message);
+  }
+
+  // Always show the league we are actually in, even if the user doc
+  // has not caught up yet.
+  if (state.leagueCode && !leagues.some(l => l && l.code === state.leagueCode)) {
+    leagues.unshift({ code: state.leagueCode, name: state.leagueName || 'My League', lastOpened: Date.now() });
+  }
+
+  if (!leagues.length) {
+    host.innerHTML = '<div class="set-row"><div class="set-row-main">' +
+      '<span class="set-row-sub">You are not in any leagues yet. Enter a code below to join one.</span>' +
+      '</div></div>';
+    return;
+  }
+
+  leagues.sort((a, b) => (b.lastOpened || 0) - (a.lastOpened || 0));
+
+  host.innerHTML = leagues.map(function (l) {
+    const active = l.code === state.leagueCode;
+    const initials = (l.name || 'L').trim().slice(0, 2).toUpperCase();
+    return '<div class="ml-row' + (active ? ' ml-row--active' : '') + '" data-code="' + esc(l.code) + '">' +
+      '<div class="ml-badge">' + esc(initials) + '</div>' +
+      '<div class="ml-info">' +
+      '<span class="ml-name">' + esc(l.name || 'League') + '</span>' +
+      '<span class="ml-meta">Code ' + esc(l.code) + '</span>' +
+      '</div>' +
+      (active ? '<span class="ml-current-pill">Current</span>' : '') +
+      '</div>';
+  }).join('');
+
+  host.querySelectorAll('.ml-row').forEach(function (row) {
+    if (row.classList.contains('ml-row--active')) return;
+    row.addEventListener('click', function () { switchToLeague(row.dataset.code); });
+  });
+}
+
+function switchToLeague(code) {
+  if (!code || code === state.leagueCode) return;
+  if (String(code).length !== 6) { toast('League codes are 6 characters.', 'error'); return; }
+
+  // handleJoin() is the single tested path for entering a league: it
+  // does the Firestore lookup, the full-league check, _applyLeagueState,
+  // _subscribeLeague and enterLeague. Reuse it rather than duplicating
+  // that sequence and drifting out of sync with it.
+  const input = document.getElementById('joinCodeInput');
+  if (!input || typeof handleJoin !== 'function') {
+    toast('Could not switch leagues.', 'error');
+    return;
+  }
+
+  // Drop the current subscription first, or two league listeners race.
+  if (_leagueUnsubscribe) { _leagueUnsubscribe(); _leagueUnsubscribe = null; }
+
+  input.value = code;
+  handleJoin();
+}
+
+// ══════════════════════════════════════════════════════════
+// 🎨 ACCENT COLOR
+// ══════════════════════════════════════════════════════════
+const DEFAULT_ACCENT = '#f26b21';
+
+function getAccent() {
+  try { return localStorage.getItem('mmfantasy-accent') || DEFAULT_ACCENT; }
+  catch (e) { return DEFAULT_ACCENT; }
+}
+
+function setAccent(color) {
+  try { localStorage.setItem('mmfantasy-accent', color); } catch (e) { }
+  applyAccent(color);
+  const ref = userDocRef();
+  if (ref) ref.set({ accent: color }, { merge: true }).catch(function () { });
+}
+
+function applyAccent(color) {
+  document.documentElement.style.setProperty('--user-accent', color || DEFAULT_ACCENT);
+  const ring = document.getElementById('profileAvatarRing');
+  if (ring) ring.style.setProperty('--ring-accent', color || DEFAULT_ACCENT);
+}
+
+function syncAccentUI() {
+  const cur = getAccent();
+  applyAccent(cur);
+  document.querySelectorAll('.look-swatch').forEach(function (sw) {
+    sw.classList.toggle('look-swatch--active', sw.dataset.color === cur);
+  });
+}
+
+function wireAccentSwatches() {
+  const host = document.getElementById('lookSwatches');
+  if (!host || host.dataset.wired === '1') return;
+  host.dataset.wired = '1';
+  host.querySelectorAll('.look-swatch').forEach(function (sw) {
+    sw.addEventListener('click', function () {
+      setAccent(sw.dataset.color);
+      syncAccentUI();
+      toast('Color updated', 'success');
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// 🔐 ACCOUNT ACTIONS  (email / password / delete)
+//   Every one of these is a Firebase "recent login required"
+//   operation, so they all reauthenticate first. That is why
+//   there is one shared modal rather than three flows.
+// ══════════════════════════════════════════════════════════
+let _acctMode = null;
+
+function openAcctModal(mode) {
+  const user = window._auth && window._auth.currentUser;
+  if (!user) { toast('You are not signed in.', 'error'); return; }
+
+  // Google/Apple accounts have no password to reauthenticate with.
+  const isPassword = (user.providerData || []).some(p => p && p.providerId === 'password');
+  if (!isPassword) {
+    toast('This account signs in with a provider. Manage it there.', 'error');
+    return;
+  }
+
+  _acctMode = mode;
+  const modal = document.getElementById('acctModal');
+  const title = document.getElementById('acctModalTitle');
+  const sub = document.getElementById('acctModalSub');
+  const newWrap = document.getElementById('acctFieldNewWrap');
+  const newLbl = document.getElementById('acctFieldNewLabel');
+  const newIn = document.getElementById('acctFieldNew');
+  const pwIn = document.getElementById('acctFieldPw');
+  const err = document.getElementById('acctModalErr');
+  const confirm = document.getElementById('acctModalConfirm');
+  if (!modal) return;
+
+  err.style.display = 'none';
+  pwIn.value = '';
+  newIn.value = '';
+  confirm.classList.remove('btn-red');
+
+  if (mode === 'email') {
+    title.textContent = 'Change Email';
+    sub.textContent = 'We will send a verification link to the new address.';
+    newWrap.style.display = '';
+    newLbl.textContent = 'New email';
+    newIn.type = 'email';
+    newIn.placeholder = 'you@example.com';
+    confirm.textContent = 'Update Email';
+  } else if (mode === 'password') {
+    title.textContent = 'Change Password';
+    sub.textContent = 'Pick something at least 6 characters long.';
+    newWrap.style.display = '';
+    newLbl.textContent = 'New password';
+    newIn.type = 'password';
+    newIn.placeholder = 'New password';
+    confirm.textContent = 'Update Password';
+  } else if (mode === 'delete') {
+    title.textContent = 'Delete Account';
+    sub.textContent = 'This permanently erases your account and removes you from every league. It cannot be undone.';
+    newWrap.style.display = 'none';
+    confirm.textContent = 'Delete Forever';
+    confirm.classList.add('btn-red');
+  }
+
+  modal.style.display = 'flex';
+  setTimeout(function () { (mode === 'delete' ? pwIn : newIn).focus(); }, 60);
+}
+
+function closeAcctModal() {
+  const modal = document.getElementById('acctModal');
+  if (modal) modal.style.display = 'none';
+  _acctMode = null;
+}
+
+function acctError(msg) {
+  const err = document.getElementById('acctModalErr');
+  if (!err) return;
+  err.textContent = msg;
+  err.style.display = '';
+}
+
+async function runAcctAction() {
+  const user = window._auth && window._auth.currentUser;
+  if (!user) return closeAcctModal();
+
+  const newVal = (document.getElementById('acctFieldNew') || {}).value || '';
+  const pw = (document.getElementById('acctFieldPw') || {}).value || '';
+  const btn = document.getElementById('acctModalConfirm');
+
+  if (!pw) return acctError('Enter your current password to confirm.');
+  if (_acctMode === 'email' && !/^\S+@\S+\.\S+$/.test(newVal.trim())) {
+    return acctError('That does not look like a valid email address.');
+  }
+  if (_acctMode === 'password' && newVal.length < 6) {
+    return acctError('New password must be at least 6 characters.');
+  }
+
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Working...';
+
+  try {
+    const cred = firebase.auth.EmailAuthProvider.credential(user.email, pw);
+    await user.reauthenticateWithCredential(cred);
+
+    if (_acctMode === 'email') {
+      // Newer Firebase projects block updateEmail outright and require
+      // the verify-first flow, so try that and fall back.
+      if (typeof user.verifyBeforeUpdateEmail === 'function') {
+        await user.verifyBeforeUpdateEmail(newVal.trim());
+        toast('Check your new inbox to confirm the change.', 'success');
+      } else {
+        await user.updateEmail(newVal.trim());
+        toast('Email updated.', 'success');
+      }
+
+    } else if (_acctMode === 'password') {
+      await user.updatePassword(newVal);
+      toast('Password updated.', 'success');
+
+    } else if (_acctMode === 'delete') {
+      const ref = userDocRef();
+      if (ref) { try { await ref.delete(); } catch (e) { } }
+      await user.delete();
+      closeAcctModal();
+      clearSession();
+      showLanding();
+      return;
+    }
+
+    closeAcctModal();
+    syncAccountUI();
+
+  } catch (e) {
+    const code = e && e.code ? e.code : '';
+    if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+      acctError('That password is not correct.');
+    } else if (code === 'auth/email-already-in-use') {
+      acctError('That email is already attached to another account.');
+    } else if (code === 'auth/too-many-requests') {
+      acctError('Too many attempts. Wait a few minutes and try again.');
+    } else if (code === 'auth/operation-not-allowed') {
+      acctError('Email changes are disabled for this project. Contact support.');
+    } else {
+      acctError(e && e.message ? e.message : 'Something went wrong.');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+function syncAccountUI() {
+  const user = window._auth && window._auth.currentUser;
+  const emailEl = document.getElementById('acctEmail');
+  if (emailEl) emailEl.textContent = (user && user.email) ? user.email : 'Not signed in';
+}
+
+async function leaveCurrentLeague() {
+  if (!state.leagueCode) { toast('You are not in a league.', 'error'); return; }
+  const name = state.leagueName || 'this league';
+  if (!confirm('Leave "' + name + '"? You can rejoin later with the code ' + state.leagueCode + '.')) return;
+
+  const code = state.leagueCode;
+  await forgetLeagueMembership(code);
+  try { localStorage.removeItem('mmfantasy-code-' + code); } catch (e) { }
+
+  if (_leagueUnsubscribe) { _leagueUnsubscribe(); _leagueUnsubscribe = null; }
+  state = Object.assign({}, defaultState);
+  state.players = (window.MM_PLAYERS || []).slice();
+  clearSession();
+  showLanding();
+  toast('You left ' + name + '.', 'success');
+}
+
+// ── Wiring ────────────────────────────────────────────────
+function wireSettingsExtras() {
+  const once = function (id, fn) {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.wired === '1') return;
+    el.dataset.wired = '1';
+    el.addEventListener('click', fn);
+  };
+
+  once('acctChangeEmailBtn', function () { openAcctModal('email'); });
+  once('acctChangePwBtn', function () { openAcctModal('password'); });
+  once('deleteAccountBtn', function () { openAcctModal('delete'); });
+  once('acctModalCancel', closeAcctModal);
+  once('acctModalConfirm', runAcctAction);
+  once('leaveLeagueBtn', leaveCurrentLeague);
+
+  once('acctSignOutBtn', function () {
+    document.getElementById('navSignOutBtn')?.click();
+  });
+
+  once('mlJoinBtn', function () {
+    const input = document.getElementById('mlJoinInput');
+    const code = (input && input.value || '').trim().toUpperCase();
+    if (!code) { toast('Enter a league code.', 'error'); return; }
+    if (code === state.leagueCode) { toast('You are already in that league.', 'error'); return; }
+    if (input) input.value = '';
+    switchToLeague(code);
+  });
+
+  const modal = document.getElementById('acctModal');
+  if (modal && modal.dataset.wiredBackdrop !== '1') {
+    modal.dataset.wiredBackdrop = '1';
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeAcctModal(); });
+  }
+
+  const joinInput = document.getElementById('mlJoinInput');
+  if (joinInput && joinInput.dataset.wired !== '1') {
+    joinInput.dataset.wired = '1';
+    joinInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') document.getElementById('mlJoinBtn')?.click();
+    });
+  }
+
+  wireNotifPrefs();
+  wireAccentSwatches();
+}
+
+// Everything above is idempotent, so it is safe to call on every
+// visit to Settings rather than only once at boot.
+function refreshSettingsPage() {
+  try { wireSettingsExtras(); } catch (e) { console.warn('wireSettingsExtras', e); }
+  try { syncAccountUI(); } catch (e) { console.warn('syncAccountUI', e); }
+  try { renderMyLeagues(); } catch (e) { console.warn('renderMyLeagues', e); }
+  try { syncAccentUI(); } catch (e) { console.warn('syncAccentUI', e); }
+}
+
+function refreshProfilePage() {
+  try { wireAccentSwatches(); } catch (e) { }
+  try { syncAccentUI(); } catch (e) { }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -4586,11 +5051,11 @@ function initDraftInnerTabs() {
       document.getElementById('draftRoomTab').style.display = tab === 'room' ? '' : 'none';
       document.getElementById('playerPoolTab').style.display = tab === 'pool' ? '' : 'none';
       if (tab === 'pool') {
-        try { renderPlayerPool(); } catch (e) {}
+        try { renderPlayerPool(); } catch (e) { }
       } else {
-        try { renderDraftGrid(); } catch (e) {}
-        try { renderDraftFeed(); } catch (e) {}
-        try { renderDraftOrderStrip(); } catch (e) {}
+        try { renderDraftGrid(); } catch (e) { }
+        try { renderDraftFeed(); } catch (e) { }
+        try { renderDraftOrderStrip(); } catch (e) { }
       }
     });
   });
@@ -4875,7 +5340,7 @@ function calcProjectedFPTS(managerName) {
 
 function renderProjectionPanel() {
   const panel = document.getElementById('projPanel');
-  const list  = document.getElementById('projList');
+  const list = document.getElementById('projList');
   if (!panel || !list) return;
 
   if (state.managers.length === 0 || Object.keys(state.drafted).length === 0) {
@@ -4909,8 +5374,8 @@ function renderProjectionPanel() {
   list.innerHTML = ranked.map(m => {
     const playerTags = m.alivePlayers.slice(0, 4).map(ap =>
       '<span class="proj-player-chip">' +
-        esc(ap.player.name.split(' ').pop()) +
-        ' <span class="proj-chip-games">×' + ap.gamesRemaining + '</span>' +
+      esc(ap.player.name.split(' ').pop()) +
+      ' <span class="proj-chip-games">×' + ap.gamesRemaining + '</span>' +
       '</span>'
     ).join('');
     const extra = m.alivePlayers.length > 4
@@ -4919,20 +5384,20 @@ function renderProjectionPanel() {
 
     return '<div class="proj-row">' +
       '<div class="proj-row-main">' +
-        '<span class="proj-manager">' + esc(m.name) + '</span>' +
-        '<div class="proj-numbers">' +
-          '<span class="proj-current">' + m.current + ' pts</span>' +
-          '<span class="proj-arrow">+</span>' +
-          '<span class="proj-projected">+' + m.projected + '</span>' +
-          '<span class="proj-total-label">= ' + m.total + '</span>' +
-        '</div>' +
+      '<span class="proj-manager">' + esc(m.name) + '</span>' +
+      '<div class="proj-numbers">' +
+      '<span class="proj-current">' + m.current + ' pts</span>' +
+      '<span class="proj-arrow">+</span>' +
+      '<span class="proj-projected">+' + m.projected + '</span>' +
+      '<span class="proj-total-label">= ' + m.total + '</span>' +
+      '</div>' +
       '</div>' +
       '<div class="proj-bar-wrap">' +
-        '<div class="proj-bar-current" style="width:' + Math.min(100, (m.current / Math.max(...ranked.map(r => r.total)) * 100)) + '%"></div>' +
-        '<div class="proj-bar-proj" style="width:' + Math.min(100, (m.projected / Math.max(...ranked.map(r => r.total)) * 100)) + '%"></div>' +
+      '<div class="proj-bar-current" style="width:' + Math.min(100, (m.current / Math.max(...ranked.map(r => r.total)) * 100)) + '%"></div>' +
+      '<div class="proj-bar-proj" style="width:' + Math.min(100, (m.projected / Math.max(...ranked.map(r => r.total)) * 100)) + '%"></div>' +
       '</div>' +
       (m.alivePlayers.length > 0 ? '<div class="proj-players">' + playerTags + extra + '</div>' : '') +
-    '</div>';
+      '</div>';
   }).join('');
 }
 

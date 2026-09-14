@@ -1404,6 +1404,244 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 }
 .panel-title { font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 800; margin-bottom: 18px; }
 .divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+
+/* ══════════════════════════════════════════════════════════
+   SETTINGS — sectioned layout
+   The page was a flat stack of panels that mixed personal
+   preferences with commissioner controls, which made it hard
+   to scan on a phone. These labels group it.
+══════════════════════════════════════════════════════════ */
+.set-label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--muted);
+  margin: 30px 0 12px 4px;
+}
+.set-label:first-of-type { margin-top: 22px; }
+.set-label--danger { color: rgba(240,82,82,0.7); }
+
+.set-panel { padding: 6px 0; }
+.panel--danger { border-color: rgba(240,82,82,0.22); padding: 6px 0; }
+
+.set-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 15px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.set-row:last-child { border-bottom: none; }
+.set-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.set-row-title { font-size: 14.5px; font-weight: 700; color: var(--text); }
+.set-row-sub {
+  font-size: 12.5px; line-height: 1.45; color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.set-row-btn {
+  flex-shrink: 0;
+  min-height: 38px; padding: 0 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-2, rgba(255,255,255,0.14));
+  border-radius: 10px;
+  color: var(--text); font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all 0.16s ease;
+}
+.set-row-btn:hover { background: rgba(255,255,255,0.09); }
+.set-row-btn--warn {
+  color: var(--gold, #f6a84e);
+  border-color: rgba(246,168,78,0.3);
+}
+.set-row-btn--warn:hover { background: rgba(246,168,78,0.12); }
+.set-row-btn--danger {
+  color: #f05252;
+  border-color: rgba(240,82,82,0.32);
+}
+.set-row-btn--danger:hover { background: rgba(240,82,82,0.14); }
+
+.set-footer {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 26px 0 12px;
+  font-size: 12px; color: rgba(255,255,255,0.22);
+}
+.set-footer-dot { opacity: 0.5; }
+
+/* ── My Leagues ── */
+.ml-list:empty { display: none; }
+.ml-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 22px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+.ml-row:hover { background: rgba(255,255,255,0.03); }
+.ml-row--active { background: rgba(242,107,33,0.07); cursor: default; }
+.ml-badge {
+  flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800;
+  background: rgba(255,255,255,0.06); color: var(--text);
+}
+.ml-row--active .ml-badge { background: rgba(242,107,33,0.18); color: var(--orange); }
+.ml-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.ml-name {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ml-meta { font-size: 11.5px; color: var(--muted); }
+.ml-current-pill {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px; border-radius: 99px;
+  background: rgba(242,107,33,0.16); color: var(--orange);
+}
+.ml-join-row { display: flex; gap: 9px; padding: 15px 22px 6px; }
+.ml-join-input {
+  flex: 1; min-width: 0;
+  /* 16px floor: anything smaller makes iOS Safari zoom on focus */
+  font-size: 16px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 11px 14px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--border-2, rgba(255,255,255,0.14));
+  border-radius: 11px; color: var(--text);
+}
+.ml-join-btn {
+  flex-shrink: 0; min-height: 44px; padding: 0 20px;
+  background: var(--orange); border: none; border-radius: 11px;
+  color: #fff; font-size: 14px; font-weight: 800; cursor: pointer;
+}
+.ml-join-btn:hover { background: var(--orange-light, #f5893d); }
+.ml-hint { padding: 0 22px 15px; font-size: 12px; margin: 0; }
+
+/* ── Notification preferences ── */
+.notif-prefs {
+  margin-top: 18px; padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.notif-prefs[data-locked="1"] { opacity: 0.4; pointer-events: none; }
+.notif-prefs-head {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--muted);
+  margin: 14px 0 6px;
+}
+.notif-pref {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.045);
+  cursor: pointer;
+}
+.notif-pref:last-child { border-bottom: none; }
+.np-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.np-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.np-sub { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+/* Switch: the real checkbox is hidden but stays focusable */
+.np-switch {
+  position: absolute; opacity: 0;
+  width: 1px; height: 1px; pointer-events: none;
+}
+.np-track {
+  flex-shrink: 0; position: relative;
+  width: 46px; height: 27px; border-radius: 99px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.08);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.np-track::after {
+  content: ''; position: absolute;
+  top: 2px; left: 2px;
+  width: 21px; height: 21px; border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1);
+}
+.np-switch:checked ~ .np-track {
+  background: var(--orange);
+  border-color: var(--orange);
+}
+.np-switch:checked ~ .np-track::after { transform: translateX(19px); }
+.np-switch:focus-visible ~ .np-track {
+  outline: 2px solid var(--orange); outline-offset: 2px;
+}
+
+/* ── Profile: accent color ── */
+.look-panel .panel-title { margin-bottom: 6px; }
+.look-swatches {
+  display: grid; grid-template-columns: repeat(8, 1fr);
+  gap: 10px; margin-top: 16px;
+}
+.look-swatch {
+  /* min-width:0 so the grid tracks can shrink on narrow phones */
+  min-width: 0;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--sw);
+  border: 2.5px solid transparent;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.1);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.look-swatch:hover { transform: scale(1.12); }
+.look-swatch--active {
+  border-color: var(--bg, #060f1c);
+  box-shadow: 0 0 0 2.5px var(--sw), 0 0 14px color-mix(in srgb, var(--sw) 45%, transparent);
+}
+
+/* Where the chosen accent actually shows up. Kept additive and
+   fallback-guarded so it cannot break anything if --user-accent
+   was never set (signed-out, or first run before syncAccentUI). */
+.profile-avatar-ring {
+  outline: 3px solid var(--ring-accent, var(--orange));
+  outline-offset: 3px;
+  border-radius: 50%;
+}
+.standings-row.current-user {
+  border-left: 3px solid var(--user-accent, var(--orange));
+}
+
+/* ── Account modal ── */
+.acct-modal {
+  position: fixed; inset: 0; z-index: 3000;
+  background: rgba(0,0,0,0.82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+.acct-modal-card {
+  width: 100%; max-width: 400px;
+  background: linear-gradient(160deg, rgba(18,24,48,0.98) 0%, rgba(10,14,32,0.99) 100%);
+  border: 1px solid var(--border-2, rgba(255,255,255,0.14));
+  border-radius: 22px;
+  padding: 26px 24px 22px;
+  max-height: calc(100dvh - 40px); overflow-y: auto;
+}
+.acct-modal-title { font-size: 19px; font-weight: 800; margin: 0 0 8px; }
+.acct-modal-sub { font-size: 13.5px; line-height: 1.55; color: var(--muted); margin: 0 0 20px; }
+.acct-modal-err {
+  font-size: 13px; color: #f05252;
+  background: rgba(240,82,82,0.1);
+  border: 1px solid rgba(240,82,82,0.25);
+  border-radius: 10px; padding: 10px 12px; margin: 14px 0 0;
+}
+.acct-modal-actions {
+  display: flex; gap: 10px; margin-top: 22px;
+}
+.acct-modal-actions button { flex: 1; min-height: 46px; }
+.acct-modal-card input {
+  /* 16px floor prevents the iOS focus-zoom */
+  font-size: 16px;
+}
+
+@media (max-width: 480px) {
+  .set-row { padding: 14px 16px; gap: 10px; }
+  .ml-row { padding: 12px 16px; }
+  .ml-join-row { padding: 14px 16px 6px; }
+  .ml-hint { padding: 0 16px 14px; }
+  .set-label { margin: 24px 0 10px 2px; }
+  .look-swatches { grid-template-columns: repeat(4, 1fr); gap: 14px; }
+}
 .section-title {
   font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700;
   color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px;
@@ -3035,6 +3273,10 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 }
 .tut-size-pill {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
+  /* Grid items default to min-width:auto and will not shrink below
+     their content. Without this the 5-column grid overflows the card
+     on any screen narrower than ~430px. */
+  min-width: 0;
   gap: 3px; padding: 12px 6px;
   background: rgba(255,255,255,0.04);
   border: 1.5px solid rgba(255,255,255,0.08);
@@ -3058,6 +3300,44 @@ input:focus, select:focus { outline: 2px solid rgba(79,143,247,0.45); outline-of
 .tut-size-label {
   font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em;
   text-transform: uppercase; color: rgba(255,255,255,0.35);
+  white-space: nowrap;
+}
+
+/* ── Tutorial on phones ──────────────────────────────────────
+   The card had no mobile rules at all, so it was laid out at
+   desktop size on every screen. Two separate problems:
+
+   1. .tut-size-pill is a grid item, and grid items default to
+      min-width:auto, so they will not shrink below their content.
+      The word "PLAYERS" needs ~43px of content box; five columns
+      on a 375px screen leaves ~36px. The track refused to shrink
+      and the grid overflowed the card.
+   2. min-height:520px plus 24px of overlay padding can exceed a
+      short viewport, which put a scrollbar inside the card.
+
+   min-width:0 fixes the first structurally. The label is dropped
+   below 480px because the step already says "How many managers
+   will join?" directly above it, so it was redundant anyway.
+────────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .tut-overlay { padding: 12px; }
+
+  .tut-card {
+    min-height: 420px;
+    max-height: calc(100dvh - 24px);
+    border-radius: 22px;
+  }
+
+  .tut-header    { padding: 16px 18px 0; }
+  .tut-body      { padding: 18px 18px 8px; }
+  .tut-title     { font-size: 21px; }
+  .tut-body-text { font-size: 13.5px; line-height: 1.65; }
+
+  .tut-size-grid { gap: 6px; margin-top: 14px; }
+  /* 44px floor keeps the tap target legal once the label is gone */
+  .tut-size-pill { padding: 12px 2px; border-radius: 12px; min-height: 46px; }
+  .tut-size-num  { font-size: 17px; }
+  .tut-size-label { display: none; }
 }
 
 /* ── League code ── */

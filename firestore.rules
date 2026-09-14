@@ -1,0 +1,66 @@
+rules_version = '2';
+
+// ════════════════════════════════════════════════════════════
+//  TIPOFF FANTASY — Firestore security rules
+//
+//  Paste these into Firebase Console → Firestore → Rules, or
+//  deploy with:  firebase deploy --only firestore:rules
+//
+//  NOTE: the users/{uid} block is new. Without it the My Leagues
+//  list, accent color and account deletion all fail silently,
+//  because a denied read looks identical to an empty document.
+// ════════════════════════════════════════════════════════════
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Per-user record ──────────────────────────────────────
+    //  { displayName, accent, leagues: [{code, name, joinedAt}] }
+    //  Readable and writable only by that user. Nobody else has
+    //  any business knowing which leagues a person belongs to.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ── Leagues ──────────────────────────────────────────────
+    //  Any signed-in user may read and write a league they know
+    //  the code for. The code IS the access control, which is
+    //  why codes are random and six characters.
+    match /leagues/{leagueCode} {
+      allow read, write: if request.auth != null;
+
+      match /{sub=**} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    // ── Live tournament stats ────────────────────────────────
+    //  Written only by the Cloud Function, which uses the Admin
+    //  SDK and bypasses these rules entirely. Clients read only.
+    match /tournamentStats/{tournamentId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+
+      match /players/{playerId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
+
+    // ── Function metadata ────────────────────────────────────
+    //  meta/activeTournaments is written by the app when a
+    //  commissioner picks a tournament, and read by the function.
+    //  meta/syncHealth and meta/teamDirectory belong to the
+    //  function alone, so clients cannot touch them.
+    match /meta/activeTournaments {
+      allow read, write: if request.auth != null;
+    }
+    match /meta/syncHealth {
+      allow read, write: if false;
+    }
+    match /meta/teamDirectory {
+      allow read, write: if false;
+    }
+
+    // Anything not matched above is denied.
+  }
+}
