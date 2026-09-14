@@ -1539,18 +1539,55 @@ function renderDraftOrderStrip() {
   if (cur) cur.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 }
 
+// Requirement chips: "G ✓ · F ✓ · C needed". Rendered for whoever is on
+// the clock so the rule is visible before it bites, not after.
+function renderRosterRequirements() {
+  const host = document.getElementById('rosterReqBar');
+  if (!host) return;
+
+  const pick = currentPick();
+  if (!pick) { host.innerHTML = ''; host.style.display = 'none'; return; }
+
+  const unmet  = unmetRequirements(pick.manager);
+  const forced = forcedPositionsFor(pick.manager);
+  const left   = picksRemainingFor(pick.manager);
+
+  host.style.display = '';
+  host.innerHTML =
+    '<span class="rr-label">' + esc(pick.manager) + '</span>' +
+    ROSTER_POSITIONS.map(function (pos) {
+      const met      = unmet.indexOf(pos) === -1;
+      const required = forced.indexOf(pos) !== -1;
+      const cls = 'rr-chip' + (met ? ' rr-chip--met' : '') + (required ? ' rr-chip--forced' : '');
+      return '<span class="' + cls + '">' + POSITION_LABELS[pos] +
+             (met ? ' ✓' : '') + '</span>';
+    }).join('') +
+    '<span class="rr-left">' + left + ' pick' + (left === 1 ? '' : 's') + ' left</span>' +
+    (forced.length
+      ? '<span class="rr-warn">Must take ' +
+        forced.map(p => POSITION_LABELS[p]).join(' + ') + '</span>'
+      : '');
+}
+
 function renderDraftGrid() {
+  try { renderRosterRequirements(); } catch (e) { console.warn('renderRosterRequirements', e); }
   const grid = document.getElementById('draftPlayerGrid');
   if (!grid) return;
   const search = (document.getElementById('draftSearch') ? document.getElementById('draftSearch').value : '').toLowerCase();
   const posFilter = document.getElementById('draftPosFilter') ? document.getElementById('draftPosFilter').value : '';
   const players = getSortedPlayers(search, posFilter);
   if (players.length === 0) { grid.innerHTML = '<div style="padding:20px;color:var(--muted);text-align:center;">No players found.</div>'; return; }
+  // Whose roster rule are we evaluating against? The manager on the
+  // clock, since they are the only one who can pick right now.
+  const _pick = currentPick();
+  const _onClock = _pick ? _pick.manager : null;
+
   grid.innerHTML = players.map((p, i) => {
     const isDrafted = !!state.drafted[p.id];
+    const isLocked  = !isDrafted && _onClock && !playerIsEligible(p, _onClock);
     const fpts = calcFPTS(p);
     const seedCls = p.seed <= 4 ? ' seed-' + p.seed : '';
-    return '<div class="pool-row' + (isDrafted ? ' drafted' : '') + '" data-pid="' + p.id + '">' +
+    return '<div class="pool-row' + (isDrafted ? ' drafted' : '') + (isLocked ? ' pool-row--locked' : '') + '" data-pid="' + p.id + '">' +
       '<span class="pool-rank">' + (i + 1) + '</span>' +
       '<div class="pool-player-cell">' + getSchoolLogoHTML(p.college, 26) +
       '<div class="pool-player-info"><div class="pool-player-name">' + esc(p.name) + '</div><div class="pool-player-college">' + esc(p.college) + '</div></div></div>' +
@@ -1613,6 +1650,14 @@ function openDraftConfirm(playerId) {
     toast("It's " + pick.manager + "'s pick, not yours.", 'error');
     return;
   }
+
+  // Block the pick before the confirm modal opens, so the reason is
+  // explained at the moment of the tap rather than after confirming.
+  if (pick) {
+    const rule = checkRosterRule(p, pick.manager);
+    if (!rule.ok) { toast(rule.reason, 'error'); return; }
+  }
+
   pendingPickPlayerId = playerId;
   const modal = document.getElementById('draftConfirmModal');
   const logoEl = document.getElementById('confirmLogo');
@@ -1636,12 +1681,167 @@ function openDraftConfirm(playerId) {
   if (modal) modal.style.display = 'flex';
 }
 
+// ══════════════════════════════════════════════════════════
+// 🏀 ROSTER REQUIREMENTS
+//   Every roster must end with at least one guard, one forward
+//   and one center. The remaining picks are unrestricted.
+//
+//   The feed only gives us three buckets (G / F / C) plus
+//   hyphenates like "F-C" and "G-F". A hyphenate counts for
+//   EITHER of its buckets but only one at a time, which makes
+//   this a small bipartite matching rather than a tally.
+//
+//   Enforcement is "don't paint yourself into a corner": a pick
+//   is blocked only when taking it would make the requirements
+//   impossible to finish. With 8 picks and 3 requirements you
+//   have 5 completely free picks before anything locks.
+// ══════════════════════════════════════════════════════════
+const ROSTER_POSITIONS = ['G', 'F', 'C'];
+
+const POSITION_LABELS = { G: 'Guard', F: 'Forward', C: 'Center' };
+
+// 'F-C' -> Set{F,C} ;  'PG' -> Set{G} ;  'C' -> Set{C}
+function positionBuckets(player) {
+  const raw = String((player && player.position) || '').toUpperCase();
+  const out = new Set();
+  if (raw.indexOf('C') !== -1) out.add('C');
+  if (raw.indexOf('G') !== -1) out.add('G');
+  if (raw.indexOf('F') !== -1) out.add('F');
+  // Unknown or blank positions are treated as wildcards rather than
+  // as unusable, so a data gap can never soft-lock someone's draft.
+  if (out.size === 0) ROSTER_POSITIONS.forEach(p => out.add(p));
+  return out;
+}
+
+// Maximum number of distinct requirements these players can cover.
+// Augmenting-path matching; the search space is 3 wide so this is
+// effectively free.
+function maxPositionCover(bucketSets) {
+  const matchOf = {};
+
+  function tryAssign(i, seen) {
+    const buckets = bucketSets[i];
+    for (const pos of ROSTER_POSITIONS) {
+      if (!buckets.has(pos) || seen.has(pos)) continue;
+      seen.add(pos);
+      if (matchOf[pos] === undefined || tryAssign(matchOf[pos], seen)) {
+        matchOf[pos] = i;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  let covered = 0;
+  for (let i = 0; i < bucketSets.length; i++) {
+    if (tryAssign(i, new Set())) covered++;
+  }
+  return covered;
+}
+
+function rosterPlayersFor(manager) {
+  const out = [];
+  Object.keys(state.drafted || {}).forEach(function (pid) {
+    if (state.drafted[pid].manager !== manager) return;
+    const p = (state.players || []).find(x => x.id === pid);
+    if (p) out.push(p);
+  });
+  return out;
+}
+
+// How many picks this manager still has, including the one on the clock.
+function picksRemainingFor(manager) {
+  const rounds = state.rounds || 8;
+  return Math.max(0, rounds - rosterPlayersFor(manager).length);
+}
+
+// Which of G/F/C this manager's current roster cannot yet cover.
+// Used for the requirement chips on the draft board.
+function unmetRequirements(manager) {
+  const sets = rosterPlayersFor(manager).map(positionBuckets);
+  const covered = maxPositionCover(sets);
+  return ROSTER_POSITIONS.filter(function (pos) {
+    return maxPositionCover(sets.concat([new Set([pos])])) > covered;
+  });
+}
+
+/**
+ * Can `manager` still finish a legal roster if they take `candidate` now?
+ * Returns { ok, reason, forced }  where `forced` lists the positions they
+ * are now obligated to take.
+ */
+function checkRosterRule(candidate, manager) {
+  const rounds = state.rounds || 8;
+  const roster = rosterPlayersFor(manager);
+
+  // Not enough rounds to satisfy the rule at all: disable it rather than
+  // making the draft unwinnable (e.g. a 2-round test league).
+  if (rounds < ROSTER_POSITIONS.length) return { ok: true, forced: [] };
+
+  const afterSets = roster.map(positionBuckets);
+  if (candidate) afterSets.push(positionBuckets(candidate));
+
+  const coveredAfter  = maxPositionCover(afterSets);
+  const stillMissing  = ROSTER_POSITIONS.length - coveredAfter;
+  const picksLeftAfter = rounds - afterSets.length;
+
+  if (stillMissing > picksLeftAfter) {
+    const missing = ROSTER_POSITIONS.filter(function (pos) {
+      const withPos = maxPositionCover(afterSets.concat([new Set([pos])]));
+      return withPos > coveredAfter;
+    });
+    return {
+      ok: false,
+      forced: missing,
+      reason: 'You need ' + missing.map(p => POSITION_LABELS[p]).join(' and ') +
+              ' to complete a legal roster, and only ' + picksLeftAfter +
+              ' pick' + (picksLeftAfter === 1 ? '' : 's') + ' left.',
+    };
+  }
+
+  return { ok: true, forced: [] };
+}
+
+// Positions a manager MUST take with their remaining picks. Empty when
+// they still have slack. Drives the draft board chips and the lockout.
+function forcedPositionsFor(manager) {
+  const rounds = state.rounds || 8;
+  if (rounds < ROSTER_POSITIONS.length) return [];
+
+  const sets = rosterPlayersFor(manager).map(positionBuckets);
+  const covered = maxPositionCover(sets);
+  const missing = ROSTER_POSITIONS.length - covered;
+  const picksLeft = rounds - sets.length;
+
+  if (missing < picksLeft) return [];   // still has slack
+
+  return ROSTER_POSITIONS.filter(function (pos) {
+    return maxPositionCover(sets.concat([new Set([pos])])) > covered;
+  });
+}
+
+// True when this player is legal for the manager on the clock right now.
+function playerIsEligible(player, manager) {
+  if (!manager) return true;
+  return checkRosterRule(player, manager).ok;
+}
+
 function confirmDraftPick() {
   if (!pendingPickPlayerId) return;
   const pick = currentPick();
   if (!pick) { toast('Draft is complete or not started', 'error'); return; }
   const p = (state.players || []).find(x => x.id === pendingPickPlayerId);
   if (!p || state.drafted[pendingPickPlayerId]) { toast('Player already drafted', 'error'); return; }
+
+  // Roster rule. Checked here as well as in the UI, because the UI can
+  // be stale by a pick or two when several managers act at once.
+  const rule = checkRosterRule(p, pick.manager);
+  if (!rule.ok) {
+    toast(rule.reason, 'error');
+    document.getElementById('draftConfirmModal').style.display = 'none';
+    pendingPickPlayerId = null;
+    return;
+  }
 
   const btn = document.getElementById('confirmPickBtn');
   if (btn) { btn.classList.add('draft-go--charging'); btn.textContent = 'Confirming…'; }
@@ -3261,8 +3461,15 @@ function updateRingProgress() {
 function autoPickForCurrent() {
   const pick = currentPick();
   if (!pick) return;
-  const players = getSortedPlayers('', '').filter(p => !state.drafted[p.id]);
+  let players = getSortedPlayers('', '').filter(p => !state.drafted[p.id]);
   if (players.length === 0) return;
+
+  // Never auto-pick a player that would make the manager's roster
+  // illegal. If the rule has locked them in, this narrows the list to
+  // the positions they are obligated to take.
+  const legal = players.filter(p => playerIsEligible(p, pick.manager));
+  if (legal.length) players = legal;
+
   const best = players[0];
   state.drafted[best.id] = { manager: pick.manager, round: pick.round, pick: pick.pick, pickNumber: pick.pickNumber, label: pick.label, ts: Date.now() };
   state.currentPickIndex++;
