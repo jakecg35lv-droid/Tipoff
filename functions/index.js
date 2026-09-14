@@ -211,6 +211,183 @@ exports.probe = onRequest(
   }
 );
 
+// ── Games probe ───────────────────────────────────────────────
+//  Live scores and bracket advancement need the game feed, which is a
+//  different shape from the player-stat feed. Verify the field names
+//  against real responses before writing any sync against them.
+//    GET .../probeGames?date=2026-MAR-20
+exports.probeGames = onRequest(
+  { timeoutSeconds: 120, memory: '256MiB' },
+  async (req, res) => {
+    const date   = req.query.date || '2026-MAR-20';
+    const season = req.query.season || '2026';
+
+    const candidates = [
+      ['GamesByDate',       `${SCORES}/GamesByDate/${date}`],
+      ['ScoresBasic',       `${SCORES}/ScoresBasic/${date}`],
+      ['Games (season)',    `${SCORES}/Games/${season}`],
+      ['TeamGameStatsByDate', `${STATS}/TeamGameStatsByDate/${date}`],
+      ['Tournaments',       `${SCORES}/Tournaments/${season}`],
+      ['TournamentHierarchy', `${SCORES}/TournamentHierarchy/${season}`],
+      ['AreAnyGamesInProgress', `${SCORES}/AreAnyGamesInProgress`],
+    ];
+
+    const results = {};
+    for (const [label, url] of candidates) {
+      try {
+        const r = await fetch(`${url}?key=${API_KEY}`);
+        const entry = { status: r.status, ok: r.ok };
+        if (r.ok) {
+          const body = await r.json();
+          if (Array.isArray(body)) {
+            entry.count = body.length;
+            entry.allKeys = body.length ? Object.keys(body[0]) : [];
+            // Two full rows beat a hand-picked sample: field names we do
+            // not anticipate are precisely the ones that break the sync.
+            entry.rows = body.slice(0, 2);
+          } else {
+            entry.type = typeof body;
+            entry.value = body;
+          }
+        }
+        results[label] = entry;
+      } catch (e) {
+        results[label] = { error: e.message };
+      }
+    }
+    res.status(200).json({ date, season, results });
+  }
+);
+
+// ── Roster generator ──────────────────────────────────────────
+//  Builds the data behind data/players.js straight from the API so the
+//  player pool never has to be typed by hand again.
+//
+//    GET .../rosters?schools=Arizona|BYU|Ole%20Miss&season=2026&top=8
+//
+//  schools : pipe-separated school names as they appear in the app's
+//            tournament team lists (NOT API abbreviations).
+//  season  : the season to pull per-game averages from. 2027 is the
+//            upcoming season and has no games yet, so default to 2026.
+//  top     : how many players per school to return (0 = all).
+//
+//  Season stat rows are SEASON TOTALS, not averages. Divide by Games.
+exports.rosters = onRequest(
+  { timeoutSeconds: 300, memory: '512MiB' },
+  async (req, res) => {
+    try {
+      const season = String(req.query.season || '2026');
+      const top    = req.query.top != null ? parseInt(req.query.top, 10) : 8;
+      const wanted = String(req.query.schools || '')
+        .split('|').map(s => s.trim()).filter(Boolean);
+
+      if (!wanted.length) {
+        return res.status(400).json({ error: 'pass ?schools=A|B|C' });
+      }
+
+      // 1. Team directory: our school name → { key, teamId, apiSchool }
+      const tRes = await fetch(`${SCORES}/teams?key=${API_KEY}`);
+      if (!tRes.ok) throw new Error(`teams HTTP ${tRes.status}`);
+      const teams = await tRes.json();
+
+      const lookup = {};
+      for (const t of teams) {
+        if (!t || !t.School || !t.Key) continue;
+        const rec = { key: t.Key, teamId: t.TeamID, apiSchool: t.School,
+                      name: t.Name, conference: t.Conference };
+        const n = normSchool(t.School);
+        if (n && !lookup[n]) lookup[n] = rec;
+        const alias = SCHOOL_MAP[n];
+        if (alias) {
+          const a = normSchool(alias);
+          if (a && !lookup[a]) lookup[a] = rec;
+        }
+      }
+      // Reverse aliases too: 'ole miss' -> 'Ole Miss' -> whichever API row matched
+      for (const [from, to] of Object.entries(SCHOOL_MAP)) {
+        const t = normSchool(to);
+        if (lookup[t] && !lookup[from]) lookup[from] = lookup[t];
+      }
+
+      // 2. Full player list once (~17k rows), indexed by TeamID
+      const pRes = await fetch(`${SCORES}/Players?key=${API_KEY}`);
+      if (!pRes.ok) throw new Error(`Players HTTP ${pRes.status}`);
+      const allPlayers = await pRes.json();
+
+      const byTeamId = {};
+      for (const p of allPlayers) {
+        if (p.TeamID == null) continue;
+        (byTeamId[String(p.TeamID)] = byTeamId[String(p.TeamID)] || []).push(p);
+      }
+
+      // 3. Per-school season stats, merged onto the roster
+      const out = {};
+      const missing = [];
+
+      for (const school of wanted) {
+        const rec = lookup[normSchool(school)];
+        if (!rec) { missing.push(school); continue; }
+
+        const roster = byTeamId[String(rec.teamId)] || [];
+
+        let statsById = {};
+        try {
+          const sRes = await fetch(
+            `${STATS}/PlayerSeasonStatsByTeam/${season}/${rec.key}?key=${API_KEY}`);
+          if (sRes.ok) {
+            const rows = await sRes.json();
+            for (const r of (rows || [])) {
+              if (r && r.PlayerID != null) statsById[String(r.PlayerID)] = r;
+            }
+          }
+        } catch (e) { /* leave stats empty */ }
+
+        const players = roster.map(p => {
+          const s  = statsById[String(p.PlayerID)];
+          const g  = s && s.Games ? s.Games : 0;
+          const pg = n => (g ? Math.round(((n || 0) / g) * 10) / 10 : 0);
+          return {
+            playerId: p.PlayerID,
+            name: [p.FirstName, p.LastName].filter(Boolean).join(' ').trim(),
+            position: p.Position || '',
+            cls: p.Class || '',
+            jersey: p.Jersey != null ? p.Jersey : '',
+            height: p.Height || '',
+            games: g,
+            mpg: s ? pg(s.Minutes) : 0,
+            fppg: s && g ? Math.round(((s.FantasyPoints || 0) / g) * 10) / 10 : 0,
+            stats: {
+              points:   s ? pg(s.Points)       : 0,
+              rebounds: s ? pg(s.Rebounds)     : 0,
+              assists:  s ? pg(s.Assists)      : 0,
+              steals:   s ? pg(s.Steals)       : 0,
+              blocks:   s ? pg(s.BlockedShots) : 0,
+            },
+            hasStats: !!s,
+          };
+        });
+
+        // Best first. Players with no prior-season line sink to the bottom;
+        // they are freshmen or transfers and need a human decision.
+        players.sort((a, b) => (b.fppg - a.fppg) || (b.mpg - a.mpg));
+
+        out[school] = {
+          apiSchool: rec.apiSchool,
+          key: rec.key,
+          teamId: rec.teamId,
+          rosterSize: roster.length,
+          withStats: players.filter(p => p.hasStats).length,
+          players: top > 0 ? players.slice(0, top) : players,
+        };
+      }
+
+      res.status(200).json({ season, top, missing, schools: out });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+);
+
 // ═══════════════════════════════════════════════════════════════
 //  CORE SYNC
 // ═══════════════════════════════════════════════════════════════
