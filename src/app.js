@@ -287,10 +287,36 @@ function _saveLeagueToFirestore() {
   if (!window._db || !state.leagueCode) return;
   const toSave = Object.assign({}, state);
   delete toSave.players; // static, large — loaded from players.js
+
+  // ── Never overwrite the manager list ────────────────────
+  //  Firestore's merge:true does NOT deep-merge arrays, it replaces
+  //  the whole field. So a client holding a stale roster would wipe
+  //  out anyone who joined since its last read — a manager silently
+  //  disappearing mid-draft. arrayUnion makes the write additive and
+  //  atomic, so two people joining at once cannot clobber each other.
+  const mgrs = Array.isArray(state.managers) ? state.managers.filter(Boolean) : [];
+  delete toSave.managers;
+
   toSave._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   toSave._commissionerUid = (window._fbUser && window._fbUser.uid) || null;
+  if (mgrs.length) {
+    toSave.managers = firebase.firestore.FieldValue.arrayUnion.apply(null, mgrs);
+  }
+
   window._db.collection('leagues').doc(state.leagueCode).set(toSave, { merge: true })
     .catch(e => console.warn('[Firestore] saveLeague failed:', e.message));
+}
+
+/**
+ * Remove a manager. This is the ONLY path that may shrink the roster,
+ * because _saveLeagueToFirestore is additive by design and cannot.
+ */
+function removeManagerRemote(name) {
+  if (!window._db || !state.leagueCode || !name) return Promise.resolve();
+  return window._db.collection('leagues').doc(state.leagueCode).update({
+    managers: firebase.firestore.FieldValue.arrayRemove(name),
+    lastSaved: Date.now(),
+  }).catch(e => console.warn('[Firestore] removeManager failed:', e.message));
 }
 
 function _subscribeLeague(code) {
@@ -300,14 +326,45 @@ function _subscribeLeague(code) {
     .onSnapshot(doc => {
       if (!doc.exists) return;
       const data = doc.data();
-      // Only apply remote data if it's newer than what we have locally
+
+      // ── Managers are merged, never compared ──────────────
+      //  lastSaved is Date.now() from whichever DEVICE wrote it, so the
+      //  timestamp guard below is really comparing two different
+      //  computers' clocks. A phone a second behind a laptop makes the
+      //  laptop treat a real join as stale and discard it forever.
+      //  Roster membership is too important to lose to clock skew, so
+      //  it is unioned unconditionally and never removed by a remote
+      //  snapshot.
+      const remoteMgrs = Array.isArray(data.managers) ? data.managers : [];
+      const localMgrs  = Array.isArray(state.managers) ? state.managers : [];
+      const merged     = localMgrs.slice();
+      let joined       = [];
+
+      remoteMgrs.forEach(function (m) {
+        if (m && merged.indexOf(m) === -1) { merged.push(m); joined.push(m); }
+      });
+
       const remoteTs = data.lastSaved || 0;
       const localTs = state.lastSaved || 0;
+
       if (remoteTs > localTs + 1000) { // 1s buffer to avoid echo
         _applyLeagueState(data);
+        state.managers = merged;       // keep anyone the remote doc lacked
         try { localStorage.setItem('mmfantasy-league-' + state.leagueId, JSON.stringify(state)); } catch (e) { }
         render();
         toast('League updated.', 'info');
+        return;
+      }
+
+      // Remote looked "older" but carried a manager we do not have.
+      // That is the clock-skew case. Apply just the roster change.
+      if (joined.length) {
+        state.managers = merged;
+        try { localStorage.setItem('mmfantasy-league-' + state.leagueId, JSON.stringify(state)); } catch (e) { }
+        render();
+        joined.forEach(function (m) { addActivity(esc(m) + ' joined the league'); });
+        toast(joined.join(', ') + (joined.length === 1 ? ' joined' : ' joined') + ' the league', 'success');
+        track('league_joined', { managers: merged.length, observed_by: 'commissioner' });
       }
     }, e => console.warn('[Firestore] snapshot error:', e));
 }
