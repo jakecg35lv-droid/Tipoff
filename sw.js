@@ -3,12 +3,13 @@
    Cache-first for static assets, network-first for data
 ══════════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'tipoff-v130';
+const CACHE_NAME = 'tipoff-v132';
 const STATIC_ASSETS = [
   './',
   './index.html',
   './src/styles.css',
   './src/app.js',
+  './src/analytics.js',
   './data/bracket.js',
   './data/players.js',
   './logo-icon.png',

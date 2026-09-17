@@ -488,8 +488,58 @@ function navigateTo(page) {
     try { refreshSettingsPage(); } catch (e) { console.error('refreshSettingsPage', e); }
   }
   if (page === 'news') { try { renderNews(); } catch (e) { console.error('renderNews', e); } }
+
+  try { trackPageView(page); } catch (e) { }
+
   // Keep right panel fresh on every navigation
   try { renderRightPanel(); } catch (e) { }
+}
+
+// ── Page-level analytics ──────────────────────────────────
+//  Mapped rather than emitted as a generic page_view, so the funnel
+//  reads in plain language instead of needing a property filter.
+const PAGE_EVENTS = {
+  standings: 'leaderboard_viewed',
+  bracket:   'bracket_viewed',
+  news:      'news_viewed',
+  teams:     'live_score_viewed',
+};
+
+function trackPageView(page) {
+  const evt = PAGE_EVENTS[page];
+  if (!evt) return;
+
+  track(evt, {
+    draft_complete: isDraftComplete(),
+    tournament: state.selectedTournament ? state.selectedTournament.id : null,
+  });
+
+  // THE retention question for this format: once your roster is dead,
+  // do you still open the app? If this number collapses on day 2, the
+  // game has an endgame problem that no amount of signups fixes.
+  try {
+    if (isDraftComplete() && myRosterFullyEliminated()) {
+      track('session_after_elimination', { page: page });
+    }
+  } catch (e) { }
+}
+
+// True when every player this user drafted belongs to an eliminated team.
+function myRosterFullyEliminated() {
+  const session = getSession();
+  const me = session ? session.name : null;
+  if (!me) return false;
+
+  const alive = getAliveTeamsInfo();
+  const mine = Object.keys(state.drafted || {})
+    .filter(pid => state.drafted[pid].manager === me);
+  if (!mine.length) return false;
+
+  return mine.every(function (pid) {
+    const p = (state.players || []).find(x => x.id === pid);
+    if (!p) return true;
+    return !(alive[p.college] || alive[normalizeName(p.college)]);
+  });
 }
 
 // ── SCREEN MANAGEMENT ─────────────────────────────────────
@@ -611,6 +661,20 @@ function enterLeague() {
   // My Leagues later. Fire and forget: it must never block entry.
   try { recordLeagueMembership(state.leagueCode, state.leagueName); } catch (e) { }
   try { applyAccent(getAccent()); } catch (e) { }
+
+  // Returning-user signal. Guarded so re-renders inside one session
+  // cannot inflate the count.
+  try {
+    if (!window._returnTracked) {
+      window._returnTracked = true;
+      const uid = _uid();
+      if (uid && window.Analytics) window.Analytics.identify(uid, {});
+      track('app_returned', {
+        draft_complete: isDraftComplete(),
+        has_tournament: !!state.selectedTournament,
+      });
+    }
+  } catch (e) { }
 
   // Resume live stat listener if a tournament was already selected
   listenToLiveStats();
@@ -761,6 +825,26 @@ function handleSignup() {
   if (!email.includes('@')) { errEl.textContent = 'Enter a valid email.'; errEl.style.display = 'block'; return; }
   if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
   if (password !== confirm) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; return; }
+
+  // ── Age gate ────────────────────────────────────────────
+  //  COPPA applies under 13, so that is a hard stop. 13-17 is allowed
+  //  but flagged, because a minor flag is the thing you need in place
+  //  BEFORE you start collecting analytics, not after.
+  const dobRaw = (document.getElementById('signupDob') || {}).value || '';
+  const age = ageFromDOB(dobRaw);
+  if (age === null) {
+    errEl.textContent = 'Enter your date of birth.';
+    errEl.style.display = 'block'; return;
+  }
+  if (age < 0 || age > 120) {
+    errEl.textContent = 'Enter a valid date of birth.';
+    errEl.style.display = 'block'; return;
+  }
+  if (age < MIN_AGE) {
+    errEl.textContent = 'You must be at least ' + MIN_AGE + ' years old to use Tipoff Fantasy.';
+    errEl.style.display = 'block'; return;
+  }
+
   if (!tosChecked) { errEl.textContent = 'You must accept the Terms of Service to create an account.'; errEl.style.display = 'block'; return; }
 
   function _afterSignupNav() {
@@ -783,6 +867,12 @@ function handleSignup() {
           ? window._db.collection('users').doc(cred.user.uid).set({
             displayName: username,
             email: email,
+            // Store the bracket, not the birth date. We needed the DOB
+            // once to make a decision; keeping it is a liability with no
+            // corresponding use.
+            ageBracket: age < 18 ? 'minor' : 'adult',
+            isMinor: age < 18,
+            ageVerifiedAt: firebase.firestore.FieldValue.serverTimestamp(),
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           })
           : Promise.resolve();
@@ -790,6 +880,17 @@ function handleSignup() {
       })
       .then(() => {
         setSession(username, email, window._fbUser ? window._fbUser.uid : null);
+
+        // Identity is the UID. Not the email, not the display name.
+        const uid = window._fbUser ? window._fbUser.uid : null;
+        if (window.Analytics) {
+          window.Analytics.identify(uid, { age_bracket: age < ADULT_AGE ? 'minor' : 'adult' });
+        }
+        track('account_created', Object.assign(
+          { age_bracket: age < ADULT_AGE ? 'minor' : 'adult' },
+          window.Analytics ? window.Analytics.acquisition() : {}
+        ));
+
         btn.textContent = 'Create Account'; btn.disabled = false;
         _afterSignupNav();
       })
@@ -902,6 +1003,10 @@ function createLeague() {
   try { localStorage.setItem('mmfantasy-code-' + state.leagueCode, state.leagueId); } catch (e) { }
   addActivity((state.commissioner || 'Commissioner') + ' created the league');
   saveState();
+  track('league_created', Object.assign(
+    { max_managers: state.maxManagers || 8, rounds: state.rounds || 8 },
+    window.Analytics ? window.Analytics.acquisition() : {}
+  ));
 }
 
 // ── INVITE LINK ───────────────────────────────────────────
@@ -911,6 +1016,10 @@ function getInviteURL(code) {
 
 function shareInviteLink() {
   if (!state.leagueCode) { toast('No league code yet. Create a league first.', 'error'); return; }
+  track('invite_sent', {
+    method: navigator.share ? 'native_share' : 'clipboard',
+    managers_so_far: (state.managers || []).length,
+  });
   const url = getInviteURL(state.leagueCode);
   const text = 'Join my Tipoff Fantasy league "' + (state.leagueName || 'My League') + '"! Code: ' + state.leagueCode;
 
@@ -1002,6 +1111,14 @@ function handleJoin() {
     saveState();
     document.getElementById('joinModal').style.display = 'none';
     _subscribeLeague(state.leagueCode);
+
+    const nowFull = saved.managers.length >= max;
+    track('league_joined', Object.assign(
+      { managers: saved.managers.length, max_managers: max, filled_league: nowFull },
+      window.Analytics ? window.Analytics.acquisition() : {}
+    ));
+    if (nowFull) track('league_filled', { max_managers: max });
+
     enterLeague();
   }
 
@@ -1655,7 +1772,13 @@ function openDraftConfirm(playerId) {
   // explained at the moment of the tap rather than after confirming.
   if (pick) {
     const rule = checkRosterRule(p, pick.manager);
-    if (!rule.ok) { toast(rule.reason, 'error'); return; }
+    if (!rule.ok) {
+      toast(rule.reason, 'error');
+      track('roster_rule_blocked', {
+        round: pick.round, forced: rule.forced.join('+'), position: p.position,
+      });
+      return;
+    }
   }
 
   pendingPickPlayerId = playerId;
@@ -1857,6 +1980,14 @@ function confirmDraftPick() {
     };
     state.currentPickIndex++;
     addActivity(esc(pick.manager) + ' drafted ' + esc(p.name) + ' (' + pick.label + ')');
+    track('pick_made', {
+      round: pick.round,
+      pick_number: pick.pickNumber,
+      seed: p.seed,
+      position: p.position,
+      seconds_used: state.pickTimerStartedAt
+        ? Math.round((Date.now() - state.pickTimerStartedAt) / 1000) : null,
+    });
     saveState();
 
     if (btn) { btn.classList.remove('draft-go--charging'); btn.textContent = 'Confirm Pick ›'; }
@@ -1880,6 +2011,12 @@ function confirmDraftPick() {
     if (isDraftComplete()) {
       toast('Draft complete!', 'success');
       setTimeout(launchConfetti, 200);
+      track('draft_completed', {
+        managers: (state.managers || []).length,
+        rounds: state.rounds || 8,
+        total_picks: Object.keys(state.drafted || {}).length,
+        tournament: state.selectedTournament ? state.selectedTournament.id : null,
+      });
     }
   }, 450);
 }
@@ -3378,11 +3515,45 @@ function updateTimerBtnState() {
 
 function startTimer() {
   if (state.timerRunning) return;
+
+  // Don't let a draft begin with half the league missing.
+  // ESPN pushes the start back in 5-minute blocks until the league is
+  // full; we can't hold the room open like that, so we warn hard and
+  // make the commissioner say yes on purpose. The failure this prevents
+  // is a Nov 23 draft starting with three of eight managers present,
+  // which cannot be undone once picks are in.
+  const joined = (state.managers || []).length;
+  const max    = state.maxManagers || 8;
+  const firstPick = state.currentPickIndex === 0;
+
+  if (firstPick && joined < max) {
+    const missing = max - joined;
+    const ok = confirm(
+      'Only ' + joined + ' of ' + max + ' managers have joined.\n\n' +
+      missing + ' spot' + (missing === 1 ? '' : 's') + ' still open. ' +
+      'Starting now drafts without them, and picks cannot be undone once the draft is running.\n\n' +
+      'Start anyway?'
+    );
+    if (!ok) return;
+    addActivity('Draft started with ' + joined + ' of ' + max + ' managers.');
+  }
+
   state.pickTimerStartedAt = Date.now();
   state.timerRunning = true;
   saveState();
   updateTimerBtnState();
   timerInterval = setInterval(tickTimer, 500);
+
+  if (firstPick) {
+    track('draft_started', {
+      managers: joined,
+      max_managers: max,
+      league_full: joined >= max,
+      rounds: state.rounds || 8,
+      timer_seconds: state.pickTimerSeconds,
+      tournament: state.selectedTournament ? state.selectedTournament.id : null,
+    });
+  }
 }
 
 function pauseTimer() {
@@ -3474,6 +3645,12 @@ function autoPickForCurrent() {
   state.drafted[best.id] = { manager: pick.manager, round: pick.round, pick: pick.pick, pickNumber: pick.pickNumber, label: pick.label, ts: Date.now() };
   state.currentPickIndex++;
   addActivity('Auto-pick: ' + esc(pick.manager) + ' was assigned ' + esc(best.name));
+  // A high rate here means the timer is too short or the missing
+  // player queue is hurting people.
+  track('pick_autodrafted', {
+    round: pick.round, pick_number: pick.pickNumber,
+    seed: best.seed, position: best.position,
+  });
   if (isDraftComplete()) {
     clearInterval(timerInterval);
     state.timerRunning = false;
@@ -3849,6 +4026,7 @@ function renderDraftSchedule() {
 }
 
 function saveDraftSchedule() {
+  track('draft_scheduled', { managers: (state.managers || []).length });
   const dateEl = document.getElementById('sdDateInput');
   const timeEl = document.getElementById('sdTimeInput');
   if (!dateEl || !timeEl) return;
@@ -4326,6 +4504,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Settings
   document.getElementById('saveScoringBtn')?.addEventListener('click', () => {
+    // League rules belong to the commissioner. Previously any manager
+    // could reweight scoring mid-draft, which silently rewrote every
+    // score in the league.
+    if (!isCommissioner()) { toast('Only the commissioner can change scoring.', 'error'); return; }
     const draftStarted = state.currentPickIndex > 0;
     if (draftStarted && !confirm('Changing scoring mid-draft will recalculate all FPTS values retroactively. Continue?')) return;
     const cats = ['points', 'rebounds', 'assists', 'steals', 'blocks'];
@@ -4334,11 +4516,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const wt = parseFloat(document.getElementById(c + 'Weight')?.value);
       if (!isNaN(wt)) state.scoring.weights[c] = wt;
     });
+    // Settings changes go in the activity feed. Without a record, a
+    // commissioner can quietly double the weight on blocks after
+    // drafting two centers and nobody ever sees it.
+    addActivity('Commissioner updated scoring: ' +
+      state.scoring.active.map(c => c.toUpperCase().slice(0, 3) + ' ×' + state.scoring.weights[c]).join(', '));
     saveState();
     render();
     toast('Scoring saved!', 'success');
   });
   document.getElementById('saveTimerBtn')?.addEventListener('click', () => {
+    if (!isCommissioner()) { toast('Only the commissioner can change the pick timer.', 'error'); return; }
     const m = parseInt(document.getElementById('timerMinutes')?.value) || 0;
     const s = parseInt(document.getElementById('timerSeconds')?.value) || 0;
     state.pickTimerSeconds = m * 60 + s;
@@ -4700,6 +4888,9 @@ async function requestNotifPermission() {
   const result = await Notification.requestPermission();
   const granted = result === 'granted';
   setNotifPref(granted);
+  // Gates most of the retention mechanism, so it is a leading
+  // indicator worth watching on its own.
+  track(granted ? 'notification_permission_granted' : 'notification_permission_denied', {});
   return granted;
 }
 
@@ -4826,6 +5017,38 @@ function wireNotifPrefs() {
 // ══════════════════════════════════════════════════════════
 function _uid() {
   return (window._auth && window._auth.currentUser) ? window._auth.currentUser.uid : null;
+}
+
+// ── Analytics helper ──────────────────────────────────────
+//  Thin passthrough so call sites never need a guard. analytics.js
+//  scrubs PII at the boundary; never pass email, display name or chat
+//  text, and note that it would be dropped anyway if you did.
+function track(event, props) {
+  try {
+    if (window.Analytics) window.Analytics.track(event, props || {});
+  } catch (e) {}
+}
+
+// ── Age ───────────────────────────────────────────────────
+const MIN_AGE = 13;          // COPPA floor
+const ADULT_AGE = 18;
+
+// Whole years as of today. Returns null for an unparseable/empty date.
+function ageFromDOB(value) {
+  if (!value) return null;
+  const parts = String(value).split('-');
+  if (parts.length !== 3) return null;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  if (!y || !m || !d) return null;
+
+  const now = new Date();
+  let age = now.getFullYear() - y;
+  // Subtract a year if the birthday has not happened yet this year.
+  const monthDiff = (now.getMonth() + 1) - m;
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d)) age--;
+  return age;
 }
 
 function userDocRef() {

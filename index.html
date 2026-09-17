@@ -116,6 +116,15 @@
             </button>
           </div>
         </div>
+        <!-- Neutral age screen. A date field rather than an "I am 13+"
+             checkbox: a checkbox telegraphs the answer that gets you in,
+             which is exactly what a neutral age screen must not do. -->
+        <div class="form-group">
+          <label for="signupDob">Date of Birth</label>
+          <input type="date" id="signupDob" autocomplete="bday" />
+          <span class="field-hint">Used once to confirm your age. We store your age bracket, nothing else.</span>
+        </div>
+
         <div id="signupError" class="auth-error" style="display:none;"></div>
         <div class="tos-check-row">
           <input type="checkbox" id="tosCheckbox" class="tos-checkbox-real" />
@@ -126,6 +135,7 @@
               </svg>
             </span>
             I have read and agree to the <a href="#" id="openTosBtn" class="tos-link">Terms of Service</a>
+            and <a href="https://tipofffantasy.com/privacy.html" target="_blank" rel="noopener noreferrer" class="tos-link">Privacy Policy</a>
           </label>
         </div>
         <button id="signupSubmitBtn" class="btn-primary btn-full" disabled>Create Account</button>
@@ -472,7 +482,7 @@
             <div class="hero-timer-controls commissioner-only">
               <button id="startTimerBtnHome" class="btn-hero-primary">Make Pick</button>
               <button id="pauseBtnHome" class="btn-hero-ghost">⏸ Pause</button>
-              <button id="resetTimerBtn" class="btn-hero-ghost">↺ Reset</button>
+              <button id="resetTimerBtn" class="btn-hero-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-2px;margin-right:5px;"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Reset</button>
             </div>
           </div>
           <div class="hero-clock-wrap">
@@ -678,7 +688,7 @@
           <div class="draft-commissioner-controls commissioner-only">
             <button id="startTimerBtnDraft" class="btn-sm btn-green">Start</button>
             <button id="pauseBtnDraft" class="btn-sm btn-ghost">Pause</button>
-            <button id="resetTimerBtnDraft" class="btn-sm btn-ghost">↺ Reset</button>
+            <button id="resetTimerBtnDraft" class="btn-sm btn-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-2px;margin-right:5px;"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Reset</button>
             <div class="dcc-divider"></div>
             <button id="undoPickBtn" class="btn-sm btn-ghost">↩ Undo</button>
             <button id="autopickBtn" class="btn-sm btn-ghost">Autopick</button>
@@ -747,7 +757,7 @@
           <h2>Standings</h2>
           <div style="display:flex;gap:8px;align-items:center;">
             <button id="simulateBtn" class="btn-primary btn-sm commissioner-only">Simulate Stats</button>
-            <button id="resetStatsBtn" class="btn-ghost btn-sm commissioner-only" style="display:none;">↺ Reset</button>
+            <button id="resetStatsBtn" class="btn-ghost btn-sm commissioner-only" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-2px;margin-right:5px;"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Reset</button>
           </div>
         </div>
         <div class="standings-header-row">
@@ -1229,7 +1239,7 @@
             <div class="code-display-row">
               <span id="settingsLeagueCodeDisplay" class="league-code-badge">--</span>
               <button id="copyCodeBtn" class="btn-ghost btn-sm">Copy Code</button>
-              <button id="shareInviteBtn" class="btn-ghost btn-sm">🔗 Invite Link</button>
+              <button id="shareInviteBtn" class="btn-ghost btn-sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-2px;margin-right:5px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Invite Link</button>
             </div>
           </div>
           <div class="form-group" style="margin-top:16px;">
@@ -1238,7 +1248,7 @@
             <button id="saveLeagueNameBtn" class="btn-primary btn-sm" style="margin-top:8px;">Save Name</button>
           </div>
           <hr class="divider" />
-          <button id="restartLeagueBtn" class="btn-ghost" style="margin-top:8px;">↺ Restart League</button>
+          <button id="restartLeagueBtn" class="btn-ghost" style="margin-top:8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-2px;margin-right:5px;"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Restart League</button>
           <p class="muted" style="font-size:12px;margin-top:6px;">Clears all picks and resets the draft. Keeps the same managers, settings, and league code.</p>
           <button id="dissolveLeagueBtn" class="btn-red" style="margin-top:12px;">Delete League</button>
         </div>
@@ -1418,29 +1428,6 @@
     </div>
   </div>
 
-  <!-- Trade Modal (TODO: not yet implemented; hidden until trades feature is built) -->
-  <div id="tradeModal" class="modal-backdrop" style="display:none;visibility:hidden;">
-    <div class="modal-card modal-lg">
-      <h3>Propose Trade</h3>
-      <div class="trade-columns">
-        <div class="trade-col">
-          <label>You send</label>
-          <div id="tradeSendList" class="trade-player-list"></div>
-        </div>
-        <div class="trade-arrow">⇄</div>
-        <div class="trade-col">
-          <label>You receive</label>
-          <div id="tradeReceiveList" class="trade-player-list"></div>
-        </div>
-      </div>
-      <p class="modal-sub" id="tradeTarget"></p>
-      <div class="modal-actions">
-        <button id="tradeCancelBtn" class="btn-ghost">Cancel</button>
-        <button id="tradeConfirmBtn" class="btn-primary">Propose Trade</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Game Stats Modal -->
   <div id="gameModal" class="modal-backdrop" style="display:none;">
     <div class="game-modal-card">
@@ -1568,6 +1555,9 @@
 
   <script src="data/bracket.js"></script>
   <script src="data/players.js"></script>
+  <!-- Loaded before app.js so window.Analytics exists at first call.
+       No-ops until a PostHog key is set in analytics.js. -->
+  <script src="src/analytics.js"></script>
   <script src="src/app.js"></script>
 
   <!-- Service Worker Registration -->

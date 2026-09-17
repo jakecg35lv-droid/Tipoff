@@ -12,3 +12,7 @@ Thumbs.db
 
 # Node (if added later)
 node_modules/
+
+# FUSE/OneDrive artifacts from in-place edits
+.fuse_hidden*
+**/.fuse_hidden*
