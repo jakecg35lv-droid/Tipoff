@@ -20,7 +20,10 @@
 (function (window) {
   'use strict';
 
-  var POSTHOG_KEY  = '';                         // <-- paste project key
+  // Project API key (NOT a secret — it ships in client-side JS by design
+  // and is visible to anyone who views source. The personal API key is
+  // the one that must never appear here.)
+  var POSTHOG_KEY  = 'phc_uhwDxyvSkFTiKU4M6USyGoadFtuqXMWSo6fP93nyQhzU';
   var POSTHOG_HOST = 'https://us.i.posthog.com';
 
   // ── Event allowlist ─────────────────────────────────────
