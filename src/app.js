@@ -198,12 +198,31 @@ let simPrevRankings = [];
 let expandedTeams = new Set();
 
 // ── PERSISTENCE ───────────────────────────────────────────
+// ── The player pool is reference data, never saved state ──
+//  saveState used to serialize the WHOLE state object, player pool
+//  included, and loadState restored it verbatim — only falling back to
+//  window.MM_PLAYERS when the stored array was missing or empty. So a
+//  browser that had ever loaded the app kept its original pool frozen
+//  in localStorage forever, and regenerating data/players.js changed
+//  nothing for existing users. That is how retired players survived a
+//  full rebuild of the file.
+//
+//  players.js is now the single source of truth. Only draft results
+//  and league settings persist.
+function _stateForStorage() {
+  const copy = Object.assign({}, state);
+  delete copy.players;
+  copy.poolVersion = POOL_VERSION;
+  return copy;
+}
+
 function saveState() {
   state.lastSaved = Date.now();
   try {
-    localStorage.setItem('mmfantasy-state', JSON.stringify(state));
+    const payload = JSON.stringify(_stateForStorage());
+    localStorage.setItem('mmfantasy-state', payload);
     if (state.leagueId) {
-      localStorage.setItem('mmfantasy-league-' + state.leagueId, JSON.stringify(state));
+      localStorage.setItem('mmfantasy-league-' + state.leagueId, payload);
       updateLeaguesIndex();
       _saveLeagueToFirestore();
     }
@@ -218,9 +237,7 @@ function loadState() {
       state = Object.assign({}, defaultState, parsed);
       state.scoring = Object.assign({}, defaultState.scoring, parsed.scoring || {});
       state.scoring.weights = Object.assign({}, defaultState.scoring.weights, (parsed.scoring || {}).weights || {});
-      if (!Array.isArray(state.players) || state.players.length === 0) {
-        state.players = (window.MM_PLAYERS || []).slice();
-      }
+      rehydratePlayerPool(parsed.poolVersion);
       return true;
     }
   } catch (e) { console.error('loadState', e); }
@@ -719,6 +736,20 @@ function enterLeague() {
   try { recordLeagueMembership(state.leagueCode, state.leagueName); } catch (e) { }
   try { applyAccent(getAccent()); } catch (e) { }
 
+  // If regenerating the player pool voided existing picks, say so.
+  // Silently emptying somebody's roster is worse than the reset itself.
+  try {
+    if (state._poolReset) {
+      const n = state._poolReset;
+      state._poolReset = 0;
+      setTimeout(function () {
+        toast(n + ' pick' + (n === 1 ? '' : 's') + ' cleared: those players are no longer on a roster. Re-draft when ready.', 'error');
+      }, 1200);
+      addActivity('Player pool updated to current rosters. ' + n + ' outdated pick' + (n === 1 ? '' : 's') + ' cleared.');
+      saveState();
+    }
+  } catch (e) { }
+
   // Returning-user signal. Guarded so re-renders inside one session
   // cannot inflate the count.
   try {
@@ -968,7 +999,37 @@ function _applyLeagueState(saved) {
   state = Object.assign({}, defaultState, saved);
   state.scoring = Object.assign({}, defaultState.scoring, saved.scoring || {});
   state.scoring.weights = Object.assign({}, defaultState.scoring.weights, (saved.scoring || {}).weights || {});
-  if (!Array.isArray(state.players) || state.players.length === 0) state.players = (window.MM_PLAYERS || []).slice();
+  rehydratePlayerPool(saved && saved.poolVersion);
+}
+
+// ── Player pool rehydration ───────────────────────────────
+//  ALWAYS rebuilds state.players from data/players.js, discarding
+//  whatever a stored league happened to carry. Also prunes draft picks
+//  that point at players who no longer exist, which happens whenever
+//  the pool is regenerated and ids change.
+const POOL_VERSION = '2026-09-21-espn';
+
+function rehydratePlayerPool(savedVersion) {
+  state.players = (window.MM_PLAYERS || []).slice();
+
+  const valid = {};
+  state.players.forEach(function (p) { valid[p.id] = true; });
+
+  const drafted = state.drafted || {};
+  const orphans = Object.keys(drafted).filter(function (pid) { return !valid[pid]; });
+
+  if (orphans.length) {
+    // A pool regeneration voids old picks. Dropping them loudly beats
+    // leaving phantom players on rosters that can never score.
+    orphans.forEach(function (pid) { delete drafted[pid]; });
+    state.drafted = drafted;
+    console.warn('[Pool] Dropped ' + orphans.length +
+      ' draft pick(s) for players no longer in the pool (was ' +
+      (savedVersion || 'pre-versioning') + ', now ' + POOL_VERSION + ').');
+    state._poolReset = orphans.length;
+  }
+
+  state.poolVersion = POOL_VERSION;
 }
 
 function _leagueCardHTML(l) {
