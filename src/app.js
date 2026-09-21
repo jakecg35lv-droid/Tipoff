@@ -877,7 +877,7 @@ function handleLogin() {
           localStorage.removeItem('mmfantasy-state');
           localStorage.removeItem('mmfantasy-leagues');
           state = Object.assign({}, defaultState);
-          state.players = (window.MM_PLAYERS || []).slice();
+          state.players = poolForCurrentTournament();
         }
         setSession(name, email, uid);
         btn.textContent = 'Sign In'; btn.disabled = false;
@@ -1009,8 +1009,27 @@ function _applyLeagueState(saved) {
 //  the pool is regenerated and ids change.
 const POOL_VERSION = '2026-09-21-espn';
 
+// ── The ONE place the player pool is built ────────────────
+//  Nine different code paths used to do
+//    state.players = (window.MM_PLAYERS || []).slice()
+//  which loads all 239 players across all three tournaments. Any of
+//  them firing after a tournament was chosen silently repopulated the
+//  draft board with players from the other events — so a Maui league
+//  would see Xavier and Belmont players on the board. Restarting a
+//  league and reloading the app both did exactly that.
+//
+//  Everything now goes through here, and here respects the selected
+//  tournament. If a tournament is selected its pool is authoritative,
+//  even when that pool is empty (an unannounced field). Only with no
+//  tournament at all do we fall back to everybody.
+function poolForCurrentTournament() {
+  const t = state && state.selectedTournament;
+  if (t) return playersForTournament(t);
+  return (window.MM_PLAYERS || []).slice();
+}
+
 function rehydratePlayerPool(savedVersion) {
-  state.players = (window.MM_PLAYERS || []).slice();
+  state.players = poolForCurrentTournament();
 
   const valid = {};
   state.players.forEach(function (p) { valid[p.id] = true; });
@@ -1110,7 +1129,7 @@ function renderSavedLeagues() {
 
 function createLeague() {
   state = Object.assign({}, defaultState);
-  state.players = (window.MM_PLAYERS || []).slice();
+  state.players = poolForCurrentTournament();
   state.leagueId = 'league_' + Date.now();
   state.leagueCode = Math.random().toString(36).toUpperCase().slice(2, 8);
   const session = getSession();
@@ -2677,17 +2696,28 @@ function saveBracketState(data) {
 // can draft the same player. Always constrain by region as well.
 const NCAA_REGIONS = ['East', 'South', 'Midwest', 'West'];
 
+// Every tournament in every section, flattened. Used to deactivate
+// stale entries and to validate pools.
+function ALL_TOURNAMENTS() {
+  const out = [];
+  Object.keys(TOURNAMENTS || {}).forEach(function (section) {
+    (TOURNAMENTS[section] || []).forEach(function (t) { if (t && t.id) out.push(t); });
+  });
+  return out;
+}
+
 function playersForTournament(tournament) {
   const all = (window.MM_PLAYERS || []);
   if (!tournament) return dedupePlayers(all.slice());
 
-  // NCAA field: the four bracket regions only, never in-season event entries
-  if (tournament.bracketFormat === 'ncaa64') {
-    return dedupePlayers(all.filter(function (p) {
-      return NCAA_REGIONS.indexOf(p.region) !== -1;
-    }));
-  }
-
+  // ── The pool is ALWAYS driven by the team list ───────────
+  //  This used to special-case ncaa64 and filter on region names
+  //  'East' / 'South' / 'Midwest' / 'West'. Those regions no longer
+  //  exist in data/players.js — it is now tagged Maui / Atlantis /
+  //  Showcase — so the NCAA tournament silently returned an EMPTY
+  //  pool. A team list is the honest source either way: if the field
+  //  has not been announced there are no teams, and an empty pool is
+  //  the correct answer rather than an accident.
   const teamNames = (tournament.seededTeams && tournament.seededTeams.length)
     ? tournament.seededTeams.map(function (t) { return t.name; })
     : (tournament.teams || []);
@@ -2788,7 +2818,8 @@ const TOURNAMENTS = {
       startMs: new Date('2026-11-23').getTime(),
       bracketFormat: 'single8',
       roundNames: ['Quarterfinals', 'Semifinals', 'Championship'],
-      canSelect: false,
+      canSelect: true,
+      playerRegion: 'Showcase',
       teams: ['Akron', 'Wright State', 'App State', 'Belmont'],
       seededTeams: []
     },
@@ -2842,6 +2873,9 @@ const TOURNAMENTS = {
   postseason: [
     {
       id: 'ncaa-2027',
+      // canSelect stays false until the field is announced on Selection
+      // Sunday (Mar 2027). It was true with teams:[] — selecting it gave
+      // a commissioner an empty draft board and no explanation.
       name: 'NCAA Tournament',
       subtitle: '64-team field · 4 regions',
       location: 'Championship: Ford Field, Detroit, MI',
@@ -2849,7 +2883,7 @@ const TOURNAMENTS = {
       startMs: new Date('2027-03-16').getTime(),
       bracketFormat: 'ncaa64',
       roundNames: ['Round of 64', 'Round of 32', 'Sweet 16', 'Elite 8'],
-      canSelect: true,
+      canSelect: false,
       comingSoon: true,
       highlight: true,
       note: 'Selection Sunday: Mar 14',
@@ -3024,7 +3058,35 @@ function listenToLiveStats() {
 }
 
 function setSelectedTournament(tournament) {
+  const previous = state.selectedTournament;
+  const changing = previous && previous.id !== tournament.id;
+  const picksMade = Object.keys(state.drafted || {}).length;
+
+  // ── Switching tournaments voids the draft ────────────────
+  //  Changing events swaps the entire player pool. Picks made in the
+  //  old one point at players who are not in the new pool: they vanish
+  //  from the draft board but stay on rosters, invisible and unable to
+  //  ever score. Better to reset the draft loudly than to leave a
+  //  league quietly broken.
+  if (changing && picksMade > 0) {
+    const ok = confirm(
+      'Switching from ' + previous.name + ' to ' + tournament.name + ' replaces the entire player pool.\n\n' +
+      'All ' + picksMade + ' pick' + (picksMade === 1 ? '' : 's') + ' will be cleared and the draft reset.\n\n' +
+      'Switch anyway?'
+    );
+    if (!ok) return;
+  }
+
   state.selectedTournament = tournament;
+
+  if (changing && picksMade > 0) {
+    state.drafted = {};
+    state.currentPickIndex = 0;
+    state.timerRunning = false;
+    state.pickTimerStartedAt = null;
+    try { clearInterval(timerInterval); } catch (e) { }
+    addActivity('Tournament changed to ' + tournament.name + '. Draft reset (' + picksMade + ' pick' + (picksMade === 1 ? '' : 's') + ' cleared).');
+  }
 
   // Wipe old bracket picks: new tournament = fresh bracket
   if (state.leagueId) {
@@ -3037,22 +3099,35 @@ function setSelectedTournament(tournament) {
   // playersForTournament - college alone double-counts shared teams)
   state.players = playersForTournament(tournament);
 
+  if (!state.players.length) {
+    toast('No player pool for ' + tournament.name + ' yet. The field has not been announced.', 'error');
+  }
+
   saveState();
   addActivity('Tournament selected: ' + tournament.name);
 
-  // Tell Cloud Function which tournament is active so it knows what to poll.
-  // Only write if there are actual teams (not a "coming soon" tournament).
-  if (window._db && tournament.teams && tournament.teams.length > 0) {
-    window._db.collection('meta').doc('activeTournaments').set({
-      [tournament.id]: {
+  // ── Tell the Cloud Function what to poll ─────────────────
+  //  This used to only ever set active:true with merge, so every
+  //  tournament a league had ever selected stayed active forever and
+  //  the function kept polling all of them. Deactivate the others.
+  if (window._db) {
+    const payload = {};
+    ALL_TOURNAMENTS().forEach(function (t) {
+      if (t.id !== tournament.id) payload[t.id] = { active: false };
+    });
+    if (tournament.teams && tournament.teams.length > 0) {
+      payload[tournament.id] = {
         name: tournament.name,
         teams: tournament.teams,
         active: true,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      }
-    }, { merge: true }).catch(function (e) {
-      console.warn('[Meta] Could not write active tournament:', e.message);
-    });
+      };
+    }
+    window._db.collection('meta').doc('activeTournaments')
+      .set(payload, { merge: true })
+      .catch(function (e) {
+        console.warn('[Meta] Could not write active tournament:', e.message);
+      });
   }
 
   updateDraftTabLock();
@@ -4391,7 +4466,7 @@ function displayNewsArticles(articles, feed) {
 document.addEventListener('DOMContentLoaded', () => {
   // Init state players
   if (!state.players || state.players.length === 0) {
-    state.players = (window.MM_PLAYERS || []).slice();
+    state.players = poolForCurrentTournament();
   }
 
   // Auth
@@ -4452,7 +4527,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     clearSession();
     state = Object.assign({}, defaultState);
-    state.players = (window.MM_PLAYERS || []).slice();
+    state.players = poolForCurrentTournament();
     showLanding();
   }
   document.getElementById('signOutBtn')?.addEventListener('click', doSignOut);
@@ -4734,7 +4809,7 @@ document.addEventListener('DOMContentLoaded', () => {
     state.prevRankings = [];
     state.activityFeed = [];
     // Reset player stats back to data file defaults
-    state.players = (window.MM_PLAYERS || []).slice();
+    state.players = poolForCurrentTournament();
     clearInterval(timerInterval);
     addActivity('League restarted: draft reset by commissioner');
     saveState();
@@ -4766,7 +4841,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     clearInterval(timerInterval);
     state = Object.assign({}, defaultState);
-    state.players = (window.MM_PLAYERS || []).slice();
+    state.players = poolForCurrentTournament();
     document.getElementById('dissolveModal').style.display = 'none';
     showSplash();
     toast('League deleted', 'info');
@@ -4801,7 +4876,7 @@ document.addEventListener('DOMContentLoaded', () => {
           localStorage.removeItem('mmfantasy-state');
           localStorage.removeItem('mmfantasy-leagues');
           state = Object.assign({}, defaultState);
-          state.players = (window.MM_PLAYERS || []).slice();
+          state.players = poolForCurrentTournament();
         }
         if (!sess || differentUser) {
           const name = (user.displayName) || user.email.split('@')[0];
@@ -5532,7 +5607,7 @@ async function leaveCurrentLeague() {
 
   if (_leagueUnsubscribe) { _leagueUnsubscribe(); _leagueUnsubscribe = null; }
   state = Object.assign({}, defaultState);
-  state.players = (window.MM_PLAYERS || []).slice();
+  state.players = poolForCurrentTournament();
   clearSession();
   showLanding();
   toast('You left ' + name + '.', 'success');
