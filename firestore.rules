@@ -44,6 +44,13 @@ service cloud.firestore {
         allow read: if request.auth != null;
         allow write: if false;
       }
+
+      // Live game scores and winners, written by the Cloud Function.
+      // Clients read these to render live scores and advance brackets.
+      match /games/{gameId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
     }
 
     // ── Function metadata ────────────────────────────────────

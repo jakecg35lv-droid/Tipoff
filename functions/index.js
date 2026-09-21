@@ -182,8 +182,14 @@ function makeApiClient(health, now) {
     }
 
     state.calls++;
-    const sep = url.includes('?') ? '&' : '?';
-    const res = await fetch(`${url}${sep}key=${API_KEY}`);
+    // Only SportsDataIO wants a key. Appending it to ESPN URLs worked
+    // by accident (they ignore unknown params) but published a dead
+    // credential in every request. Keep it scoped.
+    let target = url;
+    if (url.indexOf('sportsdata.io') !== -1) {
+      target += (url.includes('?') ? '&' : '?') + 'key=' + API_KEY;
+    }
+    const res = await fetch(target);
 
     if (res.status === 401 || res.status === 403 || res.status === 429) {
       state.failures++;
@@ -351,7 +357,7 @@ exports.syncTournamentStats = onSchedule(
       return;
     }
 
-    await runSync({ window: win });
+    await runSyncESPN({ window: win });
   }
 );
 
@@ -364,8 +370,8 @@ exports.syncNow = onRequest(
   { timeoutSeconds: 120, memory: '256MiB' },
   async (req, res) => {
     try {
-      const report = await runSync({
-        dateOverride: req.query.date || null,
+      const report = await runSyncESPN({
+        dateOverride: req.query.date || null,   // YYYYMMDD
         dryRun: req.query.dry === '1',
       });
       res.status(200).json(report);
@@ -579,6 +585,242 @@ exports.espnProbe = onRequest(
     res.status(200).json(out);
   }
 );
+
+// ═══════════════════════════════════════════════════════════════
+//  LIVE SYNC  (ESPN)
+//
+//  Replaces the SportsDataIO pipeline. Two endpoints do everything:
+//    /scoreboard?dates=YYYYMMDD   → every game, score, clock, winner
+//    /summary?event={id}          → full box score for one game
+//
+//  THE BIG RELIABILITY WIN: ESPN box scores key players by the same
+//  athlete id that data/players.js now stores as espnId. The old
+//  pipeline matched on lowercased NAME, which breaks on accents,
+//  suffixes, nicknames and middle initials — "Augusto Cassiá" and
+//  "Corey Floyd Jr." were both waiting to fail silently. Matching on
+//  id removes that entire class of bug.
+//
+//  STAT ORDER IS READ, NEVER ASSUMED. ESPN ships a `keys` array with
+//  every box score. In the sample it read:
+//    0 minutes · 1 points · 2 FG · 3 3PT · 4 FT · 5 rebounds
+//    6 assists · 7 turnovers · 8 steals · 9 blocks
+//  Note steals sit at 8 and TURNOVERS at 7 — exactly where a person
+//  assuming PTS/REB/AST/STL/BLK would have put steals. Hardcoding
+//  that would have shipped every player's turnovers as their steals.
+// ═══════════════════════════════════════════════════════════════
+
+// "2026-11-23" -> "20261123" for the scoreboard endpoint
+function espnDateParam(d) {
+  const { y, m, d: day } = etParts(d);
+  return `${y}${String(m).padStart(2, '0')}${String(day).padStart(2, '0')}`;
+}
+
+function toInt(v) {
+  const n = parseInt(String(v == null ? '' : v).trim(), 10);
+  return isNaN(n) ? 0 : n;
+}
+
+// Pull our five categories out of a positional stats array using the
+// `keys` array that came with it.
+function statsFromRow(row, keyIndex) {
+  const s = row.stats || [];
+  const get = k => (keyIndex[k] != null ? toInt(s[keyIndex[k]]) : 0);
+  return {
+    pts: get('points'),
+    reb: get('rebounds'),
+    ast: get('assists'),
+    stl: get('steals'),
+    blk: get('blocks'),
+    min: get('minutes'),
+  };
+}
+
+async function runSyncESPN(opts) {
+  const options = opts || {};
+  const report = {
+    ok: true, dryRun: !!options.dryRun,
+    activeTeams: [], gamesOnDate: 0, relevantGames: 0,
+    playersWritten: 0, gamesWritten: 0,
+    finalGames: 0, liveGames: 0,
+    unmatchedSample: [], apiCalls: 0,
+  };
+
+  const now = new Date();
+  const health = await readHealth();
+  const client = makeApiClient(health, now);
+
+  if (health.breakerUntil > Date.now()) {
+    report.ok = false;
+    report.reason = 'circuit breaker open';
+    return report;
+  }
+
+  try {
+    // 1. Which schools are we watching, and for which tournament?
+    const metaDoc = await db.collection('meta').doc('activeTournaments').get();
+    if (!metaDoc.exists) { report.ok = false; report.reason = 'no meta/activeTournaments'; return report; }
+
+    const schoolToTourn = {};
+    Object.entries(metaDoc.data()).forEach(([tournId, data]) => {
+      if (!data || !data.active || !Array.isArray(data.teams)) return;
+      data.teams.forEach(t => { schoolToTourn[normName(t)] = tournId; });
+    });
+    if (!Object.keys(schoolToTourn).length) {
+      report.ok = false; report.reason = 'no active teams'; return report;
+    }
+    report.activeTeams = Object.keys(schoolToTourn);
+
+    // 2. Scoreboard for the day (ET, not UTC)
+    const dateStr = options.dateOverride || espnDateParam(now);
+    report.date = dateStr;
+
+    const sbRes = await client.apiFetch(`${ESPN}/scoreboard?dates=${dateStr}&limit=400`, 'scoreboard');
+    if (!sbRes.ok) throw new Error(`scoreboard HTTP ${sbRes.status}`);
+    const sb = await sbRes.json();
+    const events = sb.events || [];
+    report.gamesOnDate = events.length;
+
+    const gameBatch = db.batch();
+    const playerBatch = db.batch();
+
+    for (const ev of events) {
+      const comp = (ev.competitions || [])[0];
+      if (!comp) continue;
+
+      const competitors = (comp.competitors || []).map(c => ({
+        school: ((c.team || {}).location) || '',
+        abbr: ((c.team || {}).abbreviation) || '',
+        espnTeamId: ((c.team || {}).id) || '',
+        homeAway: c.homeAway,
+        score: toInt(c.score),
+        winner: c.winner === true,
+      }));
+
+      // Is either side in an active tournament?
+      const tournIds = competitors
+        .map(c => schoolToTourn[normName(c.school)])
+        .filter(Boolean);
+      if (!tournIds.length) continue;
+      const tournId = tournIds[0];
+      report.relevantGames++;
+
+      const st = (comp.status || {});
+      const stType = st.type || {};
+      const gameState = stType.state || 'pre';     // pre | in | post
+      const completed = stType.completed === true;
+      if (completed) report.finalGames++;
+      else if (gameState === 'in') report.liveGames++;
+
+      // 3. Game doc — drives live scores AND bracket advancement
+      const home = competitors.find(c => c.homeAway === 'home') || competitors[0] || {};
+      const away = competitors.find(c => c.homeAway === 'away') || competitors[1] || {};
+      const winner = competitors.find(c => c.winner);
+
+      if (!options.dryRun) {
+        gameBatch.set(
+          db.collection('tournamentStats').doc(tournId).collection('games').doc(String(ev.id)),
+          {
+            eventId: String(ev.id),
+            shortName: ev.shortName || ev.name || '',
+            startsAt: ev.date || null,
+            state: gameState,
+            completed: completed,
+            period: st.period || 0,
+            clock: st.displayClock || '',
+            statusDetail: stType.shortDetail || stType.description || '',
+            home: { school: home.school, abbr: home.abbr, score: home.score },
+            away: { school: away.school, abbr: away.abbr, score: away.score },
+            // The app advances its bracket off this field. Null until
+            // ESPN itself calls it, so a blowout at halftime cannot
+            // eliminate somebody's roster early.
+            winnerSchool: (completed && winner) ? winner.school : null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        report.gamesWritten++;
+      }
+
+      // 4. Box score — only worth fetching once the ball is up
+      if (gameState === 'pre') continue;
+
+      let summary;
+      try {
+        const sumRes = await client.apiFetch(`${ESPN}/summary?event=${ev.id}`, 'summary');
+        if (!sumRes.ok) continue;
+        summary = await sumRes.json();
+      } catch (e) { continue; }
+
+      const teamBlocks = ((summary.boxscore || {}).players) || [];
+      for (const tb of teamBlocks) {
+        const school = ((tb.team || {}).location) || '';
+        const tId = schoolToTourn[normName(school)];
+        if (!tId) continue;                      // opponent not in our pool
+
+        const block = (tb.statistics || [])[0] || {};
+        const keyIndex = {};
+        (block.keys || []).forEach((k, i) => { keyIndex[k] = i; });
+
+        for (const row of (block.athletes || [])) {
+          const ath = row.athlete || {};
+          if (!ath.id) continue;
+          if (row.didNotPlay) continue;
+
+          const s = statsFromRow(row, keyIndex);
+          if (!s.min && !s.pts && !s.reb && !s.ast) continue;  // never checked in
+
+          const ref = db.collection('tournamentStats').doc(tId)
+            .collection('players').doc(String(ath.id));
+
+          // Finished games are stored per game id; in-progress games sit
+          // in `live` and are overwritten on each poll. The app sums the
+          // finished games and adds `live`, so re-running the sync can
+          // never inflate a total and ESPN correcting a stat mid-game
+          // revises the number down rather than stacking on top.
+          if (!options.dryRun) {
+            if (completed) {
+              // Idempotent: record this game's line under its own id so
+              // re-running the sync cannot inflate a total.
+              playerBatch.set(ref, {
+                espnId: String(ath.id),
+                name: ath.displayName || ath.fullName || '',
+                school: school,
+                games: { [String(ev.id)]: { pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, min: s.min } },
+                live: admin.firestore.FieldValue.delete(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              }, { merge: true });
+            } else {
+              playerBatch.set(ref, {
+                espnId: String(ath.id),
+                name: ath.displayName || ath.fullName || '',
+                school: school,
+                live: { gameId: String(ev.id), pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, min: s.min },
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              }, { merge: true });
+            }
+            report.playersWritten++;
+          }
+        }
+      }
+    }
+
+    if (!options.dryRun) {
+      await gameBatch.commit();
+      await playerBatch.commit();
+    }
+
+  } catch (err) {
+    console.error('[Tipoff] runSyncESPN error:', err);
+    report.ok = false;
+    report.error = err.message;
+    health.lastError = err.message;
+  }
+
+  try { await commitHealth(health, client.state, now); } catch (e) {}
+  report.apiCalls = client.state.calls;
+  report.callsThisMonth = health.calls;
+  return report;
+}
 
 // ── ESPN roster generator ─────────────────────────────────────
 //  Produces the data behind data/players.js.

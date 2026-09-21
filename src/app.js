@@ -2917,23 +2917,42 @@ function listenToLiveStats() {
         if (change.type === 'removed') return;
         const data = change.doc.data();
 
-        // Match ESPN player name → our players array (normalize case/whitespace)
-        const normName = (data.name || '').toLowerCase().trim();
-        const player = state.players.find(p =>
-          p.name.toLowerCase().trim() === normName
-        );
+        // ── Match by ESPN id, not by name ────────────────────
+        //  Name matching was a silent failure waiting to happen:
+        //  "Augusto Cassiá", "Corey Floyd Jr.", "Ja'Borri McGhee" and
+        //  every hyphenated or accented name is one formatting change
+        //  away from never matching, and the symptom is simply a
+        //  player who scores zero all tournament. Both sides now carry
+        //  the ESPN athlete id, so this is an exact join. Name is kept
+        //  only as a fallback for any doc written before this change.
+        let player = null;
+        if (data.espnId) {
+          player = state.players.find(p => p.espnId === String(data.espnId));
+        }
+        if (!player && data.name) {
+          const n = data.name.toLowerCase().trim();
+          player = state.players.find(p => p.name.toLowerCase().trim() === n);
+        }
         if (!player) return;
 
-        const totals = data.totals || {};
+        // Finished games are stored per game id so a re-run of the sync
+        // cannot double count. Sum them, then add the in-progress game.
+        const games = data.games || {};
         const live = data.live || {};
+        const sum = { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0 };
+        Object.keys(games).forEach(function (gid) {
+          const g = games[gid] || {};
+          sum.pts += g.pts || 0; sum.reb += g.reb || 0; sum.ast += g.ast || 0;
+          sum.stl += g.stl || 0; sum.blk += g.blk || 0;
+        });
 
-        // Fantasy score = committed tournament totals + current live game
-        player.stats.points = (totals.pts || 0) + (live.pts || 0);
-        player.stats.rebounds = (totals.reb || 0) + (live.reb || 0);
-        player.stats.assists = (totals.ast || 0) + (live.ast || 0);
-        player.stats.steals = (totals.stl || 0) + (live.stl || 0);
-        player.stats.blocks = (totals.blk || 0) + (live.blk || 0);
-        player._liveUpdated = !!(live.gameId); // flag for UI indicators
+        player.stats.points   = sum.pts + (live.pts || 0);
+        player.stats.rebounds = sum.reb + (live.reb || 0);
+        player.stats.assists  = sum.ast + (live.ast || 0);
+        player.stats.steals   = sum.stl + (live.stl || 0);
+        player.stats.blocks   = sum.blk + (live.blk || 0);
+        player._gamesPlayed   = Object.keys(games).length;
+        player._liveUpdated   = !!(live.gameId); // flag for UI indicators
       });
 
       // Refresh standings and projections with new data
