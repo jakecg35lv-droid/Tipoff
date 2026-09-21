@@ -1,271 +1,336 @@
-// Tipoff Fantasy: Player Pool
-// 120+ players across 64 tournament teams
+// ══════════════════════════════════════════════════════════
+//  TIPOFF FANTASY — Player Pool
+//
+//  GENERATED from ESPN rosters. Do not hand-edit; regenerate with:
+//    https://us-central1-mmapp-6b7ab.cloudfunctions.net/espnRosters
+//      ?schools=A|B|C&top=12&season=2026
+//
+//  Generated: 2026-09-21   ·   Source season: 2025-26 averages
+//
+//  WHY THIS FILE WAS REBUILT
+//    The previous version was hand-typed from the 2024-25 season and
+//    had gone two transfer cycles stale — Colorado State's entire pool
+//    was Nique Clifford (NBA), Isaiah Stevens and Joel Scott, none of
+//    whom had played college basketball since 2024. Stale rosters do
+//    not just look wrong: a player who is not on any real roster never
+//    appears in a box score, so he silently scores zero forever and
+//    his owner just quietly loses.
+//
+//  FIELDS
+//    id        stable, derived from espnId — survives regeneration
+//    cls       class year as ESPN lists it
+//    hasStats  false = no prior-season line (true freshman). The draft
+//              board should badge these rather than rank them last;
+//              a top recruit with 0.0 across the board is not a scrub.
+//    hs        present and false ONLY when ESPN has no headshot.
+//              Build the URL with headshotURL(player) in app.js.
+//    stats     PER-GAME averages for the 2025-26 season.
+//    seed      tournament seed, carried from TOURNAMENTS.seededTeams
+//              in app.js. ESPN does not supply these.
+//
+//  KNOWN LIMITATION
+//    ESPN had not rolled over to 2026-27 rosters when this was
+//    generated, so a few incoming freshmen may be missing and class
+//    years may read one season behind for returners. Regenerate in
+//    late October once ESPN flips over. It is one command now.
+// ══════════════════════════════════════════════════════════
+
 window.MM_PLAYERS = [
-  // ── EAST REGION ──────────────────────────────────────────────
-  // 1 Auburn
-  { id: 'p001', name: 'Johni Broome', college: 'Auburn', position: 'C', seed: 1, region: 'East', stats: { points: 18.3, rebounds: 10.5, assists: 2.1, steals: 1.2, blocks: 2.1 } },
-  { id: 'p002', name: 'Chad Baker-Mazara', college: 'Auburn', position: 'F', seed: 1, region: 'East', stats: { points: 14.2, rebounds: 5.1, assists: 1.8, steals: 1.0, blocks: 0.4 } },
-  // 2 Michigan State
-  { id: 'p003', name: 'Jaden Akins', college: 'Michigan State', position: 'G', seed: 2, region: 'East', stats: { points: 16.8, rebounds: 4.2, assists: 3.1, steals: 1.4, blocks: 0.3 } },
-  { id: 'p004', name: 'Malik Hall', college: 'Michigan State', position: 'F', seed: 2, region: 'East', stats: { points: 13.5, rebounds: 6.8, assists: 1.9, steals: 0.8, blocks: 0.9 } },
-  // 3 Iowa State
-  { id: 'p005', name: 'Tamin Lipsey', college: 'Iowa State', position: 'G', seed: 3, region: 'East', stats: { points: 13.9, rebounds: 3.8, assists: 5.2, steals: 2.1, blocks: 0.2 } },
-  { id: 'p006', name: 'Milan Momcilovic', college: 'Iowa State', position: 'F', seed: 3, region: 'East', stats: { points: 15.4, rebounds: 5.3, assists: 2.0, steals: 0.9, blocks: 0.5 } },
-  // 4 Texas A&M
-  { id: 'p007', name: 'Wade Taylor IV', college: 'Texas A&M', position: 'G', seed: 4, region: 'East', stats: { points: 18.1, rebounds: 3.2, assists: 5.0, steals: 1.6, blocks: 0.2 } },
-  { id: 'p008', name: 'Henry Coleman III', college: 'Texas A&M', position: 'F', seed: 4, region: 'East', stats: { points: 11.2, rebounds: 7.9, assists: 1.4, steals: 0.7, blocks: 1.1 } },
-  // 5 Michigan
-  { id: 'p009', name: 'Nimari Burnett', college: 'Michigan', position: 'G', seed: 5, region: 'East', stats: { points: 14.7, rebounds: 3.5, assists: 3.8, steals: 1.2, blocks: 0.3 } },
-  { id: 'p010', name: 'Danny Wolf', college: 'Michigan', position: 'C', seed: 5, region: 'East', stats: { points: 12.8, rebounds: 8.4, assists: 3.2, steals: 0.6, blocks: 1.4 } },
-  // 6 Mississippi
-  { id: 'p011', name: 'Matthew Murrell', college: 'Mississippi', position: 'G', seed: 6, region: 'East', stats: { points: 17.2, rebounds: 3.9, assists: 2.8, steals: 1.1, blocks: 0.2 } },
-  { id: 'p012', name: 'Jaemyn Brakefield', college: 'Mississippi', position: 'F', seed: 6, region: 'East', stats: { points: 12.4, rebounds: 7.2, assists: 1.5, steals: 0.6, blocks: 0.8 } },
-  // 7 Marquette
-  { id: 'p013', name: 'Kam Jones', college: 'Marquette', position: 'G', seed: 7, region: 'East', stats: { points: 18.8, rebounds: 4.1, assists: 4.6, steals: 1.5, blocks: 0.3 } },
-  { id: 'p014', name: 'Oso Ighodaro', college: 'Marquette', position: 'C', seed: 7, region: 'East', stats: { points: 13.1, rebounds: 7.6, assists: 2.4, steals: 0.9, blocks: 1.8 } },
-  // 8 Louisville
-  { id: 'p015', name: 'Chucky Hepburn', college: 'Louisville', position: 'G', seed: 8, region: 'East', stats: { points: 15.3, rebounds: 3.4, assists: 4.9, steals: 1.8, blocks: 0.2 } },
-  { id: 'p016', name: 'Dennis Evans', college: 'Louisville', position: 'C', seed: 8, region: 'East', stats: { points: 9.8, rebounds: 8.1, assists: 1.2, steals: 0.5, blocks: 2.3 } },
-  // 9 Creighton
-  { id: 'p017', name: 'Ryan Kalkbrenner', college: 'Creighton', position: 'C', seed: 9, region: 'East', stats: { points: 15.6, rebounds: 7.2, assists: 1.4, steals: 0.4, blocks: 2.9 } },
-  { id: 'p018', name: 'Baylor Scheierman', college: 'Creighton', position: 'F', seed: 9, region: 'East', stats: { points: 14.8, rebounds: 6.5, assists: 3.8, steals: 1.0, blocks: 0.4 } },
-  // 10 New Mexico
-  { id: 'p019', name: 'Jaelen House', college: 'New Mexico', position: 'G', seed: 10, region: 'East', stats: { points: 18.9, rebounds: 3.8, assists: 5.4, steals: 2.2, blocks: 0.2 } },
-  { id: 'p020', name: 'Donovan Dent', college: 'New Mexico', position: 'G', seed: 10, region: 'East', stats: { points: 15.1, rebounds: 3.1, assists: 4.2, steals: 1.3, blocks: 0.1 } },
-  // 11 San Diego State
-  { id: 'p021', name: 'Lamont Butler', college: 'San Diego State', position: 'G', seed: 11, region: 'East', stats: { points: 14.6, rebounds: 3.5, assists: 4.3, steals: 1.4, blocks: 0.2 } },
-  { id: 'p022', name: 'Jaedon LeDee', college: 'San Diego State', position: 'F', seed: 11, region: 'East', stats: { points: 16.2, rebounds: 8.3, assists: 1.8, steals: 0.8, blocks: 1.2 } },
-  // 12 UC San Diego
-  { id: 'p023', name: 'Aniwaniwa Tait-Jones', college: 'UC San Diego', position: 'G', seed: 12, region: 'East', stats: { points: 16.8, rebounds: 4.2, assists: 3.5, steals: 1.1, blocks: 0.3 } },
-  { id: 'p024', name: 'Hayden Gray', college: 'UC San Diego', position: 'F', seed: 12, region: 'East', stats: { points: 11.4, rebounds: 6.1, assists: 2.1, steals: 0.7, blocks: 0.6 } },
-  // 13 Yale
-  { id: 'p025', name: 'John Poulakidas', college: 'Yale', position: 'G', seed: 13, region: 'East', stats: { points: 17.1, rebounds: 3.3, assists: 2.6, steals: 1.0, blocks: 0.2 } },
-  { id: 'p026', name: 'Matt Knowling', college: 'Yale', position: 'C', seed: 13, region: 'East', stats: { points: 12.8, rebounds: 7.9, assists: 1.3, steals: 0.4, blocks: 1.5 } },
-  // 14 Lipscomb
-  { id: 'p027', name: 'Ahsan Asadullah', college: 'Lipscomb', position: 'G', seed: 14, region: 'East', stats: { points: 19.3, rebounds: 4.1, assists: 3.8, steals: 1.3, blocks: 0.3 } },
-  { id: 'p028', name: 'Jacob Ognacevic', college: 'Lipscomb', position: 'F', seed: 14, region: 'East', stats: { points: 16.4, rebounds: 7.5, assists: 1.9, steals: 0.6, blocks: 0.8 } },
-  // 15 Bryant
-  { id: 'p029', name: 'Earl Timberlake', college: 'Bryant', position: 'G', seed: 15, region: 'East', stats: { points: 20.1, rebounds: 5.2, assists: 3.4, steals: 1.5, blocks: 0.4 } },
-  { id: 'p030', name: 'Charles Pride', college: 'Bryant', position: 'F', seed: 15, region: 'East', stats: { points: 14.3, rebounds: 6.8, assists: 1.5, steals: 0.8, blocks: 0.7 } },
-  // 16 High Point
-  { id: 'p031', name: 'John-Michael Wright', college: 'High Point', position: 'G', seed: 16, region: 'East', stats: { points: 18.7, rebounds: 3.5, assists: 4.2, steals: 1.4, blocks: 0.2 } },
-  { id: 'p032', name: 'Zach Austin', college: 'High Point', position: 'F', seed: 16, region: 'East', stats: { points: 13.1, rebounds: 6.4, assists: 1.8, steals: 0.7, blocks: 0.5 } },
 
-  // ── SOUTH REGION ─────────────────────────────────────────────
-  // 1 Duke
-  { id: 'p033', name: 'Cameron Boozer', college: 'Duke', position: 'F', seed: 1, region: 'South', stats: { points: 18.5, rebounds: 8.2, assists: 2.1, steals: 1.1, blocks: 0.9 } },
-  { id: 'p034', name: 'Tyrese Proctor', college: 'Duke', position: 'G', seed: 1, region: 'South', stats: { points: 15.3, rebounds: 3.8, assists: 5.4, steals: 1.6, blocks: 0.2 } },
-  // 2 Alabama
-  { id: 'p035', name: 'Mark Sears', college: 'Alabama', position: 'G', seed: 2, region: 'South', stats: { points: 21.2, rebounds: 3.9, assists: 4.1, steals: 1.2, blocks: 0.2 } },
-  { id: 'p036', name: 'Grant Nelson', college: 'Alabama', position: 'F', seed: 2, region: 'South', stats: { points: 14.8, rebounds: 7.4, assists: 2.3, steals: 0.9, blocks: 1.3 } },
-  // 3 Wisconsin
-  { id: 'p037', name: 'AJ Storr', college: 'Wisconsin', position: 'G', seed: 3, region: 'South', stats: { points: 19.1, rebounds: 4.5, assists: 2.2, steals: 1.0, blocks: 0.3 } },
-  { id: 'p038', name: 'Nolan Winter', college: 'Wisconsin', position: 'C', seed: 3, region: 'South', stats: { points: 10.3, rebounds: 8.8, assists: 1.5, steals: 0.5, blocks: 2.4 } },
-  // 4 Arizona
-  { id: 'p039', name: 'Caleb Love', college: 'Arizona', position: 'G', seed: 4, region: 'South', stats: { points: 17.9, rebounds: 4.2, assists: 4.5, steals: 1.1, blocks: 0.3 } },
-  { id: 'p040', name: 'Motiejus Krivas', college: 'Arizona', position: 'C', seed: 4, region: 'South', stats: { points: 8.4, rebounds: 6.2, assists: 0.8, steals: 0.4, blocks: 1.5 } },
-  // 5 Ohio State
-  { id: 'p041', name: 'Bruce Thornton', college: 'Ohio State', position: 'G', seed: 5, region: 'South', stats: { points: 18.4, rebounds: 3.6, assists: 5.1, steals: 1.5, blocks: 0.2 } },
-  { id: 'p042', name: 'Zed Key', college: 'Ohio State', position: 'F', seed: 5, region: 'South', stats: { points: 12.9, rebounds: 7.8, assists: 1.6, steals: 0.7, blocks: 1.0 } },
-  // 6 Illinois
-  { id: 'p043', name: 'Terrence Shannon Jr', college: 'Illinois', position: 'G', seed: 6, region: 'South', stats: { points: 23.0, rebounds: 4.8, assists: 3.2, steals: 1.3, blocks: 0.4 } },
-  { id: 'p044', name: 'Coleman Hawkins', college: 'Illinois', position: 'F', seed: 6, region: 'South', stats: { points: 11.8, rebounds: 6.5, assists: 3.1, steals: 1.0, blocks: 1.2 } },
-  // 7 Xavier
-  { id: 'p045', name: 'Dayvion McKnight', college: 'Xavier', position: 'G', seed: 7, region: 'South', stats: { points: 16.4, rebounds: 5.1, assists: 5.8, steals: 2.0, blocks: 0.2 } },
-  { id: 'p046', name: 'Sean Stewart', college: 'Xavier', position: 'F', seed: 7, region: 'South', stats: { points: 13.2, rebounds: 8.4, assists: 1.5, steals: 0.8, blocks: 1.6 } },
-  // 8 Indiana
-  { id: 'p047', name: 'Mackenzie Mgbako', college: 'Indiana', position: 'F', seed: 8, region: 'South', stats: { points: 16.5, rebounds: 5.8, assists: 2.1, steals: 1.0, blocks: 0.6 } },
-  { id: 'p048', name: 'Oumar Ballo', college: 'Indiana', position: 'C', seed: 8, region: 'South', stats: { points: 10.1, rebounds: 7.9, assists: 1.4, steals: 0.5, blocks: 2.0 } },
-  // 9 Iowa
-  { id: 'p049', name: 'Payton Sandfort', college: 'Iowa', position: 'F', seed: 9, region: 'South', stats: { points: 17.3, rebounds: 5.9, assists: 2.4, steals: 0.9, blocks: 0.6 } },
-  { id: 'p050', name: 'Josh Dix', college: 'Iowa', position: 'G', seed: 9, region: 'South', stats: { points: 14.7, rebounds: 3.8, assists: 3.5, steals: 1.2, blocks: 0.2 } },
-  // 10 Wake Forest
-  { id: 'p051', name: 'Hunter Sallis', college: 'Wake Forest', position: 'G', seed: 10, region: 'South', stats: { points: 18.8, rebounds: 4.4, assists: 4.9, steals: 1.7, blocks: 0.4 } },
-  { id: 'p052', name: 'Efton Reid III', college: 'Wake Forest', position: 'C', seed: 10, region: 'South', stats: { points: 12.6, rebounds: 8.5, assists: 1.2, steals: 0.4, blocks: 2.1 } },
-  // 11 Vanderbilt
-  { id: 'p053', name: 'Tyrin Lawrence', college: 'Vanderbilt', position: 'G', seed: 11, region: 'South', stats: { points: 16.1, rebounds: 3.7, assists: 3.9, steals: 1.4, blocks: 0.2 } },
-  { id: 'p054', name: 'Liam Robbins', college: 'Vanderbilt', position: 'C', seed: 11, region: 'South', stats: { points: 11.9, rebounds: 7.4, assists: 1.1, steals: 0.6, blocks: 2.6 } },
-  // 12 McNeese State
-  { id: 'p055', name: 'Christian Shumate', college: 'McNeese State', position: 'F', seed: 12, region: 'South', stats: { points: 15.8, rebounds: 8.9, assists: 1.6, steals: 0.7, blocks: 1.3 } },
-  { id: 'p056', name: 'Zach Scott', college: 'McNeese State', position: 'G', seed: 12, region: 'South', stats: { points: 17.2, rebounds: 3.1, assists: 4.4, steals: 1.5, blocks: 0.2 } },
-  // 13 Liberty
-  { id: 'p057', name: 'Darius McGhee', college: 'Liberty', position: 'G', seed: 13, region: 'South', stats: { points: 22.4, rebounds: 2.8, assists: 3.6, steals: 1.2, blocks: 0.1 } },
-  { id: 'p058', name: 'Kyle Rode', college: 'Liberty', position: 'F', seed: 13, region: 'South', stats: { points: 12.3, rebounds: 5.8, assists: 2.3, steals: 0.8, blocks: 0.5 } },
-  // 14 Morehead State
-  { id: 'p059', name: 'Mark Freeman', college: 'Morehead State', position: 'G', seed: 14, region: 'South', stats: { points: 19.1, rebounds: 3.4, assists: 3.8, steals: 1.3, blocks: 0.3 } },
-  { id: 'p060', name: 'Riley Minix', college: 'Morehead State', position: 'F', seed: 14, region: 'South', stats: { points: 14.6, rebounds: 6.2, assists: 1.7, steals: 0.6, blocks: 0.7 } },
-  // 15 Winthrop
-  { id: 'p061', name: 'Charles Benitez', college: 'Winthrop', position: 'G', seed: 15, region: 'South', stats: { points: 20.5, rebounds: 3.8, assists: 4.1, steals: 1.6, blocks: 0.2 } },
-  { id: 'p062', name: 'Nick Sherod', college: 'Winthrop', position: 'F', seed: 15, region: 'South', stats: { points: 13.9, rebounds: 5.5, assists: 2.0, steals: 0.7, blocks: 0.6 } },
-  // 16 SIU Edwardsville
-  { id: 'p063', name: 'RaySean Taylor', college: 'SIU Edwardsville', position: 'G', seed: 16, region: 'South', stats: { points: 19.8, rebounds: 3.2, assists: 4.5, steals: 1.8, blocks: 0.2 } },
-  { id: 'p064', name: 'Lamar Wright', college: 'SIU Edwardsville', position: 'F', seed: 16, region: 'South', stats: { points: 12.7, rebounds: 6.3, assists: 1.4, steals: 0.5, blocks: 0.9 } },
+  // ══ MAUI INVITATIONAL — Nov 23-25, 2026 ══════════════════
 
-  // ── MIDWEST REGION ───────────────────────────────────────────
-  // 1 Houston
-  { id: 'p065', name: 'LJ Cryer', college: 'Houston', position: 'G', seed: 1, region: 'Midwest', stats: { points: 16.8, rebounds: 2.9, assists: 2.8, steals: 1.0, blocks: 0.2 } },
-  { id: 'p066', name: 'Ja\'Vier Francis', college: 'Houston', position: 'F', seed: 1, region: 'Midwest', stats: { points: 13.5, rebounds: 7.6, assists: 1.5, steals: 1.1, blocks: 2.2 } },
-  // 2 Tennessee
-  { id: 'p067', name: 'Dalton Knecht', college: 'Tennessee', position: 'G', seed: 2, region: 'Midwest', stats: { points: 21.7, rebounds: 5.8, assists: 2.1, steals: 1.2, blocks: 0.5 } },
-  { id: 'p068', name: 'Jonas Aidoo', college: 'Tennessee', position: 'C', seed: 2, region: 'Midwest', stats: { points: 11.4, rebounds: 9.2, assists: 1.0, steals: 0.5, blocks: 2.8 } },
-  // 3 Kentucky
-  { id: 'p069', name: 'Rob Dillingham', college: 'Kentucky', position: 'G', seed: 3, region: 'Midwest', stats: { points: 16.1, rebounds: 3.2, assists: 4.8, steals: 1.4, blocks: 0.3 } },
-  { id: 'p070', name: 'Aaron Bradshaw', college: 'Kentucky', position: 'C', seed: 3, region: 'Midwest', stats: { points: 12.9, rebounds: 7.8, assists: 1.1, steals: 0.5, blocks: 2.6 } },
-  // 4 Purdue
-  { id: 'p071', name: 'Zach Edey', college: 'Purdue', position: 'C', seed: 4, region: 'Midwest', stats: { points: 25.2, rebounds: 12.2, assists: 2.0, steals: 0.9, blocks: 2.2 } },
-  { id: 'p072', name: 'Fletcher Loyer', college: 'Purdue', position: 'G', seed: 4, region: 'Midwest', stats: { points: 14.1, rebounds: 2.8, assists: 3.5, steals: 0.8, blocks: 0.1 } },
-  // 5 Gonzaga
-  { id: 'p073', name: 'Ryan Nembhard', college: 'Gonzaga', position: 'G', seed: 5, region: 'Midwest', stats: { points: 14.8, rebounds: 3.5, assists: 7.2, steals: 1.6, blocks: 0.2 } },
-  { id: 'p074', name: 'Graham Ike', college: 'Gonzaga', position: 'C', seed: 5, region: 'Midwest', stats: { points: 17.3, rebounds: 8.9, assists: 1.4, steals: 0.6, blocks: 1.3 } },
-  // 6 Baylor
-  { id: 'p075', name: 'VJ Edgecombe', college: 'Baylor', position: 'G', seed: 6, region: 'Midwest', stats: { points: 16.0, rebounds: 5.2, assists: 3.4, steals: 2.1, blocks: 0.5 } },
-  { id: 'p076', name: 'Norchad Omier', college: 'Baylor', position: 'F', seed: 6, region: 'Midwest', stats: { points: 14.9, rebounds: 9.5, assists: 1.4, steals: 0.8, blocks: 0.8 } },
-  // 7 St. John's
-  { id: 'p077', name: 'RJ Luis Jr.', college: "St. John's", position: 'F', seed: 7, region: 'Midwest', stats: { points: 18.3, rebounds: 7.1, assists: 2.5, steals: 1.2, blocks: 1.0 } },
-  { id: 'p078', name: 'Kadary Richmond', college: "St. John's", position: 'G', seed: 7, region: 'Midwest', stats: { points: 15.9, rebounds: 5.8, assists: 5.4, steals: 2.4, blocks: 0.4 } },
-  // 8 Georgia
-  { id: 'p079', name: 'Silas Demary Jr.', college: 'Georgia', position: 'G', seed: 8, region: 'Midwest', stats: { points: 15.7, rebounds: 3.9, assists: 3.8, steals: 1.3, blocks: 0.2 } },
-  { id: 'p080', name: 'Asa Newell', college: 'Georgia', position: 'F', seed: 8, region: 'Midwest', stats: { points: 12.3, rebounds: 7.5, assists: 1.6, steals: 0.8, blocks: 1.4 } },
-  // 9 Florida
-  { id: 'p081', name: 'Walter Clayton Jr.', college: 'Florida', position: 'G', seed: 9, region: 'Midwest', stats: { points: 19.5, rebounds: 3.8, assists: 3.6, steals: 1.1, blocks: 0.3 } },
-  { id: 'p082', name: 'Alex Condon', college: 'Florida', position: 'C', seed: 9, region: 'Midwest', stats: { points: 10.8, rebounds: 8.2, assists: 2.1, steals: 0.6, blocks: 1.7 } },
-  // 10 Oregon
-  { id: 'p083', name: 'Nate Bittle', college: 'Oregon', position: 'C', seed: 10, region: 'Midwest', stats: { points: 14.9, rebounds: 8.7, assists: 1.8, steals: 0.5, blocks: 2.3 } },
-  { id: 'p084', name: 'Jackson Shelstad', college: 'Oregon', position: 'G', seed: 10, region: 'Midwest', stats: { points: 17.2, rebounds: 3.1, assists: 4.6, steals: 1.2, blocks: 0.2 } },
-  // 11 Texas
-  { id: 'p085', name: 'Tyrese Hunter', college: 'Texas', position: 'G', seed: 11, region: 'Midwest', stats: { points: 16.9, rebounds: 4.1, assists: 5.0, steals: 1.8, blocks: 0.3 } },
-  { id: 'p086', name: 'Ze\'Rik Onyema', college: 'Texas', position: 'C', seed: 11, region: 'Midwest', stats: { points: 11.1, rebounds: 8.1, assists: 0.9, steals: 0.4, blocks: 2.4 } },
-  // 12 UCLA
-  { id: 'p087', name: 'Dylan Andrews', college: 'UCLA', position: 'G', seed: 12, region: 'Midwest', stats: { points: 14.5, rebounds: 3.4, assists: 4.4, steals: 1.5, blocks: 0.2 } },
-  { id: 'p088', name: 'Adem Bona', college: 'UCLA', position: 'C', seed: 12, region: 'Midwest', stats: { points: 11.8, rebounds: 8.6, assists: 1.1, steals: 0.6, blocks: 2.7 } },
-  // 13 Akron
-  { id: 'p089', name: 'Enrique Freeman', college: 'Akron', position: 'F', seed: 13, region: 'Midwest', stats: { points: 18.2, rebounds: 11.1, assists: 1.5, steals: 0.9, blocks: 1.1 } },
-  { id: 'p090', name: 'Greg Tribble', college: 'Akron', position: 'G', seed: 13, region: 'Midwest', stats: { points: 15.3, rebounds: 3.2, assists: 4.0, steals: 1.3, blocks: 0.2 } },
-  // 14 Colgate
-  { id: 'p091', name: 'Tucker Richardson', college: 'Colgate', position: 'G', seed: 14, region: 'Midwest', stats: { points: 18.9, rebounds: 3.6, assists: 3.8, steals: 1.1, blocks: 0.2 } },
-  { id: 'p092', name: 'Jeff Woodward', college: 'Colgate', position: 'C', seed: 14, region: 'Midwest', stats: { points: 13.7, rebounds: 7.8, assists: 1.2, steals: 0.4, blocks: 1.9 } },
-  // 15 Long Beach State
-  { id: 'p093', name: 'Joel Murray', college: 'Long Beach State', position: 'G', seed: 15, region: 'Midwest', stats: { points: 17.4, rebounds: 4.1, assists: 3.7, steals: 1.4, blocks: 0.3 } },
-  { id: 'p094', name: 'Lassina Traore', college: 'Long Beach State', position: 'C', seed: 15, region: 'Midwest', stats: { points: 14.2, rebounds: 9.3, assists: 1.1, steals: 0.5, blocks: 2.0 } },
-  // 16 Texas Southern
-  { id: 'p095', name: 'PJ Henry', college: 'Texas Southern', position: 'G', seed: 16, region: 'Midwest', stats: { points: 20.3, rebounds: 3.5, assists: 4.8, steals: 1.7, blocks: 0.2 } },
-  { id: 'p096', name: 'Joirdon Karl Nicholas', college: 'Texas Southern', position: 'C', seed: 16, region: 'Midwest', stats: { points: 14.1, rebounds: 8.5, assists: 1.0, steals: 0.6, blocks: 2.2 } },
-
-  // ── WEST REGION ──────────────────────────────────────────────
-  // 1 Kansas
-  { id: 'p097', name: 'Hunter Dickinson', college: 'Kansas', position: 'C', seed: 1, region: 'West', stats: { points: 18.9, rebounds: 10.4, assists: 2.4, steals: 0.5, blocks: 1.8 } },
-  { id: 'p098', name: 'Dajuan Harris Jr.', college: 'Kansas', position: 'G', seed: 1, region: 'West', stats: { points: 10.2, rebounds: 3.6, assists: 6.5, steals: 2.1, blocks: 0.3 } },
-  // 2 UConn
-  { id: 'p099', name: 'Cam Spencer', college: 'UConn', position: 'G', seed: 2, region: 'West', stats: { points: 15.8, rebounds: 4.1, assists: 4.5, steals: 1.4, blocks: 0.3 } },
-  { id: 'p100', name: 'Samson Johnson', college: 'UConn', position: 'F', seed: 2, region: 'West', stats: { points: 11.4, rebounds: 7.9, assists: 1.2, steals: 0.6, blocks: 1.5 } },
-  // 3 Arkansas
-  { id: 'p101', name: 'Tramon Mark', college: 'Arkansas', position: 'G', seed: 3, region: 'West', stats: { points: 17.6, rebounds: 4.8, assists: 3.2, steals: 1.3, blocks: 0.4 } },
-  { id: 'p102', name: 'Trevon Brazile', college: 'Arkansas', position: 'F', seed: 3, region: 'West', stats: { points: 14.2, rebounds: 8.1, assists: 1.6, steals: 0.9, blocks: 2.1 } },
-  // 4 North Carolina
-  { id: 'p103', name: 'Armando Bacot', college: 'North Carolina', position: 'C', seed: 4, region: 'West', stats: { points: 16.3, rebounds: 10.7, assists: 1.5, steals: 0.6, blocks: 1.3 } },
-  { id: 'p104', name: 'RJ Davis', college: 'North Carolina', position: 'G', seed: 4, region: 'West', stats: { points: 21.5, rebounds: 3.7, assists: 3.8, steals: 1.1, blocks: 0.2 } },
-  // 5 Villanova
-  { id: 'p105', name: 'Eric Dixon', college: 'Villanova', position: 'F', seed: 5, region: 'West', stats: { points: 19.4, rebounds: 7.8, assists: 2.2, steals: 0.7, blocks: 0.8 } },
-  { id: 'p106', name: 'Justin Moore', college: 'Villanova', position: 'G', seed: 5, region: 'West', stats: { points: 14.7, rebounds: 4.5, assists: 3.8, steals: 1.2, blocks: 0.4 } },
-  // 6 Clemson
-  { id: 'p107', name: 'PJ Hall', college: 'Clemson', position: 'F', seed: 6, region: 'West', stats: { points: 17.8, rebounds: 6.9, assists: 2.0, steals: 0.8, blocks: 0.9 } },
-  { id: 'p108', name: 'Chase Hunter', college: 'Clemson', position: 'G', seed: 6, region: 'West', stats: { points: 15.2, rebounds: 3.5, assists: 4.3, steals: 1.6, blocks: 0.3 } },
-  // 7 Georgetown
-  { id: 'p109', name: 'Qudus Wahab', college: 'Georgetown', position: 'C', seed: 7, region: 'West', stats: { points: 14.6, rebounds: 9.2, assists: 1.4, steals: 0.7, blocks: 2.4 } },
-  { id: 'p110', name: 'Primo Spears', college: 'Georgetown', position: 'G', seed: 7, region: 'West', stats: { points: 18.9, rebounds: 3.7, assists: 4.1, steals: 1.4, blocks: 0.2 } },
-  // 8 Syracuse
-  { id: 'p111', name: 'JJ Starling', college: 'Syracuse', position: 'G', seed: 8, region: 'West', stats: { points: 17.4, rebounds: 4.2, assists: 4.6, steals: 1.3, blocks: 0.3 } },
-  { id: 'p112', name: 'Peter Carey', college: 'Syracuse', position: 'C', seed: 8, region: 'West', stats: { points: 11.2, rebounds: 8.4, assists: 1.3, steals: 0.5, blocks: 2.1 } },
-  // 9 Virginia
-  { id: 'p113', name: 'Isaac McKneely', college: 'Virginia', position: 'G', seed: 9, region: 'West', stats: { points: 15.6, rebounds: 3.3, assists: 3.5, steals: 1.0, blocks: 0.2 } },
-  { id: 'p114', name: 'Blake Buchanan', college: 'Virginia', position: 'C', seed: 9, region: 'West', stats: { points: 11.8, rebounds: 8.0, assists: 1.6, steals: 0.4, blocks: 2.0 } },
-  // 10 Pittsburgh
-  { id: 'p115', name: 'Ishmael Leggett', college: 'Pittsburgh', position: 'G', seed: 10, region: 'West', stats: { points: 17.8, rebounds: 3.9, assists: 4.8, steals: 1.5, blocks: 0.3 } },
-  { id: 'p116', name: 'Blake Hinson', college: 'Pittsburgh', position: 'F', seed: 10, region: 'West', stats: { points: 16.4, rebounds: 6.5, assists: 1.9, steals: 0.7, blocks: 0.7 } },
-  // 11 Penn State
-  { id: 'p117', name: 'Nick Kern Jr.', college: 'Penn State', position: 'G', seed: 11, region: 'West', stats: { points: 15.9, rebounds: 4.1, assists: 3.6, steals: 1.3, blocks: 0.4 } },
-  { id: 'p118', name: 'Zach Hicks', college: 'Penn State', position: 'G', seed: 11, region: 'West', stats: { points: 14.2, rebounds: 2.9, assists: 4.1, steals: 1.1, blocks: 0.2 } },
-  // 12 Iowa (play-in)
-  { id: 'p119', name: 'Tony Perkins', college: 'Grand Canyon', position: 'G', seed: 12, region: 'West', stats: { points: 18.3, rebounds: 4.5, assists: 3.9, steals: 1.4, blocks: 0.3 } },
-  { id: 'p120', name: 'Carlos Johnson', college: 'Grand Canyon', position: 'F', seed: 12, region: 'West', stats: { points: 13.6, rebounds: 7.2, assists: 1.8, steals: 0.7, blocks: 0.8 } },
-  // 13 Vermont
-  { id: 'p121', name: 'Nick Fiorillo', college: 'Vermont', position: 'F', seed: 13, region: 'West', stats: { points: 18.7, rebounds: 7.4, assists: 1.9, steals: 0.8, blocks: 0.9 } },
-  { id: 'p122', name: 'TJ Long', college: 'Vermont', position: 'G', seed: 13, region: 'West', stats: { points: 15.4, rebounds: 3.2, assists: 3.5, steals: 1.1, blocks: 0.2 } },
-  // 14 Samford
-  { id: 'p123', name: 'Rylan Jones', college: 'Samford', position: 'G', seed: 14, region: 'West', stats: { points: 20.8, rebounds: 3.6, assists: 5.1, steals: 1.6, blocks: 0.2 } },
-  { id: 'p124', name: 'A.J. Staton-McCray', college: 'Samford', position: 'G', seed: 14, region: 'West', stats: { points: 16.9, rebounds: 3.1, assists: 3.8, steals: 1.2, blocks: 0.2 } },
-  // 15 Montana State
-  { id: 'p125', name: 'Darius Brown II', college: 'Montana State', position: 'G', seed: 15, region: 'West', stats: { points: 18.1, rebounds: 3.5, assists: 4.3, steals: 1.4, blocks: 0.3 } },
-  { id: 'p126', name: 'Borja Fernandez', college: 'Montana State', position: 'F', seed: 15, region: 'West', stats: { points: 13.8, rebounds: 6.9, assists: 1.7, steals: 0.6, blocks: 0.7 } },
-  // 16 Longwood
-  { id: 'p127', name: 'Justin Hill', college: 'Longwood', position: 'G', seed: 16, region: 'West', stats: { points: 19.2, rebounds: 3.8, assists: 4.6, steals: 1.7, blocks: 0.2 } },
-  { id: 'p128', name: 'Leslie Nkereuwem', college: 'Longwood', position: 'C', seed: 16, region: 'West', stats: { points: 12.9, rebounds: 8.7, assists: 1.1, steals: 0.5, blocks: 2.1 } },
-
-  // ── MAUI INVITATIONAL ────────────────────────────────────
   // 1 Arizona
-  { id: 'p201', name: 'KJ Lewis', college: 'Arizona', position: 'G', seed: 1, region: 'Maui', stats: { points: 17.2, rebounds: 4.1, assists: 3.8, steals: 1.3, blocks: 0.3 } },
-  { id: 'p202', name: 'Henri Veesaar', college: 'Arizona', position: 'C', seed: 1, region: 'Maui', stats: { points: 13.5, rebounds: 8.4, assists: 1.2, steals: 0.5, blocks: 2.2 } },
-  { id: 'p203', name: 'Caleb Foster', college: 'Arizona', position: 'F', seed: 1, region: 'Maui', stats: { points: 14.8, rebounds: 5.2, assists: 2.9, steals: 1.1, blocks: 0.6 } },
-  // 2 BYU
-  { id: 'p204', name: 'Egor Demin', college: 'BYU', position: 'G', seed: 2, region: 'Maui', stats: { points: 19.1, rebounds: 4.8, assists: 5.2, steals: 1.4, blocks: 0.3 } },
-  { id: 'p205', name: 'Fousseyni Traore', college: 'BYU', position: 'C', seed: 2, region: 'Maui', stats: { points: 15.3, rebounds: 9.2, assists: 1.5, steals: 0.8, blocks: 1.4 } },
-  { id: 'p206', name: 'Richie Saunders', college: 'BYU', position: 'G', seed: 2, region: 'Maui', stats: { points: 14.6, rebounds: 5.1, assists: 2.8, steals: 1.2, blocks: 0.4 } },
-  // 3 Clemson
-  { id: 'p207', name: 'Chase Hunter', college: 'Clemson', position: 'G', seed: 3, region: 'Maui', stats: { points: 16.8, rebounds: 3.9, assists: 4.4, steals: 1.6, blocks: 0.3 } },
-  { id: 'p208', name: 'PJ Hall', college: 'Clemson', position: 'F', seed: 3, region: 'Maui', stats: { points: 17.4, rebounds: 6.8, assists: 2.1, steals: 0.9, blocks: 0.8 } },
-  { id: 'p209', name: 'Ian Schieffelin', college: 'Clemson', position: 'F', seed: 3, region: 'Maui', stats: { points: 11.2, rebounds: 7.5, assists: 1.8, steals: 0.7, blocks: 1.1 } },
-  // 4 Colorado State
-  { id: 'p210', name: 'Nique Clifford', college: 'Colorado State', position: 'F', seed: 4, region: 'Maui', stats: { points: 18.3, rebounds: 8.6, assists: 3.5, steals: 1.8, blocks: 0.9 } },
-  { id: 'p211', name: 'Isaiah Stevens', college: 'Colorado State', position: 'G', seed: 4, region: 'Maui', stats: { points: 15.7, rebounds: 4.2, assists: 6.1, steals: 2.0, blocks: 0.2 } },
-  { id: 'p212', name: 'Joel Scott', college: 'Colorado State', position: 'C', seed: 4, region: 'Maui', stats: { points: 10.8, rebounds: 8.1, assists: 1.4, steals: 0.6, blocks: 1.5 } },
-  // 5 Ole Miss
-  { id: 'p213', name: 'Matthew Murrell', college: 'Ole Miss', position: 'G', seed: 5, region: 'Maui', stats: { points: 17.2, rebounds: 3.9, assists: 2.8, steals: 1.1, blocks: 0.2 } },
-  { id: 'p214', name: 'Jaemyn Brakefield', college: 'Ole Miss', position: 'F', seed: 5, region: 'Maui', stats: { points: 12.4, rebounds: 7.2, assists: 1.5, steals: 0.6, blocks: 0.8 } },
-  { id: 'p215', name: 'Allen Flanigan', college: 'Ole Miss', position: 'F', seed: 5, region: 'Maui', stats: { points: 13.5, rebounds: 6.4, assists: 2.1, steals: 0.9, blocks: 0.7 } },
-  // 6 Providence
-  { id: 'p216', name: 'Bryce Hopkins', college: 'Providence', position: 'F', seed: 6, region: 'Maui', stats: { points: 16.7, rebounds: 8.1, assists: 2.3, steals: 1.0, blocks: 0.6 } },
-  { id: 'p217', name: 'Devin Carter', college: 'Providence', position: 'G', seed: 6, region: 'Maui', stats: { points: 18.4, rebounds: 4.3, assists: 3.7, steals: 1.9, blocks: 0.3 } },
-  { id: 'p218', name: 'Noah Locke', college: 'Providence', position: 'G', seed: 6, region: 'Maui', stats: { points: 13.2, rebounds: 3.1, assists: 2.6, steals: 0.9, blocks: 0.2 } },
-  // 7 VCU
-  { id: 'p219', name: 'Joe Bamisile', college: 'VCU', position: 'G', seed: 7, region: 'Maui', stats: { points: 18.8, rebounds: 4.5, assists: 4.1, steals: 1.5, blocks: 0.4 } },
-  { id: 'p220', name: 'Adrian Baldwin Jr', college: 'VCU', position: 'G', seed: 7, region: 'Maui', stats: { points: 15.2, rebounds: 4.8, assists: 5.3, steals: 2.3, blocks: 0.2 } },
-  { id: 'p221', name: 'Levi Stockard III', college: 'VCU', position: 'F', seed: 7, region: 'Maui', stats: { points: 12.1, rebounds: 6.9, assists: 1.4, steals: 0.7, blocks: 0.9 } },
-  // 8 Washington
-  { id: 'p222', name: 'Great Osobor', college: 'Washington', position: 'F', seed: 8, region: 'Maui', stats: { points: 20.4, rebounds: 9.3, assists: 2.1, steals: 1.0, blocks: 0.8 } },
-  { id: 'p223', name: 'Zoom Diallo', college: 'Washington', position: 'G', seed: 8, region: 'Maui', stats: { points: 14.5, rebounds: 5.1, assists: 3.4, steals: 1.4, blocks: 0.5 } },
-  { id: 'p224', name: 'Keion Brooks Jr', college: 'Washington', position: 'F', seed: 8, region: 'Maui', stats: { points: 16.3, rebounds: 6.2, assists: 2.7, steals: 1.1, blocks: 0.6 } },
+  { id: 'e5311896', espnId: '5311896', name: 'Ivan Kharchenkov', college: 'Arizona', position: 'F', cls: 'FR', jersey: '8',  height: "6'7\"",  seed: 1, region: 'Maui', hasStats: true,  stats: { points: 10.1, rebounds: 4.1, assists: 2.3, steals: 1.4, blocks: 0.3 } },
+  { id: 'e5174954', espnId: '5174954', name: 'Motiejus Krivas',  college: 'Arizona', position: 'C', cls: 'JR', jersey: '13', height: "7'2\"",  seed: 1, region: 'Maui', hasStats: true,  stats: { points: 10.5, rebounds: 8.1, assists: 1.0, steals: 0.7, blocks: 1.8 } },
+  { id: 'e5186456', espnId: '5186456', name: 'Dwayne Aristode',  college: 'Arizona', position: 'F', cls: 'FR', jersey: '2',  height: "6'8\"",  seed: 1, region: 'Maui', hasStats: true,  stats: { points: 4.1,  rebounds: 1.8, assists: 0.8, steals: 0.5, blocks: 0.1 } },
+  { id: 'e4702960', espnId: '4702960', name: 'Evan Nelson',      college: 'Arizona', position: 'G', cls: 'SR', jersey: '21', height: "6'2\"",  seed: 1, region: 'Maui', hasStats: true,  stats: { points: 0.6,  rebounds: 0.5, assists: 0.3, steals: 0.1, blocks: 0.0 } },
+  { id: 'e5311897', espnId: '5311897', name: 'Sidi Gueye',       college: 'Arizona', position: 'F', cls: 'FR', jersey: '15', height: "6'11\"", seed: 1, region: 'Maui', hasStats: true,  stats: { points: 1.2,  rebounds: 0.7, assists: 0.2, steals: 0.1, blocks: 0.3 } },
+  { id: 'e4896359', espnId: '4896359', name: 'Addison Arnold',   college: 'Arizona', position: 'G', cls: 'SO', jersey: '22', height: "6'3\"",  seed: 1, region: 'Maui', hasStats: true,  stats: { points: 0.3,  rebounds: 0.4, assists: 0.2, steals: 0.0, blocks: 0.1 } },
+  { id: 'e5239487', espnId: '5239487', name: 'Sven Djopmo',      college: 'Arizona', position: 'G', cls: 'SO', jersey: '42', height: "6'2\"",  seed: 1, region: 'Maui', hasStats: true,  stats: { points: 0.6,  rebounds: 0.2, assists: 0.2, steals: 0.1, blocks: 0.0 } },
+  { id: 'e5105542', espnId: '5105542', name: 'Jackson Francois', college: 'Arizona', position: 'G', cls: 'SR', jersey: '7',  height: "6'5\"",  seed: 1, region: 'Maui', hasStats: true,  stats: { points: 0.5,  rebounds: 0.5, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+  { id: 'e5174956', espnId: '5174956', name: 'Jackson Cook',     college: 'Arizona', position: 'G', cls: 'SO', jersey: '11', height: "6'3\"",  seed: 1, region: 'Maui', hasStats: true,  stats: { points: 0.0,  rebounds: 0.1, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+  { id: 'e5082287', espnId: '5082287', name: 'Bryce James',      college: 'Arizona', position: 'G', cls: 'FR', jersey: '6',  height: "6'5\"",  seed: 1, region: 'Maui', hasStats: false, stats: { points: 0.0,  rebounds: 0.0, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+  { id: 'e5311898', espnId: '5311898', name: 'Mabil Mawut',      college: 'Arizona', position: 'F', cls: 'FR', jersey: '20', height: "6'11\"", seed: 1, region: 'Maui', hasStats: false, stats: { points: 0.0,  rebounds: 0.0, assists: 0.0, steals: 0.0, blocks: 0.0 } },
 
-  // ── BATTLE 4 ATLANTIS ────────────────────────────────────
+  // 2 BYU
+  { id: 'e5060709', espnId: '5060709', name: 'Robert Wright III',   college: 'BYU', position: 'G', cls: 'SO', jersey: '1',  height: "6'1\"",  seed: 2, region: 'Maui', hasStats: true,  stats: { points: 18.2, rebounds: 3.5, assists: 4.7, steals: 1.2, blocks: 0.0 } },
+  { id: 'e4685654', espnId: '4685654', name: 'Kennard Davis Jr.',   college: 'BYU', position: 'F', cls: 'JR', jersey: '30', height: "6'6\"",  seed: 2, region: 'Maui', hasStats: true,  stats: { points: 8.5,  rebounds: 2.7, assists: 1.3, steals: 1.1, blocks: 0.2 } },
+  { id: 'e4702626', espnId: '4702626', name: 'Dawson Baker',        college: 'BYU', position: 'G', cls: 'SR', jersey: '25', height: "6'4\"",  seed: 2, region: 'Maui', hasStats: true,  stats: { points: 7.5,  rebounds: 1.7, assists: 0.5, steals: 0.5, blocks: 0.0 } },
+  { id: 'e5262601', espnId: '5262601', name: 'Khadim Mboup',        college: 'BYU', position: 'F', cls: 'FR', jersey: '7',  height: "6'9\"",  seed: 2, region: 'Maui', hasStats: true,  stats: { points: 2.3,  rebounds: 5.1, assists: 0.4, steals: 0.5, blocks: 0.5 } },
+  { id: 'e5183975', espnId: '5183975', name: 'Abdullah Ahmed',      college: 'BYU', position: 'C', cls: 'SO', jersey: '34', height: "6'10\"", seed: 2, region: 'Maui', hasStats: true,  hs: false, stats: { points: 1.3, rebounds: 2.8, assists: 0.4, steals: 0.1, blocks: 1.4 } },
+  { id: 'e5243211', espnId: '5243211', name: 'Mihailo Boškovic',    college: 'BYU', position: 'F', cls: 'SR', jersey: '5',  height: "6'10\"", seed: 2, region: 'Maui', hasStats: true,  stats: { points: 3.1,  rebounds: 1.9, assists: 0.6, steals: 0.2, blocks: 0.4 } },
+  { id: 'e5311908', espnId: '5311908', name: 'Aleksej Kostic',      college: 'BYU', position: 'G', cls: 'FR', jersey: '6',  height: "6'4\"",  seed: 2, region: 'Maui', hasStats: true,  stats: { points: 4.2,  rebounds: 0.9, assists: 0.4, steals: 0.2, blocks: 0.0 } },
+  { id: 'e5176299', espnId: '5176299', name: 'Tyler Mrus',          college: 'BYU', position: 'F', cls: 'JR', jersey: '2',  height: "6'7\"",  seed: 2, region: 'Maui', hasStats: true,  stats: { points: 2.0,  rebounds: 0.9, assists: 0.3, steals: 0.2, blocks: 0.1 } },
+  { id: 'e5262996', espnId: '5262996', name: 'Dominique Diomande',  college: 'BYU', position: 'F', cls: 'FR', jersey: '24', height: "6'7\"",  seed: 2, region: 'Maui', hasStats: true,  stats: { points: 2.0,  rebounds: 1.3, assists: 0.1, steals: 0.7, blocks: 0.1 } },
+  { id: 'e5143304', espnId: '5143304', name: 'Xavion Staton',       college: 'BYU', position: 'C', cls: 'FR', jersey: '33', height: "6'11\"", seed: 2, region: 'Maui', hasStats: true,  stats: { points: 0.6,  rebounds: 0.4, assists: 0.3, steals: 0.0, blocks: 0.6 } },
+  { id: 'e5105466', espnId: '5105466', name: 'Jared McGregor',      college: 'BYU', position: 'G', cls: 'SR', jersey: '51', height: "6'3\"",  seed: 2, region: 'Maui', hasStats: true,  stats: { points: 0.0,  rebounds: 0.3, assists: 0.3, steals: 0.1, blocks: 0.0 } },
+  { id: 'e5243214', espnId: '5243214', name: 'Brody Kozlowski',     college: 'BYU', position: 'F', cls: 'SO', jersey: '4',  height: "6'8\"",  seed: 2, region: 'Maui', hasStats: false, stats: { points: 0.0,  rebounds: 0.0, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+
+  // 3 Clemson
+  { id: 'e5105445', espnId: '5105445', name: 'Dillon Hunter',   college: 'Clemson', position: 'G', cls: 'SR', jersey: '2',  height: "6'3\"",  seed: 3, region: 'Maui', hasStats: true, stats: { points: 7.5,  rebounds: 3.8, assists: 3.0, steals: 0.9, blocks: 0.1 } },
+  { id: 'e5106880', espnId: '5106880', name: 'Jestin Porter',   college: 'Clemson', position: 'G', cls: 'SR', jersey: '1',  height: "6'1\"",  seed: 3, region: 'Maui', hasStats: true, stats: { points: 9.6,  rebounds: 1.8, assists: 1.3, steals: 1.2, blocks: 0.2 } },
+  { id: 'e5105449', espnId: '5105449', name: 'RJ Godfrey',      college: 'Clemson', position: 'F', cls: 'SR', jersey: '0',  height: "6'8\"",  seed: 3, region: 'Maui', hasStats: true, stats: { points: 11.9, rebounds: 5.3, assists: 1.6, steals: 0.6, blocks: 0.6 } },
+  { id: 'e4699440', espnId: '4699440', name: 'Nick Davidson',   college: 'Clemson', position: 'F', cls: 'SR', jersey: '11', height: "6'10\"", seed: 3, region: 'Maui', hasStats: true, stats: { points: 9.1,  rebounds: 4.1, assists: 1.1, steals: 0.5, blocks: 0.4 } },
+  { id: 'e5176397', espnId: '5176397', name: 'Carter Welling',  college: 'Clemson', position: 'F', cls: 'JR', jersey: '22', height: "6'10\"", seed: 3, region: 'Maui', hasStats: true, stats: { points: 10.2, rebounds: 5.4, assists: 1.1, steals: 0.8, blocks: 0.8 } },
+  { id: 'e5107144', espnId: '5107144', name: 'Butta Johnson',   college: 'Clemson', position: 'G', cls: 'SR', jersey: '4',  height: "6'4\"",  seed: 3, region: 'Maui', hasStats: true, stats: { points: 6.2,  rebounds: 2.1, assists: 1.0, steals: 0.6, blocks: 0.2 } },
+  { id: 'e5174977', espnId: '5174977', name: 'Jake Wahlin',     college: 'Clemson', position: 'F', cls: 'JR', jersey: '10', height: "6'10\"", seed: 3, region: 'Maui', hasStats: true, stats: { points: 5.4,  rebounds: 3.9, assists: 0.7, steals: 0.4, blocks: 0.3 } },
+  { id: 'e5179085', espnId: '5179085', name: 'Ace Buckner',     college: 'Clemson', position: 'G', cls: 'FR', jersey: '21', height: "6'3\"",  seed: 3, region: 'Maui', hasStats: true, stats: { points: 8.4,  rebounds: 2.8, assists: 1.8, steals: 0.9, blocks: 0.1 } },
+  { id: 'e5237299', espnId: '5237299', name: 'Zac Foster',      college: 'Clemson', position: 'G', cls: 'FR', jersey: '5',  height: "6'4\"",  seed: 3, region: 'Maui', hasStats: true, stats: { points: 6.9,  rebounds: 2.8, assists: 2.5, steals: 0.4, blocks: 0.3 } },
+  { id: 'e5196962', espnId: '5196962', name: 'Chase Thompson',  college: 'Clemson', position: 'F', cls: 'FR', jersey: '3',  height: "6'8\"",  seed: 3, region: 'Maui', hasStats: true, stats: { points: 2.3,  rebounds: 1.1, assists: 0.3, steals: 0.2, blocks: 0.1 } },
+  { id: 'e4869781', espnId: '4869781', name: 'Dallas Thomas',   college: 'Clemson', position: 'F', cls: 'FR', jersey: '8',  height: "6'9\"",  seed: 3, region: 'Maui', hasStats: true, stats: { points: 2.2,  rebounds: 0.4, assists: 0.1, steals: 0.1, blocks: 0.0 } },
+  { id: 'e5196959', espnId: '5196959', name: 'Trent Steinour',  college: 'Clemson', position: 'F', cls: 'FR', jersey: '44', height: "6'10\"", seed: 3, region: 'Maui', hasStats: true, stats: { points: 1.0,  rebounds: 1.2, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+
+  // 4 Colorado State
+  { id: 'e5108770', espnId: '5108770', name: 'Jevin Muniz',          college: 'Colorado State', position: 'G', cls: 'SR', jersey: '55', height: "6'6\"",  seed: 4, region: 'Maui', hasStats: true, stats: { points: 9.3,  rebounds: 3.9, assists: 4.9, steals: 0.9, blocks: 0.2 } },
+  { id: 'e5103590', espnId: '5103590', name: 'Brandon Rechsteiner',  college: 'Colorado State', position: 'G', cls: 'JR', jersey: '2',  height: "6'1\"",  seed: 4, region: 'Maui', hasStats: true, stats: { points: 12.2, rebounds: 2.2, assists: 2.6, steals: 0.8, blocks: 0.1 } },
+  { id: 'e5177121', espnId: '5177121', name: 'Josh Pascarelli',      college: 'Colorado State', position: 'G', cls: 'JR', jersey: '1',  height: "6'3\"",  seed: 4, region: 'Maui', hasStats: true, stats: { points: 10.2, rebounds: 2.8, assists: 1.4, steals: 0.6, blocks: 0.0 } },
+  { id: 'e5241234', espnId: '5241234', name: 'Kyle Jorgensen',       college: 'Colorado State', position: 'F', cls: 'SO', jersey: '35', height: "6'9\"",  seed: 4, region: 'Maui', hasStats: true, stats: { points: 11.9, rebounds: 4.1, assists: 2.2, steals: 0.7, blocks: 0.5 } },
+  { id: 'e5175589', espnId: '5175589', name: 'Jase Butler',          college: 'Colorado State', position: 'G', cls: 'SO', jersey: '4',  height: "6'4\"",  seed: 4, region: 'Maui', hasStats: true, stats: { points: 9.3,  rebounds: 3.1, assists: 1.8, steals: 0.6, blocks: 0.1 } },
+  { id: 'e5037880', espnId: '5037880', name: 'Carey Booth',          college: 'Colorado State', position: 'F', cls: 'JR', jersey: '0',  height: "6'10\"", seed: 4, region: 'Maui', hasStats: true, stats: { points: 10.7, rebounds: 5.6, assists: 0.7, steals: 0.5, blocks: 1.0 } },
+  { id: 'e5176196', espnId: '5176196', name: 'Rashaan Mbemba',       college: 'Colorado State', position: 'F', cls: 'JR', jersey: '21', height: "6'7\"",  seed: 4, region: 'Maui', hasStats: true, stats: { points: 8.1,  rebounds: 3.6, assists: 0.9, steals: 0.4, blocks: 0.3 } },
+  { id: 'e5176346', espnId: '5176346', name: 'Augustinas Kiudulas',  college: 'Colorado State', position: 'F', cls: 'JR', jersey: '11', height: "6'8\"",  seed: 4, region: 'Maui', hasStats: true, stats: { points: 5.9,  rebounds: 2.6, assists: 0.8, steals: 0.5, blocks: 0.0 } },
+  { id: 'e5313905', espnId: '5313905', name: 'Jojo McIver',          college: 'Colorado State', position: 'G', cls: 'FR', jersey: '8',  height: "6'3\"",  seed: 4, region: 'Maui', hasStats: true, stats: { points: 2.6,  rebounds: 1.9, assists: 1.0, steals: 0.3, blocks: 0.0 } },
+  { id: 'e5177264', espnId: '5177264', name: 'Nikola Djapa',         college: 'Colorado State', position: 'C', cls: 'JR', jersey: '23', height: "6'11\"", seed: 4, region: 'Maui', hasStats: true, stats: { points: 2.4,  rebounds: 1.8, assists: 0.7, steals: 0.4, blocks: 0.2 } },
+  { id: 'e5241231', espnId: '5241231', name: 'Darnez Slater',        college: 'Colorado State', position: 'G', cls: 'FR', jersey: '3',  height: "6'3\"",  seed: 4, region: 'Maui', hasStats: true, stats: { points: 1.6,  rebounds: 0.6, assists: 0.2, steals: 0.1, blocks: 0.1 } },
+  { id: 'e5241232', espnId: '5241232', name: 'Jon Mekonnen',         college: 'Colorado State', position: 'F', cls: 'FR', jersey: '5',  height: "6'8\"",  seed: 4, region: 'Maui', hasStats: true, stats: { points: 2.1,  rebounds: 1.3, assists: 0.4, steals: 0.5, blocks: 0.0 } },
+
+  // 5 Ole Miss
+  { id: 'e5311523', espnId: '5311523', name: 'Ilias Kamardine',    college: 'Ole Miss', position: 'G', cls: 'SR', jersey: '6',  height: "6'4\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 11.3, rebounds: 3.4, assists: 3.8, steals: 1.3, blocks: 0.4 } },
+  { id: 'e5105603', espnId: '5105603', name: 'AJ Storr',           college: 'Ole Miss', position: 'G', cls: 'SR', jersey: '2',  height: "6'5\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 15.5, rebounds: 3.1, assists: 1.9, steals: 0.9, blocks: 0.1 } },
+  { id: 'e5144099', espnId: '5144099', name: 'Patton Pinkins',     college: 'Ole Miss', position: 'G', cls: 'FR', jersey: '23', height: "6'5\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 9.3,  rebounds: 1.9, assists: 0.9, steals: 0.5, blocks: 0.1 } },
+  { id: 'e5102798', espnId: '5102798', name: 'James Scott',        college: 'Ole Miss', position: 'F', cls: 'JR', jersey: '4',  height: "6'10\"", seed: 5, region: 'Maui', hasStats: true, stats: { points: 3.9,  rebounds: 4.6, assists: 0.6, steals: 0.5, blocks: 1.3 } },
+  { id: 'e4873100', espnId: '4873100', name: 'Travis Perry',       college: 'Ole Miss', position: 'G', cls: 'SO', jersey: '11', height: "6'1\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 5.3,  rebounds: 1.6, assists: 1.1, steals: 0.8, blocks: 0.1 } },
+  { id: 'e4897575', espnId: '4897575', name: 'Kezza Giffa',        college: 'Ole Miss', position: 'G', cls: 'SR', jersey: '13', height: "6'1\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 5.9,  rebounds: 1.3, assists: 1.3, steals: 0.6, blocks: 0.1 } },
+  { id: 'e5171788', espnId: '5171788', name: 'Eduardo Klafke',     college: 'Ole Miss', position: 'G', cls: 'SO', jersey: '8',  height: "6'5\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 4.6,  rebounds: 2.5, assists: 1.1, steals: 0.6, blocks: 0.1 } },
+  { id: 'e4858606', espnId: '4858606', name: 'Corey Chest',        college: 'Ole Miss', position: 'F', cls: 'SO', jersey: '1',  height: "6'8\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 2.6,  rebounds: 3.8, assists: 0.6, steals: 0.5, blocks: 0.7 } },
+  { id: 'e5175354', espnId: '5175354', name: 'Augusto Cassiá',     college: 'Ole Miss', position: 'F', cls: 'JR', jersey: '88', height: "6'8\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 2.2,  rebounds: 1.6, assists: 0.5, steals: 0.4, blocks: 0.2 } },
+  { id: 'e5105649', espnId: '5105649', name: 'Koren Johnson',      college: 'Ole Miss', position: 'G', cls: 'JR', jersey: '3',  height: "6'1\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 1.8,  rebounds: 0.8, assists: 1.4, steals: 0.4, blocks: 0.2 } },
+  { id: 'e5238224', espnId: '5238224', name: 'Zach Day',           college: 'Ole Miss', position: 'G', cls: 'FR', jersey: '31', height: "6'5\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 0.9,  rebounds: 1.4, assists: 0.3, steals: 0.3, blocks: 0.3 } },
+  { id: 'e5259006', espnId: '5259006', name: 'Hobert Grayson IV',  college: 'Ole Miss', position: 'G', cls: 'SR', jersey: '5',  height: "6'4\"",  seed: 5, region: 'Maui', hasStats: true, stats: { points: 1.4,  rebounds: 1.4, assists: 0.2, steals: 0.4, blocks: 0.2 } },
+
+  // 6 Providence
+  { id: 'e5311991', espnId: '5311991', name: 'Stefan Vaaks',          college: 'Providence', position: 'G', cls: 'FR', jersey: '7',  height: "6'7\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 15.8, rebounds: 2.5, assists: 3.2, steals: 0.8, blocks: 0.3 } },
+  { id: 'e5175064', espnId: '5175064', name: 'Jason Edwards',         college: 'Providence', position: 'G', cls: 'SR', jersey: '1',  height: "6'1\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 16.5, rebounds: 2.8, assists: 3.0, steals: 0.8, blocks: 0.0 } },
+  { id: 'e5156117', espnId: '5156117', name: 'Ryan Mela',             college: 'Providence', position: 'G', cls: 'SO', jersey: '11', height: "6'7\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 9.9,  rebounds: 5.3, assists: 2.0, steals: 0.8, blocks: 0.1 } },
+  { id: 'e5041949', espnId: '5041949', name: 'Jamier Jones',          college: 'Providence', position: 'F', cls: 'FR', jersey: '5',  height: "6'6\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 11.9, rebounds: 4.5, assists: 1.4, steals: 0.9, blocks: 0.3 } },
+  { id: 'e4684718', espnId: '4684718', name: 'Corey Floyd Jr.',       college: 'Providence', position: 'G', cls: 'SR', jersey: '14', height: "6'4\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 7.6,  rebounds: 4.0, assists: 2.5, steals: 0.6, blocks: 0.2 } },
+  { id: 'e5164558', espnId: '5164558', name: 'Oswin Erhunmwunse',     college: 'Providence', position: 'F', cls: 'SO', jersey: '55', height: "6'10\"", seed: 6, region: 'Maui', hasStats: true, stats: { points: 6.9,  rebounds: 8.3, assists: 0.8, steals: 0.3, blocks: 2.1 } },
+  { id: 'e4565204', espnId: '4565204', name: 'Duncan Powell',         college: 'Providence', position: 'F', cls: 'SR', jersey: '31', height: "6'8\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 4.6,  rebounds: 3.0, assists: 0.8, steals: 0.3, blocks: 0.3 } },
+  { id: 'e5105782', espnId: '5105782', name: 'Cole Hargrove',         college: 'Providence', position: 'F', cls: 'SR', jersey: '13', height: "6'8\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 1.8,  rebounds: 2.9, assists: 0.5, steals: 0.2, blocks: 0.6 } },
+  { id: 'e5240530', espnId: '5240530', name: 'Nilavan Daniels',       college: 'Providence', position: 'G', cls: 'SO', jersey: '20', height: "6'3\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 2.0,  rebounds: 1.1, assists: 0.4, steals: 0.3, blocks: 0.1 } },
+  { id: 'e5101651', espnId: '5101651', name: 'Daquan Davis',          college: 'Providence', position: 'G', cls: 'SO', jersey: '3',  height: "6'1\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 0.7,  rebounds: 0.3, assists: 1.0, steals: 0.3, blocks: 0.0 } },
+  { id: 'e5144104', espnId: '5144104', name: 'Jaylen Harrell',        college: 'Providence', position: 'G', cls: 'FR', jersey: '4',  height: "6'5\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 3.7,  rebounds: 0.7, assists: 0.3, steals: 0.2, blocks: 0.0 } },
+  { id: 'e5311993', espnId: '5311993', name: 'Peteris Pinnis',        college: 'Providence', position: 'F', cls: 'FR', jersey: '17', height: "7'0\"",  seed: 6, region: 'Maui', hasStats: true, stats: { points: 0.8,  rebounds: 1.2, assists: 0.1, steals: 0.2, blocks: 0.1 } },
+
+  // 7 VCU
+  { id: 'e5175368', espnId: '5175368', name: 'Lazar Djokovic',     college: 'VCU', position: 'F', cls: 'JR', jersey: '17', height: "6'11\"", seed: 7, region: 'Maui', hasStats: true, stats: { points: 13.5, rebounds: 5.4, assists: 1.0, steals: 0.5, blocks: 1.2 } },
+  { id: 'e5239713', espnId: '5239713', name: 'Brandon Jennings',   college: 'VCU', position: 'G', cls: 'SO', jersey: '0',  height: "6'4\"",  seed: 7, region: 'Maui', hasStats: true, stats: { points: 8.7,  rebounds: 3.5, assists: 2.2, steals: 1.7, blocks: 0.8 } },
+  { id: 'e5060712', espnId: '5060712', name: 'Terrence Hill Jr.',  college: 'VCU', position: 'G', cls: 'SO', jersey: '6',  height: "6'3\"",  seed: 7, region: 'Maui', hasStats: true, stats: { points: 14.4, rebounds: 2.5, assists: 2.8, steals: 0.6, blocks: 0.1 } },
+  { id: 'e5311890', espnId: '5311890', name: 'Nyk Lewis',          college: 'VCU', position: 'G', cls: 'FR', jersey: '1',  height: "6'1\"",  seed: 7, region: 'Maui', hasStats: true, stats: { points: 8.7,  rebounds: 4.5, assists: 1.7, steals: 1.1, blocks: 0.0 } },
+  { id: 'e5174672', espnId: '5174672', name: 'Michael Belle',      college: 'VCU', position: 'F', cls: 'JR', jersey: '8',  height: "6'8\"",  seed: 7, region: 'Maui', hasStats: true, stats: { points: 7.5,  rebounds: 5.1, assists: 1.0, steals: 0.7, blocks: 0.7 } },
+  { id: 'e4701030', espnId: '4701030', name: 'Jadrian Tracey',     college: 'VCU', position: 'G', cls: 'SR', jersey: '2',  height: "6'6\"",  seed: 7, region: 'Maui', hasStats: true, stats: { points: 9.9,  rebounds: 2.9, assists: 1.8, steals: 0.7, blocks: 0.4 } },
+  { id: 'e4684733', espnId: '4684733', name: 'Tyrell Ward',        college: 'VCU', position: 'G', cls: 'JR', jersey: '15', height: "6'6\"",  seed: 7, region: 'Maui', hasStats: true, stats: { points: 5.8,  rebounds: 2.1, assists: 0.5, steals: 0.6, blocks: 0.2 } },
+  { id: 'e5106041', espnId: '5106041', name: 'Christian Fermin',   college: 'VCU', position: 'F', cls: 'SR', jersey: '21', height: "6'10\"", seed: 7, region: 'Maui', hasStats: true, stats: { points: 0.8,  rebounds: 2.5, assists: 0.8, steals: 0.3, blocks: 1.5 } },
+  { id: 'e5174851', espnId: '5174851', name: 'Keyshawn Mitchell',  college: 'VCU', position: 'F', cls: 'JR', jersey: '22', height: "6'11\"", seed: 7, region: 'Maui', hasStats: true, stats: { points: 3.4,  rebounds: 2.6, assists: 0.5, steals: 0.2, blocks: 0.3 } },
+  { id: 'e4869778', espnId: '4869778', name: 'Ahmad Nowell',       college: 'VCU', position: 'G', cls: 'SO', jersey: '4',  height: "6'0\"",  seed: 7, region: 'Maui', hasStats: true, stats: { points: 4.7,  rebounds: 1.2, assists: 0.6, steals: 0.5, blocks: 0.1 } },
+  { id: 'e5311892', espnId: '5311892', name: 'Jordan Tillery',     college: 'VCU', position: 'G', cls: 'FR', jersey: '14', height: "6'5\"",  seed: 7, region: 'Maui', hasStats: true, stats: { points: 4.5,  rebounds: 1.5, assists: 0.5, steals: 0.4, blocks: 0.2 } },
+  { id: 'e5117584', espnId: '5117584', name: 'Jordann Dumont',     college: 'VCU', position: 'F', cls: 'SO', jersey: '10', height: "6'8\"",  seed: 7, region: 'Maui', hasStats: true, stats: { points: 1.0,  rebounds: 0.1, assists: 0.0, steals: 0.1, blocks: 0.0 } },
+
+  // 8 Washington
+  { id: 'e4869737', espnId: '4869737', name: 'Wesley Yates III',      college: 'Washington', position: 'G', cls: 'SO', jersey: '9',  height: "6'4\"",  seed: 8, region: 'Maui', hasStats: true, stats: { points: 12.7, rebounds: 3.3, assists: 1.3, steals: 1.5, blocks: 0.3 } },
+  { id: 'e4897465', espnId: '4897465', name: 'Quimari Peterson',      college: 'Washington', position: 'G', cls: 'SR', jersey: '0',  height: "6'1\"",  seed: 8, region: 'Maui', hasStats: true, stats: { points: 9.2,  rebounds: 2.8, assists: 2.2, steals: 1.3, blocks: 0.2 } },
+  { id: 'e5060705', espnId: '5060705', name: 'Zoom Diallo',           college: 'Washington', position: 'G', cls: 'SO', jersey: '5',  height: "6'4\"",  seed: 8, region: 'Maui', hasStats: true, stats: { points: 15.7, rebounds: 3.9, assists: 4.5, steals: 0.7, blocks: 0.0 } },
+  { id: 'e5105606', espnId: '5105606', name: 'Desmond Claude',        college: 'Washington', position: 'G', cls: 'SR', jersey: '1',  height: "6'6\"",  seed: 8, region: 'Maui', hasStats: true, stats: { points: 13.3, rebounds: 2.4, assists: 1.9, steals: 0.4, blocks: 0.1 } },
+  { id: 'e4711400', espnId: '4711400', name: 'Franck Kepnang',        college: 'Washington', position: 'C', cls: 'SR', jersey: '11', height: "6'11\"", seed: 8, region: 'Maui', hasStats: true, stats: { points: 6.2,  rebounds: 6.3, assists: 0.2, steals: 0.6, blocks: 2.1 } },
+  { id: 'e4873180', espnId: '4873180', name: 'Bryson Tucker',         college: 'Washington', position: 'F', cls: 'SO', jersey: '8',  height: "6'7\"",  seed: 8, region: 'Maui', hasStats: true, stats: { points: 5.7,  rebounds: 3.9, assists: 0.5, steals: 0.3, blocks: 0.1 } },
+  { id: 'e5101766', espnId: '5101766', name: 'JJ Mandaquit',          college: 'Washington', position: 'G', cls: 'FR', jersey: '23', height: "6'1\"",  seed: 8, region: 'Maui', hasStats: true, stats: { points: 5.2,  rebounds: 2.1, assists: 3.2, steals: 0.5, blocks: 0.1 } },
+  { id: 'e5101689', espnId: '5101689', name: 'Lathan Sommerville',    college: 'Washington', position: 'C', cls: 'SO', jersey: '24', height: "6'10\"", seed: 8, region: 'Maui', hasStats: true, stats: { points: 4.3,  rebounds: 2.6, assists: 0.2, steals: 0.1, blocks: 0.4 } },
+  { id: 'e5221320', espnId: '5221320', name: 'Courtland Muldrew',     college: 'Washington', position: 'G', cls: 'FR', jersey: '30', height: "6'3\"",  seed: 8, region: 'Maui', hasStats: true, stats: { points: 3.3,  rebounds: 1.9, assists: 1.5, steals: 0.3, blocks: 0.2 } },
+  { id: 'e4703983', espnId: '4703983', name: 'Jacob Ognacevic',       college: 'Washington', position: 'F', cls: 'SR', jersey: '41', height: "6'8\"",  seed: 8, region: 'Maui', hasStats: true, stats: { points: 3.1,  rebounds: 1.2, assists: 0.3, steals: 0.3, blocks: 0.0 } },
+  { id: 'e5328456', espnId: '5328456', name: 'Nikola Dzepina',        college: 'Washington', position: 'F', cls: 'FR', jersey: '33', height: "6'10\"", seed: 8, region: 'Maui', hasStats: true, hs: false, stats: { points: 2.6, rebounds: 1.3, assists: 0.7, steals: 0.0, blocks: 0.9 } },
+  { id: 'e5144117', espnId: '5144117', name: 'Jasir Rencher',         college: 'Washington', position: 'F', cls: 'FR', jersey: '4',  height: "6'5\"",  seed: 8, region: 'Maui', hasStats: true, stats: { points: 3.0,  rebounds: 1.8, assists: 0.1, steals: 0.0, blocks: 0.3 } },
+
+  // ══ BATTLE 4 ATLANTIS — Nov 25-27, 2026 ══════════════════
+
   // 1 Marquette
-  { id: 'p225', name: 'Tyler Kolek', college: 'Marquette', position: 'G', seed: 1, region: 'Atlantis', stats: { points: 16.2, rebounds: 4.8, assists: 7.4, steals: 1.8, blocks: 0.2 } },
-  { id: 'p226', name: 'Kam Jones', college: 'Marquette', position: 'G', seed: 1, region: 'Atlantis', stats: { points: 18.8, rebounds: 4.1, assists: 4.6, steals: 1.5, blocks: 0.3 } },
-  { id: 'p227', name: 'Oso Ighodaro', college: 'Marquette', position: 'C', seed: 1, region: 'Atlantis', stats: { points: 13.1, rebounds: 7.6, assists: 2.4, steals: 0.9, blocks: 1.8 } },
+  { id: 'e5144086', espnId: '5144086', name: 'Nigel James Jr.',      college: 'Marquette', position: 'G', cls: 'FR', jersey: '0',  height: "6'0\"",  seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 16.4, rebounds: 3.4, assists: 4.9, steals: 1.9, blocks: 0.3 } },
+  { id: 'e5101676', espnId: '5101676', name: 'Royce Parham',         college: 'Marquette', position: 'F', cls: 'SO', jersey: '13', height: "6'8\"",  seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 12.5, rebounds: 4.9, assists: 0.9, steals: 0.7, blocks: 0.8 } },
+  { id: 'e5105599', espnId: '5105599', name: 'Ben Gold',             college: 'Marquette', position: 'F', cls: 'SR', jersey: '12', height: "6'11\"", seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 8.0,  rebounds: 5.8, assists: 0.9, steals: 0.7, blocks: 0.5 } },
+  { id: 'e5196920', espnId: '5196920', name: 'Adrien Stevens',       college: 'Marquette', position: 'G', cls: 'FR', jersey: '10', height: "6'4\"",  seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 7.9,  rebounds: 2.6, assists: 1.6, steals: 1.4, blocks: 0.2 } },
+  { id: 'e5105600', espnId: '5105600', name: 'Sean Jones',           college: 'Marquette', position: 'G', cls: 'JR', jersey: '22', height: "5'10\"", seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 6.3,  rebounds: 1.4, assists: 3.9, steals: 1.0, blocks: 0.0 } },
+  { id: 'e5061595', espnId: '5061595', name: 'Damarius Owens',       college: 'Marquette', position: 'F', cls: 'SO', jersey: '9',  height: "6'7\"",  seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 4.8,  rebounds: 2.6, assists: 0.7, steals: 0.6, blocks: 0.2 } },
+  { id: 'e5175364', espnId: '5175364', name: 'Caedin Hamilton',      college: 'Marquette', position: 'F', cls: 'SO', jersey: '18', height: "6'9\"",  seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 2.9,  rebounds: 2.9, assists: 0.6, steals: 0.4, blocks: 0.4 } },
+  { id: 'e4895745', espnId: '4895745', name: 'Tre Norman',           college: 'Marquette', position: 'G', cls: 'JR', jersey: '5',  height: "6'4\"",  seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 2.2,  rebounds: 1.4, assists: 0.7, steals: 0.5, blocks: 0.0 } },
+  { id: 'e5248300', espnId: '5248300', name: 'Michael Phillips II',  college: 'Marquette', position: 'F', cls: 'FR', jersey: '35', height: "6'6\"",  seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 2.1,  rebounds: 1.3, assists: 0.2, steals: 0.2, blocks: 0.3 } },
+  { id: 'e5240527', espnId: '5240527', name: 'Joshua Clark',         college: 'Marquette', position: 'F', cls: 'SO', jersey: '8',  height: "7'1\"",  seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 1.3,  rebounds: 1.9, assists: 0.0, steals: 0.2, blocks: 0.3 } },
+  { id: 'e5311977', espnId: '5311977', name: 'Braeden Brenn',        college: 'Marquette', position: 'F', cls: 'FR', jersey: '42', height: "6'8\"",  seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 0.7,  rebounds: 0.0, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+  { id: 'e5175365', espnId: '5175365', name: "Casey O'Malley",       college: 'Marquette', position: 'G', cls: 'SR', jersey: '40', height: "6'3\"",  seed: 1, region: 'Atlantis', hasStats: true, stats: { points: 0.0,  rebounds: 0.0, assists: 0.3, steals: 0.0, blocks: 0.0 } },
+
   // 2 Penn State
-  { id: 'p228', name: 'Nick Kern Jr', college: 'Penn State', position: 'G', seed: 2, region: 'Atlantis', stats: { points: 17.3, rebounds: 5.4, assists: 3.8, steals: 1.4, blocks: 0.4 } },
-  { id: 'p229', name: 'Kebba Njie', college: 'Penn State', position: 'C', seed: 2, region: 'Atlantis', stats: { points: 12.5, rebounds: 8.9, assists: 1.2, steals: 0.6, blocks: 2.0 } },
-  { id: 'p230', name: 'Ace Baldwin Jr', college: 'Penn State', position: 'G', seed: 2, region: 'Atlantis', stats: { points: 15.8, rebounds: 4.2, assists: 5.9, steals: 1.9, blocks: 0.2 } },
+  { id: 'e5144108', espnId: '5144108', name: 'Kayden Mingo',       college: 'Penn State', position: 'G', cls: 'FR', jersey: '4',  height: "6'3\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 13.7, rebounds: 3.5, assists: 4.3, steals: 2.1, blocks: 0.2 } },
+  { id: 'e4838723', espnId: '4838723', name: 'Josh Reed',          college: 'Penn State', position: 'F', cls: 'SR', jersey: '10', height: "6'8\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 11.5, rebounds: 4.1, assists: 1.0, steals: 1.0, blocks: 0.1 } },
+  { id: 'e5125192', espnId: '5125192', name: 'Freddie Dilione V',  college: 'Penn State', position: 'G', cls: 'JR', jersey: '5',  height: "6'5\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 14.0, rebounds: 3.2, assists: 2.2, steals: 1.2, blocks: 0.2 } },
+  { id: 'e5312025', espnId: '5312025', name: 'Ivan Juric',         college: 'Penn State', position: 'F', cls: 'FR', jersey: '3',  height: "7'0\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 10.2, rebounds: 5.3, assists: 0.8, steals: 0.4, blocks: 0.2 } },
+  { id: 'e5312026', espnId: '5312026', name: 'Melih Tunca',        college: 'Penn State', position: 'G', cls: 'FR', jersey: '9',  height: "6'5\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 7.8,  rebounds: 2.0, assists: 2.4, steals: 0.7, blocks: 0.2 } },
+  { id: 'e5173445', espnId: '5173445', name: 'Dominick Stewart',   college: 'Penn State', position: 'G', cls: 'SO', jersey: '7',  height: "6'5\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 6.6,  rebounds: 2.2, assists: 1.6, steals: 0.7, blocks: 0.2 } },
+  { id: 'e5093264', espnId: '5093264', name: 'Eli Rice',           college: 'Penn State', position: 'G', cls: 'SO', jersey: '11', height: "6'8\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 6.7,  rebounds: 1.7, assists: 0.2, steals: 0.6, blocks: 0.2 } },
+  { id: 'e5312028', espnId: '5312028', name: 'Tibor Mirtic',       college: 'Penn State', position: 'F', cls: 'FR', jersey: '16', height: "6'9\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 3.7,  rebounds: 3.3, assists: 0.7, steals: 0.5, blocks: 0.1 } },
+  { id: 'e4873144', espnId: '4873144', name: 'Mason Blackwood',    college: 'Penn State', position: 'F', cls: 'FR', jersey: '1',  height: "6'7\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 2.6,  rebounds: 1.8, assists: 0.2, steals: 0.2, blocks: 0.0 } },
+  { id: 'e5170078', espnId: '5170078', name: 'Saša Ciani',         college: 'Penn State', position: 'F', cls: 'JR', jersey: '22', height: "6'10\"", seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 2.1,  rebounds: 1.9, assists: 0.2, steals: 0.1, blocks: 0.2 } },
+  { id: 'e5217197', espnId: '5217197', name: 'Justin Houser',      college: 'Penn State', position: 'F', cls: 'FR', jersey: '21', height: "7'0\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 1.4,  rebounds: 1.1, assists: 0.2, steals: 0.1, blocks: 0.4 } },
+  { id: 'e5312029', espnId: '5312029', name: 'Chris Lotito',       college: 'Penn State', position: 'F', cls: 'FR', jersey: '30', height: "6'7\"",  seed: 2, region: 'Atlantis', hasStats: true, stats: { points: 0.0,  rebounds: 0.3, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+
   // 3 Texas A&M
-  { id: 'p231', name: 'Wade Taylor IV', college: 'Texas A&M', position: 'G', seed: 3, region: 'Atlantis', stats: { points: 18.1, rebounds: 3.2, assists: 5.0, steals: 1.6, blocks: 0.2 } },
-  { id: 'p232', name: 'Henry Coleman III', college: 'Texas A&M', position: 'F', seed: 3, region: 'Atlantis', stats: { points: 11.2, rebounds: 7.9, assists: 1.4, steals: 0.7, blocks: 1.1 } },
-  { id: 'p233', name: 'Andersson Garcia', college: 'Texas A&M', position: 'F', seed: 3, region: 'Atlantis', stats: { points: 12.6, rebounds: 8.4, assists: 1.8, steals: 1.2, blocks: 0.9 } },
+  { id: 'e5311530', espnId: '5311530', name: 'Rubén Dominguez',      college: 'Texas A&M', position: 'G', cls: 'SO', jersey: '9',  height: "6'6\"",  seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 10.3, rebounds: 2.4, assists: 1.4, steals: 0.4, blocks: 0.1 } },
+  { id: 'e5176153', espnId: '5176153', name: 'Marcus Hill',          college: 'Texas A&M', position: 'G', cls: 'SR', jersey: '0',  height: "6'3\"",  seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 10.8, rebounds: 3.2, assists: 1.6, steals: 1.0, blocks: 0.1 } },
+  { id: 'e5106285', espnId: '5106285', name: 'Pop Isaacs',           college: 'Texas A&M', position: 'G', cls: 'JR', jersey: '2',  height: "6'2\"",  seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 10.1, rebounds: 2.6, assists: 2.6, steals: 0.6, blocks: 0.1 } },
+  { id: 'e5107078', espnId: '5107078', name: 'Jacari Lane',          college: 'Texas A&M', position: 'G', cls: 'SR', jersey: '5',  height: "6'0\"",  seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 6.4,  rebounds: 1.8, assists: 3.2, steals: 0.6, blocks: 0.0 } },
+  { id: 'e4683779', espnId: '4683779', name: 'Mackenzie Mgbako',     college: 'Texas A&M', position: 'F', cls: 'JR', jersey: '21', height: "6'9\"",  seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 10.4, rebounds: 4.9, assists: 1.3, steals: 0.6, blocks: 0.1 } },
+  { id: 'e4683146', espnId: '4683146', name: 'Zach Clemence',        college: 'Texas A&M', position: 'F', cls: 'SR', jersey: '7',  height: "6'11\"", seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 7.1,  rebounds: 3.1, assists: 0.8, steals: 0.5, blocks: 0.4 } },
+  { id: 'e4896862', espnId: '4896862', name: 'Ali Dibba',            college: 'Texas A&M', position: 'G', cls: 'SR', jersey: '6',  height: "6'5\"",  seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 5.6,  rebounds: 2.7, assists: 0.8, steals: 1.1, blocks: 0.1 } },
+  { id: 'e5176160', espnId: '5176160', name: 'Josh Holloway',        college: 'Texas A&M', position: 'G', cls: 'JR', jersey: '1',  height: "6'1\"",  seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 4.5,  rebounds: 1.7, assists: 1.8, steals: 0.8, blocks: 0.1 } },
+  { id: 'e5105412', espnId: '5105412', name: 'Federiko Federiko',    college: 'Texas A&M', position: 'F', cls: 'SR', jersey: '33', height: "6'11\"", seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 1.8,  rebounds: 1.9, assists: 0.5, steals: 0.4, blocks: 0.4 } },
+  { id: 'e5101692', espnId: '5101692', name: 'Jamie Vinson',         college: 'Texas A&M', position: 'F', cls: 'SO', jersey: '4',  height: "6'11\"", seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 3.4,  rebounds: 2.2, assists: 0.4, steals: 0.1, blocks: 0.6 } },
+  { id: 'e5041941', espnId: '5041941', name: 'Jeremiah Green',       college: 'Texas A&M', position: 'G', cls: 'FR', jersey: '10', height: "6'3\"",  seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 0.9,  rebounds: 0.1, assists: 0.5, steals: 0.3, blocks: 0.0 } },
+  { id: 'e5061578', espnId: '5061578', name: 'Chris McDermott',      college: 'Texas A&M', position: 'F', cls: 'SO', jersey: '14', height: "6'7\"",  seed: 3, region: 'Atlantis', hasStats: true, stats: { points: 0.7,  rebounds: 0.7, assists: 0.2, steals: 0.0, blocks: 0.1 } },
+
   // 4 Memphis
-  { id: 'p234', name: 'Milos Uzan', college: 'Memphis', position: 'G', seed: 4, region: 'Atlantis', stats: { points: 17.5, rebounds: 4.3, assists: 5.7, steals: 1.6, blocks: 0.3 } },
-  { id: 'p235', name: 'Nick Jourdain', college: 'Memphis', position: 'F', seed: 4, region: 'Atlantis', stats: { points: 14.2, rebounds: 6.8, assists: 2.1, steals: 1.0, blocks: 0.8 } },
-  { id: 'p236', name: 'Jaykwon Walton', college: 'Memphis', position: 'G', seed: 4, region: 'Atlantis', stats: { points: 13.8, rebounds: 3.7, assists: 3.4, steals: 1.3, blocks: 0.2 } },
+  { id: 'e5105805', espnId: '5105805', name: 'Dug McDaniel',        college: 'Memphis', position: 'G', cls: 'SR', jersey: '1',  height: "5'11\"", seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 13.9, rebounds: 3.7, assists: 4.6, steals: 1.9, blocks: 0.1 } },
+  { id: 'e5037872', espnId: '5037872', name: 'Curtis Givens III',   college: 'Memphis', position: 'G', cls: 'SO', jersey: '5',  height: "6'3\"",  seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 9.4,  rebounds: 2.1, assists: 2.3, steals: 0.8, blocks: 0.2 } },
+  { id: 'e5176660', espnId: '5176660', name: 'Hasan Abdul Hakim',   college: 'Memphis', position: 'G', cls: 'SR', jersey: '14', height: "6'8\"",  seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 6.2,  rebounds: 4.1, assists: 1.8, steals: 1.2, blocks: 0.5 } },
+  { id: 'e5105548', espnId: '5105548', name: 'Zach Davis',          college: 'Memphis', position: 'G', cls: 'SR', jersey: '2',  height: "6'7\"",  seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 7.2,  rebounds: 4.2, assists: 1.1, steals: 1.1, blocks: 0.3 } },
+  { id: 'e5242617', espnId: '5242617', name: 'Julius Thedford',     college: 'Memphis', position: 'G', cls: 'SO', jersey: '15', height: "6'4\"",  seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 8.4,  rebounds: 5.0, assists: 0.7, steals: 1.1, blocks: 0.3 } },
+  { id: 'e5105984', espnId: '5105984', name: 'Sincere Parker',      college: 'Memphis', position: 'G', cls: 'SR', jersey: '23', height: "6'3\"",  seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 11.4, rebounds: 3.7, assists: 1.1, steals: 0.7, blocks: 0.4 } },
+  { id: 'e4711280', espnId: '4711280', name: 'Ashton Hardaway',     college: 'Memphis', position: 'F', cls: 'JR', jersey: '3',  height: "6'8\"",  seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 5.6,  rebounds: 2.5, assists: 1.4, steals: 0.8, blocks: 0.7 } },
+  { id: 'e4685683', espnId: '4685683', name: 'Aaron Bradshaw',      college: 'Memphis', position: 'F', cls: 'JR', jersey: '11', height: "7'1\"",  seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 8.6,  rebounds: 4.2, assists: 0.6, steals: 0.5, blocks: 0.6 } },
+  { id: 'e5105618', espnId: '5105618', name: 'Quante Berry',        college: 'Memphis', position: 'G', cls: 'JR', jersey: '0',  height: "6'4\"",  seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 6.1,  rebounds: 2.5, assists: 1.2, steals: 1.1, blocks: 0.3 } },
+  { id: 'e5106647', espnId: '5106647', name: 'Thierno Sylla',       college: 'Memphis', position: 'C', cls: 'SR', jersey: '31', height: "6'11\"", seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 3.8,  rebounds: 2.5, assists: 0.3, steals: 0.2, blocks: 0.8 } },
+  { id: 'e5313374', espnId: '5313374', name: 'Simon Majok',         college: 'Memphis', position: 'C', cls: 'FR', jersey: '10', height: "7'1\"",  seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 2.9,  rebounds: 2.4, assists: 0.2, steals: 0.4, blocks: 0.6 } },
+  { id: 'e4431995', espnId: '4431995', name: 'Tariq Ingraham',      college: 'Memphis', position: 'F', cls: 'SR', jersey: '19', height: "6'9\"",  seed: 4, region: 'Atlantis', hasStats: true, stats: { points: 3.2,  rebounds: 1.7, assists: 0.2, steals: 0.3, blocks: 0.2 } },
+
   // 5 Mississippi State
-  { id: 'p237', name: 'Josh Hubbard', college: 'Mississippi State', position: 'G', seed: 5, region: 'Atlantis', stats: { points: 19.2, rebounds: 3.6, assists: 3.2, steals: 1.4, blocks: 0.3 } },
-  { id: 'p238', name: 'Tolu Arokodare', college: 'Mississippi State', position: 'C', seed: 5, region: 'Atlantis', stats: { points: 13.4, rebounds: 8.2, assists: 1.3, steals: 0.5, blocks: 1.7 } },
-  { id: 'p239', name: 'RJ Luis Jr', college: 'Mississippi State', position: 'F', seed: 5, region: 'Atlantis', stats: { points: 15.1, rebounds: 7.1, assists: 2.0, steals: 0.8, blocks: 0.9 } },
+  { id: 'e4895740', espnId: '4895740', name: 'Josh Hubbard',            college: 'Mississippi State', position: 'G', cls: 'JR', jersey: '12', height: "6'0\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 22.1, rebounds: 2.5, assists: 3.6, steals: 1.2, blocks: 0.1 } },
+  { id: 'e5105791', espnId: '5105791', name: 'Jayden Epps',             college: 'Mississippi State', position: 'G', cls: 'SR', jersey: '10', height: "6'2\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 13.7, rebounds: 2.5, assists: 2.3, steals: 0.5, blocks: 0.2 } },
+  { id: 'e5105540', espnId: '5105540', name: 'Shawn Jones Jr.',         college: 'Mississippi State', position: 'G', cls: 'SR', jersey: '5',  height: "6'6\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 5.3,  rebounds: 4.0, assists: 1.5, steals: 1.3, blocks: 0.6 } },
+  { id: 'e5240392', espnId: '5240392', name: "Ja'Borri McGhee",         college: 'Mississippi State', position: 'G', cls: 'SR', jersey: '2',  height: "6'2\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 8.4,  rebounds: 2.1, assists: 1.9, steals: 0.6, blocks: 0.0 } },
+  { id: 'e4683134', espnId: '4683134', name: 'Quincy Ballard',          college: 'Mississippi State', position: 'C', cls: 'SR', jersey: '15', height: "7'0\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 6.5,  rebounds: 6.0, assists: 0.6, steals: 0.2, blocks: 1.1 } },
+  { id: 'e5220874', espnId: '5220874', name: 'Jamarion Davis-Fleming',  college: 'Mississippi State', position: 'F', cls: 'FR', jersey: '0',  height: "6'10\"", seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 3.7,  rebounds: 4.8, assists: 0.7, steals: 0.4, blocks: 1.3 } },
+  { id: 'e5311740', espnId: '5311740', name: 'Sergej Macura',           college: 'Mississippi State', position: 'F', cls: 'SO', jersey: '11', height: "6'9\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 5.0,  rebounds: 4.8, assists: 0.8, steals: 0.4, blocks: 0.1 } },
+  { id: 'e5107364', espnId: '5107364', name: 'Achor Achor',             college: 'Mississippi State', position: 'F', cls: 'SR', jersey: '99', height: "6'9\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 6.2,  rebounds: 6.3, assists: 0.4, steals: 0.5, blocks: 0.6 } },
+  { id: 'e5142708', espnId: '5142708', name: 'King Grace',              college: 'Mississippi State', position: 'G', cls: 'FR', jersey: '23', height: "6'5\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 5.1,  rebounds: 1.3, assists: 0.4, steals: 0.4, blocks: 0.3 } },
+  { id: 'e5105487', espnId: '5105487', name: 'Brandon Walker',          college: 'Mississippi State', position: 'F', cls: 'SR', jersey: '4',  height: "6'8\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 4.7,  rebounds: 2.1, assists: 0.5, steals: 0.2, blocks: 0.2 } },
+  { id: 'e4873112', espnId: '4873112', name: 'Dellquan Warren',         college: 'Mississippi State', position: 'G', cls: 'SO', jersey: '1',  height: "6'2\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 1.2,  rebounds: 0.4, assists: 0.9, steals: 0.4, blocks: 0.0 } },
+  { id: 'e4873130', espnId: '4873130', name: 'Amier Ali',               college: 'Mississippi State', position: 'G', cls: 'SO', jersey: '14', height: "6'8\"",  seed: 5, region: 'Atlantis', hasStats: true, stats: { points: 3.2,  rebounds: 1.7, assists: 0.2, steals: 0.2, blocks: 0.0 } },
+
   // 6 Virginia
-  { id: 'p240', name: 'Isaac McKneely', college: 'Virginia', position: 'G', seed: 6, region: 'Atlantis', stats: { points: 15.6, rebounds: 3.5, assists: 2.9, steals: 1.1, blocks: 0.3 } },
-  { id: 'p241', name: 'Blake Buchanan', college: 'Virginia', position: 'C', seed: 6, region: 'Atlantis', stats: { points: 11.8, rebounds: 7.4, assists: 1.6, steals: 0.5, blocks: 1.5 } },
-  { id: 'p242', name: 'Ryan Dunn', college: 'Virginia', position: 'F', seed: 6, region: 'Atlantis', stats: { points: 13.9, rebounds: 5.8, assists: 2.5, steals: 1.4, blocks: 1.2 } },
+  { id: 'e5105464', espnId: '5105464', name: 'Dallin Hall',        college: 'Virginia', position: 'G', cls: 'SR', jersey: '30', height: "6'4\"",  seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 5.9,  rebounds: 3.6, assists: 4.3, steals: 0.9, blocks: 0.1 } },
+  { id: 'e5311846', espnId: '5311846', name: 'Thijs De Ridder',    college: 'Virginia', position: 'F', cls: 'FR', jersey: '28', height: "6'9\"",  seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 15.5, rebounds: 6.2, assists: 1.6, steals: 0.9, blocks: 0.5 } },
+  { id: 'e5176232', espnId: '5176232', name: 'Sam Lewis',          college: 'Virginia', position: 'G', cls: 'JR', jersey: '5',  height: "6'7\"",  seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 10.8, rebounds: 3.6, assists: 1.4, steals: 0.8, blocks: 0.2 } },
+  { id: 'e5150404', espnId: '5150404', name: 'Chance Mallory',     college: 'Virginia', position: 'G', cls: 'FR', jersey: '2',  height: "5'10\"", seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 9.5,  rebounds: 3.7, assists: 3.6, steals: 1.6, blocks: 0.1 } },
+  { id: 'e5311844', espnId: '5311844', name: 'Johann Grunloh',     college: 'Virginia', position: 'C', cls: 'FR', jersey: '17', height: "7'0\"",  seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 7.2,  rebounds: 5.2, assists: 0.7, steals: 0.5, blocks: 2.2 } },
+  { id: 'e4703393', espnId: '4703393', name: 'Devin Tillis',       college: 'Virginia', position: 'F', cls: 'SR', jersey: '11', height: "6'7\"",  seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 4.3,  rebounds: 2.8, assists: 1.4, steals: 0.2, blocks: 0.0 } },
+  { id: 'e5080790', espnId: '5080790', name: 'Elijah Gertrude',    college: 'Virginia', position: 'G', cls: 'SO', jersey: '12', height: "6'4\"",  seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 1.7,  rebounds: 0.8, assists: 0.6, steals: 0.1, blocks: 0.1 } },
+  { id: 'e5239714', espnId: '5239714', name: 'Martin Carrere',     college: 'Virginia', position: 'G', cls: 'FR', jersey: '7',  height: "6'9\"",  seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 0.8,  rebounds: 0.5, assists: 0.3, steals: 0.1, blocks: 0.1 } },
+  { id: 'e4894460', espnId: '4894460', name: 'Carter Lang',        college: 'Virginia', position: 'F', cls: 'SO', jersey: '35', height: "6'9\"",  seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 0.4,  rebounds: 0.5, assists: 0.3, steals: 0.0, blocks: 0.0 } },
+  { id: 'e5174572', espnId: '5174572', name: 'Desmond Roberts',    college: 'Virginia', position: 'G', cls: 'SO', jersey: '13', height: "6'4\"",  seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 0.0,  rebounds: 0.4, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+  { id: 'e5311845', espnId: '5311845', name: 'Owen Odom',          college: 'Virginia', position: 'G', cls: 'FR', jersey: '22', height: "6'1\"",  seed: 6, region: 'Atlantis', hasStats: true,  stats: { points: 0.4,  rebounds: 0.2, assists: 0.0, steals: 0.1, blocks: 0.1 } },
+  { id: 'e5144157', espnId: '5144157', name: 'Silas Barksdale',    college: 'Virginia', position: 'F', cls: 'FR', jersey: '21', height: "6'9\"",  seed: 6, region: 'Atlantis', hasStats: false, stats: { points: 0.0,  rebounds: 0.0, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+
   // 7 Wake Forest
-  { id: 'p243', name: 'Hunter Sallis', college: 'Wake Forest', position: 'G', seed: 7, region: 'Atlantis', stats: { points: 18.0, rebounds: 4.1, assists: 4.8, steals: 1.7, blocks: 0.4 } },
-  { id: 'p244', name: 'Efton Reid III', college: 'Wake Forest', position: 'C', seed: 7, region: 'Atlantis', stats: { points: 12.3, rebounds: 8.5, assists: 1.4, steals: 0.5, blocks: 2.1 } },
-  { id: 'p245', name: 'Boopie Miller', college: 'Wake Forest', position: 'G', seed: 7, region: 'Atlantis', stats: { points: 14.7, rebounds: 3.2, assists: 4.2, steals: 1.3, blocks: 0.2 } },
+  { id: 'e5142609', espnId: '5142609', name: 'Juke Harris',          college: 'Wake Forest', position: 'G', cls: 'SO', jersey: '2',  height: "6'7\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 21.3, rebounds: 6.5, assists: 1.8, steals: 1.3, blocks: 0.2 } },
+  { id: 'e4894452', espnId: '4894452', name: 'Myles Colvin',         college: 'Wake Forest', position: 'G', cls: 'JR', jersey: '6',  height: "6'5\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 11.6, rebounds: 4.5, assists: 1.3, steals: 1.2, blocks: 0.3 } },
+  { id: 'e5108081', espnId: '5108081', name: 'Nate Calmese',         college: 'Wake Forest', position: 'G', cls: 'SR', jersey: '1',  height: "6'2\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 10.5, rebounds: 1.9, assists: 4.5, steals: 1.3, blocks: 0.1 } },
+  { id: 'e5176402', espnId: '5176402', name: 'Cooper Schwieger',     college: 'Wake Forest', position: 'F', cls: 'JR', jersey: '13', height: "6'10\"", seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 5.2,  rebounds: 2.5, assists: 0.9, steals: 0.5, blocks: 0.6 } },
+  { id: 'e4905250', espnId: '4905250', name: 'Mekhi Mason',          college: 'Wake Forest', position: 'G', cls: 'SR', jersey: '8',  height: "6'5\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 7.7,  rebounds: 2.7, assists: 1.3, steals: 0.9, blocks: 0.3 } },
+  { id: 'e5175037', espnId: '5175037', name: 'Omaha Biliew',         college: 'Wake Forest', position: 'F', cls: 'JR', jersey: '0',  height: "6'8\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 5.9,  rebounds: 2.3, assists: 0.5, steals: 0.6, blocks: 0.3 } },
+  { id: 'e5241913', espnId: '5241913', name: 'Sebastian Akins',      college: 'Wake Forest', position: 'G', cls: 'SO', jersey: '10', height: "6'2\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 5.6,  rebounds: 1.5, assists: 1.9, steals: 0.8, blocks: 0.1 } },
+  { id: 'e5174579', espnId: '5174579', name: 'Marqus Marion',        college: 'Wake Forest', position: 'F', cls: 'SO', jersey: '11', height: "6'9\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 1.5,  rebounds: 2.3, assists: 0.7, steals: 0.5, blocks: 0.4 } },
+  { id: 'e5237435', espnId: '5237435', name: 'Isaac Carr',           college: 'Wake Forest', position: 'G', cls: 'FR', jersey: '7',  height: "6'4\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 2.3,  rebounds: 1.5, assists: 1.3, steals: 0.3, blocks: 0.0 } },
+  { id: 'e5196911', espnId: '5196911', name: 'Jaylen Cross',         college: 'Wake Forest', position: 'F', cls: 'FR', jersey: '23', height: "6'4\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 1.8,  rebounds: 1.0, assists: 0.4, steals: 0.2, blocks: 0.0 } },
+  { id: 'e5174580', espnId: '5174580', name: 'Vincent Ricchiuti',    college: 'Wake Forest', position: 'F', cls: 'JR', jersey: '9',  height: "6'6\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 2.0,  rebounds: 0.0, assists: 0.0, steals: 0.3, blocks: 0.0 } },
+  { id: 'e5174581', espnId: '5174581', name: 'Will Underwood',       college: 'Wake Forest', position: 'G', cls: 'JR', jersey: '4',  height: "6'3\"",  seed: 7, region: 'Atlantis', hasStats: true, stats: { points: 0.0,  rebounds: 0.7, assists: 0.0, steals: 0.3, blocks: 0.0 } },
+
   // 8 Xavier
-  { id: 'p246', name: 'Dayvion McKnight', college: 'Xavier', position: 'G', seed: 8, region: 'Atlantis', stats: { points: 16.4, rebounds: 5.1, assists: 5.8, steals: 2.0, blocks: 0.2 } },
-  { id: 'p247', name: 'Sean Stewart', college: 'Xavier', position: 'F', seed: 8, region: 'Atlantis', stats: { points: 13.2, rebounds: 8.4, assists: 1.5, steals: 0.8, blocks: 1.6 } },
-  { id: 'p248', name: 'Quincy Olivari', college: 'Xavier', position: 'G', seed: 8, region: 'Atlantis', stats: { points: 17.9, rebounds: 4.2, assists: 3.6, steals: 1.4, blocks: 0.3 } }
+  { id: 'e5105454', espnId: '5105454', name: 'Malik Messina-Moore',   college: 'Xavier', position: 'G', cls: 'SR', jersey: '1',  height: "6'5\"",  seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 10.9, rebounds: 3.0, assists: 3.8, steals: 1.1, blocks: 0.1 } },
+  { id: 'e5105569', espnId: '5105569', name: 'Filip Borovicanin',     college: 'Xavier', position: 'F', cls: 'SR', jersey: '4',  height: "6'9\"",  seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 10.8, rebounds: 7.4, assists: 4.2, steals: 1.2, blocks: 0.5 } },
+  { id: 'e5101673', espnId: '5101673', name: 'Jovan Milicevic',       college: 'Xavier', position: 'F', cls: 'SO', jersey: '24', height: "6'10\"", seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 12.4, rebounds: 3.9, assists: 1.4, steals: 0.7, blocks: 0.6 } },
+  { id: 'e5152658', espnId: '5152658', name: "Pape N'Diaye",          college: 'Xavier', position: 'F', cls: 'SO', jersey: '22', height: "7'0\"",  seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 2.0,  rebounds: 5.0, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+  { id: 'e5107148', espnId: '5107148', name: 'Roddie Anderson III',   college: 'Xavier', position: 'G', cls: 'SR', jersey: '0',  height: "6'3\"",  seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 10.9, rebounds: 3.3, assists: 2.2, steals: 1.3, blocks: 0.2 } },
+  { id: 'e5241430', espnId: '5241430', name: 'All Wright',            college: 'Xavier', position: 'G', cls: 'SO', jersey: '3',  height: "6'3\"",  seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 7.5,  rebounds: 1.6, assists: 2.0, steals: 0.5, blocks: 0.0 } },
+  { id: 'e4897261', espnId: '4897261', name: 'Isaiah Walker',         college: 'Xavier', position: 'G', cls: 'SR', jersey: '7',  height: "6'5\"",  seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 4.7,  rebounds: 2.7, assists: 0.7, steals: 0.5, blocks: 0.1 } },
+  { id: 'e5143921', espnId: '5143921', name: 'Anthony Robinson',      college: 'Xavier', position: 'F', cls: 'SO', jersey: '21', height: "6'10\"", seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 2.3,  rebounds: 2.4, assists: 0.3, steals: 0.3, blocks: 0.5 } },
+  { id: 'e5175711', espnId: '5175711', name: 'Mier Panoam',           college: 'Xavier', position: 'G', cls: 'JR', jersey: '9',  height: "6'2\"",  seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 0.9,  rebounds: 0.9, assists: 0.7, steals: 0.0, blocks: 0.1 } },
+  { id: 'e5105608', espnId: '5105608', name: 'Michael Wolf',          college: 'Xavier', position: 'G', cls: 'SR', jersey: '25', height: "6'1\"",  seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 0.0,  rebounds: 0.3, assists: 0.3, steals: 0.0, blocks: 0.0 } },
+  { id: 'e5240541', espnId: '5240541', name: 'Henry Thole',           college: 'Xavier', position: 'F', cls: 'SO', jersey: '20', height: "6'7\"",  seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 0.6,  rebounds: 0.0, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+  { id: 'e5105609', espnId: '5105609', name: 'Ian Sabourin',          college: 'Xavier', position: 'F', cls: 'SR', jersey: '31', height: "6'4\"",  seed: 8, region: 'Atlantis', hasStats: true, stats: { points: 1.2,  rebounds: 0.2, assists: 0.0, steals: 0.0, blocks: 0.0 } },
+
+  // ══ ESPN THANKSGIVING SHOWCASE — Nov 23-25, 2026 ═════════
+  //  seededTeams is empty in app.js for this event, so seeds here
+  //  follow the order of the `teams` array. Update both together.
+
+  // 1 Akron
+  { id: 'e5108059', espnId: '5108059', name: 'Tavari Johnson',          college: 'Akron', position: 'G', cls: 'SR', jersey: '5',  height: "6'0\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 20.1, rebounds: 3.0, assists: 5.0, steals: 1.3, blocks: 0.3 } },
+  { id: 'e5105847', espnId: '5105847', name: 'Evan Mahaffey',           college: 'Akron', position: 'G', cls: 'SR', jersey: '12', height: "6'6\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 10.2, rebounds: 5.6, assists: 3.5, steals: 1.7, blocks: 0.8 } },
+  { id: 'e5106652', espnId: '5106652', name: 'Shammah Scott',           college: 'Akron', position: 'G', cls: 'SR', jersey: '1',  height: "6'2\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 12.7, rebounds: 2.6, assists: 2.9, steals: 0.3, blocks: 0.1 } },
+  { id: 'e5241471', espnId: '5241471', name: 'Eric Mahaffey',           college: 'Akron', position: 'G', cls: 'FR', jersey: '4',  height: "6'6\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 7.8,  rebounds: 5.7, assists: 1.6, steals: 0.7, blocks: 0.5 } },
+  { id: 'e5241470', espnId: '5241470', name: 'Sharron Young',           college: 'Akron', position: 'G', cls: 'SO', jersey: '3',  height: "6'0\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 7.3,  rebounds: 2.7, assists: 1.6, steals: 1.2, blocks: 0.1 } },
+  { id: 'e5105840', espnId: '5105840', name: 'Bowen Hardman',           college: 'Akron', position: 'G', cls: 'SR', jersey: '15', height: "6'3\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 7.9,  rebounds: 1.6, assists: 0.2, steals: 0.2, blocks: 0.0 } },
+  { id: 'e5176138', espnId: '5176138', name: 'Zach Halligan',           college: 'Akron', position: 'G', cls: 'SO', jersey: '21', height: "6'5\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 2.7,  rebounds: 2.2, assists: 0.7, steals: 0.5, blocks: 0.0 } },
+  { id: 'e5176139', espnId: '5176139', name: 'Marvin Musiime-Kamali',   college: 'Akron', position: 'G', cls: 'SO', jersey: '23', height: "6'6\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 2.1,  rebounds: 2.0, assists: 0.5, steals: 0.5, blocks: 0.2 } },
+  { id: 'e5314282', espnId: '5314282', name: 'Ognjen Stankovic',        college: 'Akron', position: 'G', cls: 'FR', jersey: '16', height: "6'8\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 2.4,  rebounds: 1.8, assists: 0.5, steals: 0.4, blocks: 0.1 } },
+  { id: 'e5105882', espnId: '5105882', name: 'Chabi Barre',             college: 'Akron', position: 'F', cls: 'JR', jersey: '8',  height: "6'10\"", seed: 1, region: 'Showcase', hasStats: true, stats: { points: 3.3,  rebounds: 2.1, assists: 0.1, steals: 0.1, blocks: 0.6 } },
+  { id: 'e5241469', espnId: '5241469', name: 'Rich Brisco',             college: 'Akron', position: 'F', cls: 'FR', jersey: '2',  height: "6'8\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 1.1,  rebounds: 0.8, assists: 0.0, steals: 0.2, blocks: 0.2 } },
+  { id: 'e5241472', espnId: '5241472', name: 'Conner Groce',            college: 'Akron', position: 'G', cls: 'FR', jersey: '11', height: "6'0\"",  seed: 1, region: 'Showcase', hasStats: true, stats: { points: 0.9,  rebounds: 0.1, assists: 0.1, steals: 0.0, blocks: 0.0 } },
+
+  // 2 Wright State
+  { id: 'e5177215', espnId: '5177215', name: 'Solomon Callaghan',   college: 'Wright State', position: 'G', cls: 'SO', jersey: '13', height: "6'2\"",  seed: 2, region: 'Showcase', hasStats: true, stats: { points: 9.9,  rebounds: 1.9, assists: 1.1, steals: 0.5, blocks: 0.0 } },
+  { id: 'e5243109', espnId: '5243109', name: 'Dominic Pangonis',    college: 'Wright State', position: 'G', cls: 'SO', jersey: '3',  height: "6'7\"",  seed: 2, region: 'Showcase', hasStats: true, stats: { points: 9.0,  rebounds: 2.6, assists: 1.2, steals: 0.8, blocks: 0.2 } },
+  { id: 'e5314630', espnId: '5314630', name: 'Michael Cooper',      college: 'Wright State', position: 'G', cls: 'FR', jersey: '55', height: "6'3\"",  seed: 2, region: 'Showcase', hasStats: true, hs: false, stats: { points: 13.4, rebounds: 2.8, assists: 2.2, steals: 0.6, blocks: 0.2 } },
+  { id: 'e5241483', espnId: '5241483', name: 'TJ Burch',            college: 'Wright State', position: 'G', cls: 'SO', jersey: '22', height: "6'1\"",  seed: 2, region: 'Showcase', hasStats: true, stats: { points: 12.3, rebounds: 2.4, assists: 3.5, steals: 2.5, blocks: 0.3 } },
+  { id: 'e4707481', espnId: '4707481', name: 'Michael Imariagbe',   college: 'Wright State', position: 'F', cls: 'SR', jersey: '33', height: "6'7\"",  seed: 2, region: 'Showcase', hasStats: true, stats: { points: 11.8, rebounds: 7.0, assists: 1.8, steals: 0.5, blocks: 0.8 } },
+  { id: 'e5314627', espnId: '5314627', name: 'Kellen Pickett',      college: 'Wright State', position: 'F', cls: 'FR', jersey: '4',  height: "6'9\"",  seed: 2, region: 'Showcase', hasStats: true, hs: false, stats: { points: 8.7,  rebounds: 5.4, assists: 1.1, steals: 0.4, blocks: 1.4 } },
+  { id: 'e5106806', espnId: '5106806', name: 'Logan Woods',         college: 'Wright State', position: 'G', cls: 'JR', jersey: '21', height: "6'5\"",  seed: 2, region: 'Showcase', hasStats: true, stats: { points: 5.4,  rebounds: 2.0, assists: 1.6, steals: 0.5, blocks: 0.1 } },
+  { id: 'e5241700', espnId: '5241700', name: 'Andrea Holden',       college: 'Wright State', position: 'F', cls: 'SO', jersey: '20', height: "6'6\"",  seed: 2, region: 'Showcase', hasStats: true, stats: { points: 6.3,  rebounds: 4.0, assists: 0.4, steals: 0.5, blocks: 1.2 } },
+  { id: 'e4898006', espnId: '4898006', name: 'Sam Alamutu',         college: 'Wright State', position: 'G', cls: 'SR', jersey: '2',  height: "6'5\"",  seed: 2, region: 'Showcase', hasStats: true, stats: { points: 2.9,  rebounds: 2.4, assists: 1.1, steals: 0.8, blocks: 0.2 } },
+  { id: 'e5106602', espnId: '5106602', name: 'Bryan Etumnu',        college: 'Wright State', position: 'F', cls: 'SR', jersey: '1',  height: "6'7\"",  seed: 2, region: 'Showcase', hasStats: true, stats: { points: 3.4,  rebounds: 2.4, assists: 0.5, steals: 0.3, blocks: 0.2 } },
+  { id: 'e5241701', espnId: '5241701', name: 'Ayden Davis',         college: 'Wright State', position: 'C', cls: 'FR', jersey: '51', height: "6'10\"", seed: 2, region: 'Showcase', hasStats: true, stats: { points: 5.0,  rebounds: 1.3, assists: 0.0, steals: 0.7, blocks: 0.3 } },
+  { id: 'e5241699', espnId: '5241699', name: 'Alex Bruskotter',     college: 'Wright State', position: 'G', cls: 'FR', jersey: '5',  height: "6'8\"",  seed: 2, region: 'Showcase', hasStats: true, stats: { points: 4.5,  rebounds: 1.5, assists: 0.2, steals: 0.4, blocks: 0.0 } },
+
+  // 3 App State
+  { id: 'e4700841', espnId: '4700841', name: 'Kasen Jennings',       college: 'App State', position: 'G', cls: 'SR', jersey: '13', height: "6'5\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 15.2, rebounds: 4.3, assists: 2.1, steals: 1.0, blocks: 0.2 } },
+  { id: 'e5108925', espnId: '5108925', name: 'Alonzo Dodd',          college: 'App State', position: 'G', cls: 'SR', jersey: '2',  height: "6'1\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 13.8, rebounds: 5.3, assists: 4.2, steals: 0.8, blocks: 0.3 } },
+  { id: 'e5176754', espnId: '5176754', name: 'Luke Wilson',          college: 'App State', position: 'C', cls: 'SO', jersey: '3',  height: "6'9\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 10.7, rebounds: 8.3, assists: 0.6, steals: 0.4, blocks: 1.8 } },
+  { id: 'e5176798', espnId: '5176798', name: 'Eren Banks',           college: 'App State', position: 'G', cls: 'JR', jersey: '4',  height: "6'3\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 6.6,  rebounds: 2.6, assists: 1.8, steals: 0.6, blocks: 0.1 } },
+  { id: 'e5312355', espnId: '5312355', name: 'Jalen Tot',            college: 'App State', position: 'G', cls: 'SR', jersey: '9',  height: "6'1\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 9.6,  rebounds: 1.9, assists: 1.1, steals: 0.7, blocks: 0.1 } },
+  { id: 'e5239587', espnId: '5239587', name: 'Michael Marcus Jr.',   college: 'App State', position: 'F', cls: 'SO', jersey: '44', height: "6'9\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 7.8,  rebounds: 6.0, assists: 0.4, steals: 0.6, blocks: 0.5 } },
+  { id: 'e5239579', espnId: '5239579', name: 'Jason Clarke Jr.',     college: 'App State', position: 'G', cls: 'SO', jersey: '5',  height: "6'0\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 3.4,  rebounds: 1.6, assists: 1.4, steals: 0.4, blocks: 0.0 } },
+  { id: 'e5177526', espnId: '5177526', name: 'Chad Moodie',          college: 'App State', position: 'F', cls: 'JR', jersey: '23', height: "6'8\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 2.7,  rebounds: 2.7, assists: 0.1, steals: 0.2, blocks: 0.6 } },
+  { id: 'e5239586', espnId: '5239586', name: 'Andrin Njock',         college: 'App State', position: 'F', cls: 'FR', jersey: '21', height: "6'6\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 3.1,  rebounds: 2.9, assists: 0.4, steals: 0.3, blocks: 0.1 } },
+  { id: 'e5176759', espnId: '5176759', name: 'Luke Ledford',         college: 'App State', position: 'G', cls: 'JR', jersey: '32', height: "6'3\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 5.5,  rebounds: 1.5, assists: 1.0, steals: 0.5, blocks: 0.0 } },
+  { id: 'e5312356', espnId: '5312356', name: 'Grant Clayton',        college: 'App State', position: 'F', cls: 'FR', jersey: '33', height: "6'7\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 4.0,  rebounds: 6.0, assists: 0.5, steals: 0.0, blocks: 1.0 } },
+  { id: 'e5312352', espnId: '5312352', name: 'Jacari Brim',          college: 'App State', position: 'G', cls: 'FR', jersey: '6',  height: "6'2\"",  seed: 3, region: 'Showcase', hasStats: true, stats: { points: 1.2,  rebounds: 0.7, assists: 0.7, steals: 0.1, blocks: 0.0 } },
+
+  // 4 Belmont
+  { id: 'e4683944', espnId: '4683944', name: 'Tyler Lundblade',      college: 'Belmont', position: 'G', cls: 'SR', jersey: '8',  height: "6'5\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 15.6, rebounds: 2.7, assists: 1.8, steals: 0.3, blocks: 0.1 } },
+  { id: 'e5176310', espnId: '5176310', name: 'Sam Orme',             college: 'Belmont', position: 'F', cls: 'SO', jersey: '14', height: "6'9\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 12.7, rebounds: 5.0, assists: 1.8, steals: 0.9, blocks: 0.7 } },
+  { id: 'e5175371', espnId: '5175371', name: 'Nic McClain',          college: 'Belmont', position: 'G', cls: 'SR', jersey: '1',  height: "6'3\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 10.4, rebounds: 4.3, assists: 6.3, steals: 1.5, blocks: 0.1 } },
+  { id: 'e5241334', espnId: '5241334', name: 'Jabez Jenkins',        college: 'Belmont', position: 'G', cls: 'FR', jersey: '10', height: "6'4\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 9.0,  rebounds: 4.5, assists: 1.3, steals: 1.2, blocks: 0.4 } },
+  { id: 'e5176309', espnId: '5176309', name: 'Drew Scharnowski',     college: 'Belmont', position: 'F', cls: 'SO', jersey: '11', height: "6'9\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 10.7, rebounds: 6.0, assists: 2.6, steals: 0.8, blocks: 1.3 } },
+  { id: 'e5176311', espnId: '5176311', name: 'Brigham Rogers',       college: 'Belmont', position: 'F', cls: 'JR', jersey: '12', height: "6'9\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 7.1,  rebounds: 3.9, assists: 1.7, steals: 0.4, blocks: 0.6 } },
+  { id: 'e5255092', espnId: '5255092', name: 'Jack Smiley',          college: 'Belmont', position: 'G', cls: 'FR', jersey: '2',  height: "6'2\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 8.5,  rebounds: 1.9, assists: 2.6, steals: 0.5, blocks: 0.0 } },
+  { id: 'e4683784', espnId: '4683784', name: 'Isaiah West',          college: 'Belmont', position: 'G', cls: 'JR', jersey: '3',  height: "6'2\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 2.9,  rebounds: 2.6, assists: 1.8, steals: 0.9, blocks: 0.2 } },
+  { id: 'e5241333', espnId: '5241333', name: 'Eoin Dillon',          college: 'Belmont', position: 'F', cls: 'FR', jersey: '5',  height: "6'9\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 7.6,  rebounds: 2.5, assists: 1.5, steals: 0.4, blocks: 0.3 } },
+  { id: 'e4710359', espnId: '4710359', name: 'Aidan Noyes',          college: 'Belmont', position: 'F', cls: 'SR', jersey: '4',  height: "6'7\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 5.9,  rebounds: 1.9, assists: 0.3, steals: 0.1, blocks: 0.1 } },
+  { id: 'e5176308', espnId: '5176308', name: 'Win Miller',           college: 'Belmont', position: 'G', cls: 'JR', jersey: '0',  height: "6'3\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 2.9,  rebounds: 0.7, assists: 0.6, steals: 0.1, blocks: 0.0 } },
+  { id: 'e4873154', espnId: '4873154', name: 'Cooper Haynes',        college: 'Belmont', position: 'G', cls: 'FR', jersey: '13', height: "6'2\"",  seed: 4, region: 'Showcase', hasStats: true, stats: { points: 1.7,  rebounds: 0.5, assists: 0.4, steals: 0.1, blocks: 0.0 } },
+
 ];
+
+// ── Headshot URL ──────────────────────────────────────────
+//  Every ESPN headshot lives at a predictable path, so storing the
+//  full URL on 240 players would add ~23KB of pure repetition.
+//  `hs: false` marks the handful ESPN has no photo for.
+window.headshotURL = function (player) {
+  if (!player || !player.espnId || player.hs === false) return null;
+  return 'https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/' + player.espnId + '.png';
+};

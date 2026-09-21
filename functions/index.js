@@ -376,6 +376,362 @@ exports.syncNow = onRequest(
   }
 );
 
+// ═══════════════════════════════════════════════════════════════
+//  ESPN  (replaces SportsDataIO as of 2026-09-21)
+//
+//  The SportsDataIO trial was deactivated and every endpoint began
+//  returning 401. ESPN's public endpoints need no key, carry current
+//  2026-27 rosters, real G/F/C positions, class year, headshots and
+//  injuries, plus scoreboards and box scores — strictly more than the
+//  paid feed provided.
+//
+//  They are undocumented and unsupported, so two rules apply:
+//    1. Cache anything we can live without for a day (rosters) in
+//       Firestore, so an ESPN outage cannot empty the draft board.
+//    2. Never hammer. This is someone else's free service.
+// ═══════════════════════════════════════════════════════════════
+const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball';
+
+// Schools across every selectable tournament, exactly as they appear
+// in src/app.js. ESPN's "location" field is what we match against.
+const TOURNAMENT_SCHOOLS = [
+  // Maui Invitational
+  'Arizona', 'BYU', 'Clemson', 'Colorado State', 'Ole Miss', 'Providence', 'VCU', 'Washington',
+  // Battle 4 Atlantis
+  'Penn State', 'Marquette', 'Memphis', 'Mississippi State', 'Texas A&M', 'Virginia', 'Wake Forest', 'Xavier',
+  // ESPN Thanksgiving Showcase
+  'Akron', 'Wright State', 'App State', 'Belmont',
+];
+
+// Our name -> the string ESPN uses, where they disagree.
+const ESPN_NAME_MAP = {
+  'ole miss': 'Ole Miss',
+  'app state': 'Appalachian State',
+  'byu': 'BYU',
+  'vcu': 'VCU',
+  'texas a&m': 'Texas A&M',
+  'uconn': 'UConn',
+};
+
+function normName(s) {
+  return String(s || '').toLowerCase()
+    .replace(/&amp;/g, '&').replace(/[.']/g, '')
+    .replace(/\s+/g, ' ').trim();
+}
+
+// ── ESPN probe ────────────────────────────────────────────────
+//  Returns COMPACT summaries only. The raw payloads are enormous and
+//  the point here is to learn field names, not to move data.
+//    GET .../espnProbe?date=20260320
+exports.espnProbe = onRequest(
+  { timeoutSeconds: 120, memory: '512MiB' },
+  async (req, res) => {
+    const date = req.query.date || '20260320';  // a date with real games
+    const out = {};
+
+    try {
+      // 1. Team directory -> our school names mapped to ESPN ids
+      const tRes = await fetch(`${ESPN}/teams?limit=500`);
+      out.teamsStatus = tRes.status;
+      const tJson = await tRes.json();
+      const list = ((((tJson.sports || [])[0] || {}).leagues || [])[0] || {}).teams || [];
+      out.totalTeams = list.length;
+
+      const byName = {};
+      list.forEach(function (w) {
+        const t = w.team || {};
+        byName[normName(t.location)] = { id: t.id, abbr: t.abbreviation, display: t.displayName };
+        byName[normName(t.displayName)] = { id: t.id, abbr: t.abbreviation, display: t.displayName };
+        if (t.shortDisplayName) byName[normName(t.shortDisplayName)] = { id: t.id, abbr: t.abbreviation, display: t.displayName };
+      });
+
+      const resolved = {};
+      const unresolved = [];
+      TOURNAMENT_SCHOOLS.forEach(function (school) {
+        const n = normName(school);
+        const alias = ESPN_NAME_MAP[n] ? normName(ESPN_NAME_MAP[n]) : null;
+        const hit = byName[n] || (alias && byName[alias]);
+        if (hit) resolved[school] = hit;
+        else unresolved.push(school);
+      });
+      out.resolvedSchools = resolved;
+      out.unresolvedSchools = unresolved;
+
+      // 2. One roster, compacted
+      const sampleId = (resolved['Arizona'] || {}).id || '12';
+      const rRes = await fetch(`${ESPN}/teams/${sampleId}/roster`);
+      out.rosterStatus = rRes.status;
+      const rJson = await rRes.json();
+      const ath = rJson.athletes || [];
+      out.rosterCount = ath.length;
+      out.rosterSample = ath.slice(0, 3).map(function (a) {
+        return {
+          id: a.id,
+          name: a.fullName,
+          pos: ((a.position || {}).abbreviation) || null,
+          cls: ((a.experience || {}).abbreviation) || null,
+          jersey: a.jersey,
+          height: a.displayHeight,
+          headshot: !!(a.headshot && a.headshot.href),
+          injuries: (a.injuries || []).length,
+        };
+      });
+      out.rosterKeys = ath.length ? Object.keys(ath[0]) : [];
+
+      // 3. Scoreboard for a date, compacted
+      const sRes = await fetch(`${ESPN}/scoreboard?dates=${date}&limit=400`);
+      out.scoreboardStatus = sRes.status;
+      const sJson = await sRes.json();
+      const events = sJson.events || [];
+      out.gamesOnDate = events.length;
+      if (events.length) {
+        const e = events[0];
+        const comp = (e.competitions || [])[0] || {};
+        out.gameSample = {
+          eventId: e.id,
+          name: e.shortName,
+          date: e.date,
+          statusState: ((comp.status || {}).type || {}).state,     // pre | in | post
+          completed: ((comp.status || {}).type || {}).completed,
+          period: (comp.status || {}).period,
+          clock: (comp.status || {}).displayClock,
+          competitors: (comp.competitors || []).map(function (c) {
+            return {
+              teamId: (c.team || {}).id,
+              school: (c.team || {}).location,
+              homeAway: c.homeAway,
+              score: c.score,
+              winner: c.winner,
+            };
+          }),
+        };
+        out.eventKeys = Object.keys(e);
+        out.competitionKeys = Object.keys(comp);
+
+        // 4. Box score for that game, compacted
+        const bRes = await fetch(`${ESPN}/summary?event=${e.id}`);
+        out.summaryStatus = bRes.status;
+        const bJson = await bRes.json();
+        out.summaryTopKeys = Object.keys(bJson);
+
+        const bs = bJson.boxscore || {};
+        out.boxscoreKeys = Object.keys(bs);
+        const players = bs.players || [];
+        out.boxTeams = players.length;
+        if (players.length) {
+          const teamBlock = players[0];
+          const statsBlock = (teamBlock.statistics || [])[0] || {};
+          out.statLabels = statsBlock.labels || statsBlock.names || null;
+          out.statKeys = statsBlock.keys || null;
+          const rows = statsBlock.athletes || [];
+          out.boxPlayerCount = rows.length;
+          out.boxPlayerSample = rows.slice(0, 2).map(function (r) {
+            return {
+              id: ((r.athlete || {}).id),
+              name: ((r.athlete || {}).displayName),
+              didNotPlay: r.didNotPlay,
+              stats: r.stats,
+            };
+          });
+        }
+      }
+      // 5. Where do per-player SEASON stats live? The roster endpoint
+      //    carries bio only, so the draft board has nothing to rank on.
+      //    Try the two plausible sources and report which works.
+      const athleteId = req.query.athlete || '5174954';   // Motiejus Krivas
+      const season = req.query.season || '2026';
+
+      const CORE = 'https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball';
+      const candidates = [
+        ['core athlete season stats', `${CORE}/seasons/${season}/types/2/athletes/${athleteId}/statistics`],
+        ['site athlete overview',     `${ESPN}/athletes/${athleteId}/stats`],
+        ['team season statistics',    `${ESPN}/teams/${sampleId}/statistics`],
+      ];
+
+      out.statSources = {};
+      for (const [label, url] of candidates) {
+        try {
+          const r = await fetch(url);
+          const entry = { status: r.status, ok: r.ok };
+          if (r.ok) {
+            const j = await r.json();
+            entry.topKeys = Object.keys(j).slice(0, 12);
+            // The core endpoint nests as splits.categories[].stats[]
+            const cats = ((j.splits || {}).categories) || j.categories || null;
+            if (Array.isArray(cats)) {
+              entry.categories = cats.map(c => c.name);
+              const gen = cats.find(c => /general|offensive|defensive/i.test(c.name || '')) || cats[0];
+              entry.sampleStats = (gen.stats || []).slice(0, 14).map(s => ({
+                name: s.name, abbr: s.abbreviation, value: s.value, display: s.displayValue,
+              }));
+            }
+          }
+          out.statSources[label] = entry;
+        } catch (e) {
+          out.statSources[label] = { error: e.message };
+        }
+      }
+
+    } catch (e) {
+      out.error = e.message;
+    }
+
+    res.status(200).json(out);
+  }
+);
+
+// ── ESPN roster generator ─────────────────────────────────────
+//  Produces the data behind data/players.js.
+//
+//    GET .../espnRosters?schools=Arizona|BYU&top=12&season=2026
+//
+//  Two calls per school (team directory is cached) plus one per player
+//  for season averages. Run rarely, not on a schedule.
+//
+//  Season note: 2026 is the 2025-26 season. The 2026-27 season has not
+//  started, so these are LAST season's averages. Freshmen and transfers
+//  will legitimately have none — they are returned with zeros and
+//  hasStats:false so the UI can badge rather than silently rank them last.
+const ESPN_CORE = 'https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball';
+
+const WANTED_STATS = {
+  avgPoints: 'points', avgRebounds: 'rebounds', avgAssists: 'assists',
+  avgSteals: 'steals', avgBlocks: 'blocks',
+  avgMinutes: 'minutes', gamesPlayed: 'games',
+};
+
+async function espnTeamDirectory() {
+  const doc = db.collection('meta').doc('espnTeams');
+  try {
+    const snap = await doc.get();
+    if (snap.exists) {
+      const d = snap.data();
+      if (d && d.fetchedAt && (Date.now() - d.fetchedAt) < 7 * 24 * 60 * 60 * 1000 && d.byName) {
+        return d.byName;
+      }
+    }
+  } catch (e) { /* fall through to a fresh fetch */ }
+
+  const res = await fetch(`${ESPN}/teams?limit=500`);
+  if (!res.ok) throw new Error(`ESPN teams HTTP ${res.status}`);
+  const json = await res.json();
+  const list = ((((json.sports || [])[0] || {}).leagues || [])[0] || {}).teams || [];
+
+  const byName = {};
+  list.forEach(function (w) {
+    const t = w.team || {};
+    const rec = { id: t.id, abbr: t.abbreviation, display: t.displayName, color: t.color };
+    [t.location, t.displayName, t.shortDisplayName, t.name].forEach(function (n) {
+      const k = normName(n);
+      if (k && !byName[k]) byName[k] = rec;
+    });
+  });
+
+  try { await doc.set({ byName: byName, fetchedAt: Date.now(), count: list.length }); } catch (e) {}
+  return byName;
+}
+
+// Pull per-game averages for one athlete. Returns zeros when the
+// player has no prior season, which is the freshman case.
+async function espnPlayerAverages(athleteId, season) {
+  const out = { points: 0, rebounds: 0, assists: 0, steals: 0, blocks: 0, minutes: 0, games: 0, hasStats: false };
+  try {
+    const res = await fetch(`${ESPN_CORE}/seasons/${season}/types/2/athletes/${athleteId}/statistics`);
+    if (!res.ok) return out;
+    const json = await res.json();
+    const cats = ((json.splits || {}).categories) || [];
+    cats.forEach(function (c) {
+      (c.stats || []).forEach(function (s) {
+        const key = WANTED_STATS[s.name];
+        if (key && typeof s.value === 'number') {
+          out[key] = Math.round(s.value * 10) / 10;
+          out.hasStats = true;
+        }
+      });
+    });
+    if (out.games) out.games = Math.round(out.games);
+  } catch (e) { /* leave zeros */ }
+  return out;
+}
+
+exports.espnRosters = onRequest(
+  { timeoutSeconds: 540, memory: '512MiB' },
+  async (req, res) => {
+    try {
+      const season = String(req.query.season || '2026');
+      const top = req.query.top != null ? parseInt(req.query.top, 10) : 12;
+      const wanted = String(req.query.schools || '')
+        .split('|').map(s => s.trim()).filter(Boolean);
+      if (!wanted.length) return res.status(400).json({ error: 'pass ?schools=A|B|C' });
+
+      const dir = await espnTeamDirectory();
+      const out = {};
+      const missing = [];
+
+      for (const school of wanted) {
+        const n = normName(school);
+        const alias = ESPN_NAME_MAP[n] ? normName(ESPN_NAME_MAP[n]) : null;
+        const team = dir[n] || (alias && dir[alias]);
+        if (!team) { missing.push(school); continue; }
+
+        const rRes = await fetch(`${ESPN}/teams/${team.id}/roster`);
+        if (!rRes.ok) { missing.push(school + ' (roster HTTP ' + rRes.status + ')'); continue; }
+        const rJson = await rRes.json();
+        const athletes = rJson.athletes || [];
+
+        // Season averages, a few at a time. Sequential would take
+        // minutes for 20 schools; unbounded parallelism is rude to a
+        // free service. Five at a time is the compromise.
+        const players = [];
+        for (let i = 0; i < athletes.length; i += 5) {
+          const slice = athletes.slice(i, i + 5);
+          const stats = await Promise.all(slice.map(a => espnPlayerAverages(a.id, season)));
+          slice.forEach(function (a, j) {
+            const s = stats[j];
+            players.push({
+              espnId: a.id,
+              name: a.fullName || a.displayName,
+              pos: ((a.position || {}).abbreviation) || '',
+              cls: ((a.experience || {}).abbreviation) || '',
+              jersey: a.jersey || '',
+              height: a.displayHeight || '',
+              headshot: (a.headshot && a.headshot.href) || '',
+              injured: (a.injuries || []).length > 0,
+              games: s.games,
+              minutes: s.minutes,
+              hasStats: s.hasStats,
+              stats: {
+                points: s.points, rebounds: s.rebounds, assists: s.assists,
+                steals: s.steals, blocks: s.blocks,
+              },
+            });
+          });
+        }
+
+        // Minutes is the honest proxy for "does this player matter".
+        // Players with no prior season sort last but are still returned,
+        // so the caller can decide whether to badge or drop them.
+        players.sort(function (a, b) {
+          return (b.minutes - a.minutes) || (b.stats.points - a.stats.points);
+        });
+
+        out[school] = {
+          espnId: team.id,
+          abbr: team.abbr,
+          color: team.color || null,
+          rosterSize: athletes.length,
+          withStats: players.filter(p => p.hasStats).length,
+          players: top > 0 ? players.slice(0, top) : players,
+        };
+      }
+
+      res.status(200).json({ season, top, missing, schools: out });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+);
+
 // ── Status ────────────────────────────────────────────────────
 //  Reads Firestore only. Zero API calls, safe to hit any time.
 //  SportsDataIO shows no usage meter, so this is the only place to

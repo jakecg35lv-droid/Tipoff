@@ -1880,6 +1880,14 @@ const ROSTER_POSITIONS = ['G', 'F', 'C'];
 
 const POSITION_LABELS = { G: 'Guard', F: 'Forward', C: 'Center' };
 
+// Height in inches from ESPN's "6'9\"" format. 0 if unparseable.
+function heightInches(h) {
+  const m = /(\d+)\s*'\s*(\d+)/.exec(String(h || ''));
+  return m ? (parseInt(m[1], 10) * 12 + parseInt(m[2], 10)) : 0;
+}
+
+const CENTER_ELIGIBLE_INCHES = 81;   // 6'9"
+
 // 'F-C' -> Set{F,C} ;  'PG' -> Set{G} ;  'C' -> Set{C}
 function positionBuckets(player) {
   const raw = String((player && player.position) || '').toUpperCase();
@@ -1887,6 +1895,24 @@ function positionBuckets(player) {
   if (raw.indexOf('C') !== -1) out.add('C');
   if (raw.indexOf('G') !== -1) out.add('G');
   if (raw.indexOf('F') !== -1) out.add('F');
+
+  // ── Why tall forwards count as centers ──────────────────
+  //  ESPN labels almost every big as 'F', including 7-footers.
+  //  Counting only literal 'C' left the real pools at 6 centers for
+  //  8 Maui managers, 4 for 8 at Atlantis and 2 for 4 at the
+  //  Showcase — the roster rule was mathematically unsatisfiable and
+  //  a live draft would have deadlocked with players still on the
+  //  board. Treating F at 6'9" or taller as center-eligible takes
+  //  those pools to 24 / 29 / 9, which is comfortable.
+  //
+  //  This is eligibility, not relabelling: the player still displays
+  //  as a Forward and can still fill the Forward requirement. He just
+  //  also satisfies Center, the same way a genuine 'F-C' does.
+  if (out.has('F') && !out.has('C') &&
+      heightInches(player && player.height) >= CENTER_ELIGIBLE_INCHES) {
+    out.add('C');
+  }
+
   // Unknown or blank positions are treated as wildcards rather than
   // as unusable, so a data gap can never soft-lock someone's draft.
   if (out.size === 0) ROSTER_POSITIONS.forEach(p => out.add(p));
