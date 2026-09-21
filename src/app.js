@@ -766,6 +766,7 @@ function enterLeague() {
 
   // Resume live stat listener if a tournament was already selected
   listenToLiveStats();
+  listenToGameScores();
 
   // Fade the splash out smoothly before switching screens
   const splash = document.getElementById('splashScreen');
@@ -2982,6 +2983,167 @@ function generateBracketData(tournament) {
 
 // Commissioner calls this to pick a tournament.
 // Clears existing bracket state, rebuilds MM_BRACKET_DATA, saves + re-renders.
+// ══════════════════════════════════════════════════════════
+// 🏀 LIVE GAME SCORES + AUTOMATIC BRACKET ADVANCEMENT
+//
+//  The Cloud Function writes one doc per game to
+//    tournamentStats/{tournId}/games/{eventId}
+//  carrying score, period, clock, state (pre|in|post) and
+//  winnerSchool. winnerSchool stays null until ESPN itself marks the
+//  game final, so a 20-point lead at halftime cannot eliminate
+//  somebody's roster early.
+//
+//  Advancement is automatic but NOT irreversible: a commissioner can
+//  still click a different winner, and a manual pick is remembered so
+//  the next poll does not silently overwrite it. The feed is treated
+//  as a very reliable default, not as the final word.
+// ══════════════════════════════════════════════════════════
+let _gamesUnsub = null;
+let _liveGames = {};          // eventId -> game doc
+
+function listenToGameScores() {
+  if (_gamesUnsub) { _gamesUnsub(); _gamesUnsub = null; }
+  _liveGames = {};
+  if (!window._db || !state.selectedTournament) return;
+
+  const tournId = state.selectedTournament.id;
+
+  _gamesUnsub = window._db
+    .collection('tournamentStats').doc(tournId)
+    .collection('games')
+    .onSnapshot(function (snap) {
+      snap.docChanges().forEach(function (chg) {
+        if (chg.type === 'removed') { delete _liveGames[chg.doc.id]; return; }
+        _liveGames[chg.doc.id] = chg.doc.data();
+      });
+      try { renderLiveScores(); } catch (e) { console.warn('renderLiveScores', e); }
+      try { applyAutoAdvance(); } catch (e) { console.warn('applyAutoAdvance', e); }
+    }, function (e) { console.warn('[Games] snapshot error:', e.message); });
+}
+
+function liveGamesList() {
+  return Object.keys(_liveGames).map(function (k) { return _liveGames[k]; })
+    .sort(function (a, b) {
+      // In progress first, then upcoming, then finals.
+      const rank = function (g) { return g.state === 'in' ? 0 : (g.state === 'pre' ? 1 : 2); };
+      return rank(a) - rank(b) || String(a.startsAt || '').localeCompare(String(b.startsAt || ''));
+    });
+}
+
+function renderLiveScores() {
+  const host = document.getElementById('liveScoreStrip');
+  if (!host) return;
+
+  const games = liveGamesList();
+  if (!games.length) { host.innerHTML = ''; host.style.display = 'none'; return; }
+
+  host.style.display = '';
+  host.innerHTML = games.map(function (g) {
+    const live = g.state === 'in';
+    const done = g.completed;
+    const status = live
+      ? (g.clock ? esc(g.clock) + ' · ' + ordinalHalf(g.period) : 'LIVE')
+      : (done ? 'Final' : esc(g.statusDetail || 'Upcoming'));
+
+    const row = function (side) {
+      const t = g[side] || {};
+      const won = done && g.winnerSchool && g.winnerSchool === t.school;
+      const lost = done && g.winnerSchool && g.winnerSchool !== t.school;
+      return '<div class="ls-team' + (won ? ' ls-team--won' : '') + (lost ? ' ls-team--lost' : '') + '">' +
+        '<span class="ls-name">' + esc(t.school || 'TBD') + '</span>' +
+        '<span class="ls-score">' + (g.state === 'pre' ? '' : (t.score != null ? t.score : 0)) + '</span>' +
+        '</div>';
+    };
+
+    return '<div class="ls-card' + (live ? ' ls-card--live' : '') + '">' +
+      '<div class="ls-status">' + (live ? '<span class="ls-dot"></span>' : '') + status + '</div>' +
+      row('away') + row('home') +
+      '</div>';
+  }).join('');
+}
+
+function ordinalHalf(period) {
+  if (!period) return '';
+  if (period === 1) return '1st';
+  if (period === 2) return '2nd';
+  return 'OT' + (period - 2 > 1 ? (period - 2) : '');
+}
+
+// ── Automatic advancement ─────────────────────────────────
+//  Finds the bracket slot whose two teams match a finished game and
+//  writes the winner there. Never touches a slot a commissioner has
+//  set by hand.
+function applyAutoAdvance() {
+  if (!state.selectedTournament || !state.leagueId) return;
+  const data = window.MM_BRACKET_DATA;
+  if (!data || !data.regions || !data.regions.length) return;
+
+  const bs = getBracketState();
+  if (!bs) return;
+
+  bs.manual = bs.manual || {};       // "region|rnd|match" -> true
+  let changed = 0;
+
+  const finals = liveGamesList().filter(function (g) { return g.completed && g.winnerSchool; });
+  if (!finals.length) return;
+
+  data.regions.forEach(function (reg) {
+    const rounds = bs.regions[reg.name] || [];
+    // Round 0 pairs come straight from the generated matchups. Later
+    // rounds pair the previous round's winners.
+    let pairs = (reg.matchups || []).map(function (mu) {
+      return [mu.top && mu.top.name, mu.bot && mu.bot.name];
+    });
+
+    for (let rnd = 0; rnd < (data.numRounds || 0); rnd++) {
+      rounds[rnd] = rounds[rnd] || [];
+
+      pairs.forEach(function (pair, m) {
+        const a = pair[0], b = pair[1];
+        if (!a || !b) return;
+        if (bs.manual[reg.name + '|' + rnd + '|' + m]) return;   // commissioner owns this slot
+
+        const game = finals.find(function (g) {
+          const s = [g.home && g.home.school, g.away && g.away.school];
+          return s.indexOf(a) !== -1 && s.indexOf(b) !== -1;
+        });
+        if (!game) return;
+        if (rounds[rnd][m] === game.winnerSchool) return;         // already set
+
+        rounds[rnd][m] = game.winnerSchool;
+        changed++;
+        addActivity(esc(game.winnerSchool) + ' advances (' +
+          esc(game.away.school) + ' ' + game.away.score + ', ' +
+          esc(game.home.school) + ' ' + game.home.score + ')');
+      });
+
+      bs.regions[reg.name] = rounds;
+
+      // Winners of this round become next round's pairs.
+      const w = rounds[rnd] || [];
+      const next = [];
+      for (let i = 0; i < w.length; i += 2) next.push([w[i], w[i + 1]]);
+      pairs = next;
+    }
+  });
+
+  if (changed) {
+    saveBracketState(bs);
+    try { renderBracket(); } catch (e) { }
+    try { renderStandings(); } catch (e) { }
+    toast(changed + ' game' + (changed === 1 ? '' : 's') + ' final. Bracket updated.', 'success');
+  }
+}
+
+// Called by the bracket click handler so a manual pick sticks.
+function markManualBracketPick(regionName, rnd, match) {
+  const bs = getBracketState();
+  if (!bs) return;
+  bs.manual = bs.manual || {};
+  bs.manual[regionName + '|' + rnd + '|' + match] = true;
+  saveBracketState(bs);
+}
+
 // ── LIVE STATS LISTENER (ESPN → Firestore → app) ──────────────
 let _liveStatsUnsub = null;
 
@@ -3146,6 +3308,7 @@ function setSelectedTournament(tournament) {
 
   // Start live stat sync for this tournament
   listenToLiveStats();
+  listenToGameScores();
 }
 
 // Rebuild bracket region tabs to match the selected tournament format.
