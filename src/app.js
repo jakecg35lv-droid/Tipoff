@@ -166,6 +166,7 @@ const defaultState = {
   leagueName: 'My League',
   managers: [],
   rounds: 8,
+  bracketOverrides: {},   // "Region|rnd|match" -> team name, commissioner corrections
   currentPickIndex: 0,
   drafted: {},
   pickTimerSeconds: 90,
@@ -3001,6 +3002,26 @@ function generateBracketData(tournament) {
 let _gamesUnsub = null;
 let _liveGames = {};          // eventId -> game doc
 
+// Delegated click handler for commissioner bracket overrides. Bound
+// once on the page rather than per team row, so it survives every
+// re-render of the bracket.
+function wireBracketOverrideClicks() {
+  const page = document.getElementById('bracketPage');
+  if (!page || page.dataset.ovWired === '1') return;
+  page.dataset.ovWired = '1';
+
+  page.addEventListener('click', function (e) {
+    const row = e.target.closest ? e.target.closest('.br-team[data-team]') : null;
+    if (!row) return;
+    const region = row.getAttribute('data-region');
+    const rnd = parseInt(row.getAttribute('data-rnd'), 10);
+    const match = parseInt(row.getAttribute('data-match'), 10);
+    const team = row.getAttribute('data-team');
+    if (!region || isNaN(rnd) || isNaN(match) || !team) return;
+    setBracketOverride(region, rnd, match, team);
+  });
+}
+
 function listenToGameScores() {
   if (_gamesUnsub) { _gamesUnsub(); _gamesUnsub = null; }
   _liveGames = {};
@@ -3030,7 +3051,38 @@ function liveGamesList() {
     });
 }
 
+// Banner above the bracket: tells the commissioner they can edit, and
+// tells everyone when results have been set by hand rather than by the
+// feed. Silence there would let a manual result pass as a real one.
+function renderBracketOverrideBar() {
+  const host = document.getElementById('bracketOverrideBar');
+  if (!host) return;
+
+  let commish = false;
+  try { commish = isCommissioner(); } catch (e) { }
+  const n = Object.keys(state.bracketOverrides || {}).length;
+
+  if (!commish && !n) { host.innerHTML = ''; host.style.display = 'none'; return; }
+
+  host.style.display = '';
+
+  if (n) {
+    host.className = 'bracket-override-bar';
+    host.innerHTML =
+      '<span><b>' + n + ' result' + (n === 1 ? '' : 's') + ' set manually.</b> ' +
+      'The live feed will not overwrite ' + (n === 1 ? 'it' : 'them') + '.</span>' +
+      (commish ? '<button class="bov-clear" id="bovClearBtn">Revert to live data</button>' : '');
+  } else {
+    host.className = 'bracket-edit-hint';
+    host.innerHTML = 'Winners update automatically from live scores. As commissioner you can tap a team to correct a result, and tap the winner again to undo.';
+  }
+
+  const btn = document.getElementById('bovClearBtn');
+  if (btn) btn.addEventListener('click', clearAllBracketOverrides);
+}
+
 function renderLiveScores() {
+  try { renderBracketOverrideBar(); } catch (e) { }
   const host = document.getElementById('liveScoreStrip');
   if (!host) return;
 
@@ -3069,10 +3121,25 @@ function ordinalHalf(period) {
   return 'OT' + (period - 2 > 1 ? (period - 2) : '');
 }
 
-// ── Automatic advancement ─────────────────────────────────
-//  Finds the bracket slot whose two teams match a finished game and
-//  writes the winner there. Never touches a slot a commissioner has
-//  set by hand.
+// ── Bracket recompute: live feed + commissioner overrides ──
+//  The bracket is rebuilt from scratch on every change rather than
+//  mutated in place. Two inputs, in priority order:
+//
+//    1. state.bracketOverrides  — commissioner's manual corrections
+//    2. the ESPN game feed      — whatever ESPN called final
+//
+//  Overrides live in `state`, NOT in the local bracket cache, because
+//  bracket state is localStorage-only and per-device. An override
+//  stored locally would exist on the commissioner's phone and nowhere
+//  else, which is worse than having no override at all. Putting it in
+//  state means it rides the normal league sync to everyone.
+//
+//  Rebuilding beats patching: an override in round 1 changes who is
+//  even playing in round 2, so the whole downstream has to be redrawn.
+function bracketSlotKey(region, rnd, match) {
+  return region + '|' + rnd + '|' + match;
+}
+
 function applyAutoAdvance() {
   if (!state.selectedTournament || !state.leagueId) return;
   const data = window.MM_BRACKET_DATA;
@@ -3081,67 +3148,113 @@ function applyAutoAdvance() {
   const bs = getBracketState();
   if (!bs) return;
 
-  bs.manual = bs.manual || {};       // "region|rnd|match" -> true
-  let changed = 0;
-
+  const overrides = state.bracketOverrides || {};
   const finals = liveGamesList().filter(function (g) { return g.completed && g.winnerSchool; });
-  if (!finals.length) return;
+
+  const newlyFinal = [];
 
   data.regions.forEach(function (reg) {
-    const rounds = bs.regions[reg.name] || [];
-    // Round 0 pairs come straight from the generated matchups. Later
-    // rounds pair the previous round's winners.
+    const before = (bs.regions[reg.name] || []).map(function (r) { return (r || []).slice(); });
+    const rounds = [];
+
     let pairs = (reg.matchups || []).map(function (mu) {
       return [mu.top && mu.top.name, mu.bot && mu.bot.name];
     });
 
     for (let rnd = 0; rnd < (data.numRounds || 0); rnd++) {
-      rounds[rnd] = rounds[rnd] || [];
+      const winners = [];
 
       pairs.forEach(function (pair, m) {
         const a = pair[0], b = pair[1];
-        if (!a || !b) return;
-        if (bs.manual[reg.name + '|' + rnd + '|' + m]) return;   // commissioner owns this slot
+        const key = bracketSlotKey(reg.name, rnd, m);
 
+        // 1. Commissioner override wins, but only if it names a team
+        //    actually in this matchup. A stale override left over from
+        //    a re-seed must not put a phantom team in the bracket.
+        const ov = overrides[key];
+        if (ov && (ov === a || ov === b)) { winners[m] = ov; return; }
+
+        if (!a || !b) { winners[m] = null; return; }
+
+        // 2. Otherwise the feed, and only once ESPN calls it final.
         const game = finals.find(function (g) {
           const s = [g.home && g.home.school, g.away && g.away.school];
           return s.indexOf(a) !== -1 && s.indexOf(b) !== -1;
         });
-        if (!game) return;
-        if (rounds[rnd][m] === game.winnerSchool) return;         // already set
+        if (game) {
+          winners[m] = game.winnerSchool;
+          const prev = (before[rnd] || [])[m];
+          if (prev !== game.winnerSchool) newlyFinal.push({ game: game, winner: game.winnerSchool });
+          return;
+        }
 
-        rounds[rnd][m] = game.winnerSchool;
-        changed++;
-        addActivity(esc(game.winnerSchool) + ' advances (' +
-          esc(game.away.school) + ' ' + game.away.score + ', ' +
-          esc(game.home.school) + ' ' + game.home.score + ')');
+        winners[m] = null;
       });
 
-      bs.regions[reg.name] = rounds;
+      rounds[rnd] = winners;
 
-      // Winners of this round become next round's pairs.
-      const w = rounds[rnd] || [];
       const next = [];
-      for (let i = 0; i < w.length; i += 2) next.push([w[i], w[i + 1]]);
+      for (let i = 0; i < winners.length; i += 2) next.push([winners[i], winners[i + 1]]);
       pairs = next;
     }
+
+    bs.regions[reg.name] = rounds;
   });
 
-  if (changed) {
-    saveBracketState(bs);
-    try { renderBracket(); } catch (e) { }
-    try { renderStandings(); } catch (e) { }
-    toast(changed + ' game' + (changed === 1 ? '' : 's') + ' final. Bracket updated.', 'success');
+  saveBracketState(bs);
+
+  if (newlyFinal.length) {
+    newlyFinal.forEach(function (n) {
+      addActivity(esc(n.winner) + ' advances (' +
+        esc(n.game.away.school) + ' ' + n.game.away.score + ', ' +
+        esc(n.game.home.school) + ' ' + n.game.home.score + ')');
+    });
+    toast(newlyFinal.length + ' game' + (newlyFinal.length === 1 ? '' : 's') + ' final. Bracket updated.', 'success');
   }
+
+  try { renderBracket(); } catch (e) { }
+  try { renderStandings(); } catch (e) { }
 }
 
-// Called by the bracket click handler so a manual pick sticks.
-function markManualBracketPick(regionName, rnd, match) {
-  const bs = getBracketState();
-  if (!bs) return;
-  bs.manual = bs.manual || {};
-  bs.manual[regionName + '|' + rnd + '|' + match] = true;
-  saveBracketState(bs);
+// ── Commissioner override ─────────────────────────────────
+//  Clicking a team sets it as the winner of that matchup. Clicking the
+//  team that is ALREADY winning by override clears it and hands the
+//  slot back to the live feed.
+function setBracketOverride(region, rnd, match, teamName) {
+  if (!isCommissioner()) { toast('Only the commissioner can change the bracket.', 'error'); return; }
+  if (!teamName) return;
+
+  state.bracketOverrides = state.bracketOverrides || {};
+  const key = bracketSlotKey(region, rnd, match);
+
+  if (state.bracketOverrides[key] === teamName) {
+    delete state.bracketOverrides[key];
+    addActivity('Commissioner reverted ' + esc(teamName) + ' to the live result.');
+    toast('Reverted to live data.', 'info');
+  } else {
+    state.bracketOverrides[key] = teamName;
+    addActivity('Commissioner set ' + esc(teamName) + ' as the winner (manual override).');
+    toast(esc(teamName) + ' advances. Live data will not overwrite this.', 'success');
+  }
+
+  saveState();               // syncs the override to every device
+  applyAutoAdvance();        // rebuild downstream rounds
+}
+
+function isOverriddenSlot(region, rnd, match) {
+  return !!(state.bracketOverrides || {})[bracketSlotKey(region, rnd, match)];
+}
+
+function clearAllBracketOverrides() {
+  if (!isCommissioner()) return;
+  const n = Object.keys(state.bracketOverrides || {}).length;
+  if (!n) { toast('No manual overrides to clear.', 'info'); return; }
+  if (!confirm('Clear all ' + n + ' manual bracket override' + (n === 1 ? '' : 's') + ' and return the bracket to live data?')) return;
+  state.bracketOverrides = {};
+  addActivity('Commissioner cleared all bracket overrides.');
+  saveState();
+  applyAutoAdvance();
+  toast('Bracket returned to live data.', 'success');
 }
 
 // ── LIVE STATS LISTENER (ESPN → Firestore → app) ──────────────
@@ -3612,6 +3725,7 @@ function closeBracketPreview() {
 }
 
 function renderBracket() {
+  try { renderBracketOverrideBar(); } catch (e) { }
   const content = document.getElementById('bracketContent');
   if (!content) return;
 
@@ -3644,11 +3758,15 @@ function renderBracket() {
 }
 
 function renderRegionSimple(content, regData, bracketData, region, customRoundNames) {
+  try { wireBracketOverrideClicks(); } catch (e) { }
   const defaultRoundNames = ['Round of 64', 'Round of 32', 'Sweet 16', 'Elite 8'];
   const roundNames = customRoundNames || defaultRoundNames;
   const numRounds = roundNames.length;
   const roundWinners = bracketData.regions[region] || Array(numRounds).fill(null).map(() => []);
-  const canEdit = false; // Bracket is read-only; winners are set by live data feed
+  // Winners come from the live feed. The commissioner can override any
+  // slot when the feed is wrong or slow — a tournament that cannot be
+  // corrected from inside the app is a tournament that stays broken.
+  const canEdit = (function () { try { return isCommissioner(); } catch (e) { return false; } })();
 
   const seedMap = {};
   (regData.matchups || []).forEach(mu => {
@@ -3659,12 +3777,18 @@ function renderRegionSimple(content, regData, bracketData, region, customRoundNa
   const makeTeamRow = (team, won, lost, rnd, m) => {
     if (!team) return '<div class="br-team br-tbd"><span class="br-seed">-</span><span class="br-name">TBD</span></div>';
     const matchWinner = (roundWinners[rnd] || [])[m] || null;
-    const clickable = canEdit && !matchWinner;
-    const editAttr = clickable ? ' data-team="' + esc(team.name) + '" data-rnd="' + rnd + '" data-match="' + m + '"' : '';
+    // Clickable even when a winner is already set — overriding a WRONG
+    // result is the whole point. Clicking the current winner reverts.
+    const clickable = canEdit;
+    const overridden = (function () { try { return isOverriddenSlot(region, rnd, m); } catch (e) { return false; } })();
+    const editAttr = clickable
+      ? ' data-team="' + esc(team.name) + '" data-region="' + esc(region) + '" data-rnd="' + rnd + '" data-match="' + m + '"'
+      : '';
     let cls = 'br-team';
     if (won) cls += ' br-winner';
     if (lost) cls += ' br-loser';
     if (clickable) cls += ' br-clickable';
+    if (overridden && won) cls += ' br-override';
     const owner = getOwnerInitials(team.name);
     return '<div class="' + cls + '"' + editAttr + '>' +
       '<span class="br-seed">' + (team.seed || '') + '</span>' +

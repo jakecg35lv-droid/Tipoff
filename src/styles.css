@@ -1602,6 +1602,68 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
 }
 
 /* ══════════════════════════════════════════════════════════
+   COMMISSIONER BRACKET OVERRIDE
+   A manually set winner must never look identical to one the feed
+   produced — otherwise nobody can tell which results are real.
+══════════════════════════════════════════════════════════ */
+.br-team.br-clickable {
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.br-team.br-clickable:hover {
+  background: rgba(242, 107, 33, 0.1);
+  box-shadow: inset 2px 0 0 var(--orange);
+}
+
+/* Overridden winner: dashed edge + a small marker */
+.br-team.br-override {
+  border: 1px dashed rgba(242, 107, 33, 0.65);
+  position: relative;
+}
+.br-team.br-override::after {
+  content: 'SET';
+  position: absolute;
+  right: 6px; top: 50%;
+  transform: translateY(-50%);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8.5px; font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--orange);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.bracket-override-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 12px;
+  background: rgba(242, 107, 33, 0.07);
+  border: 1px solid var(--border-accent);
+  border-radius: 12px;
+  font-size: 13px; color: var(--text-2);
+}
+.bracket-override-bar b { color: var(--text); }
+.bov-clear {
+  margin-left: auto;
+  min-height: 34px; padding: 0 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border-2, rgba(255,255,255,0.14));
+  border-radius: 9px;
+  color: var(--text); font-size: 12.5px; font-weight: 700;
+  cursor: pointer;
+}
+.bov-clear:hover { background: rgba(255,255,255,0.1); }
+
+.bracket-edit-hint {
+  font-size: 12.5px; color: var(--muted);
+  margin-bottom: 10px;
+}
+
+@media (max-width: 480px) {
+  .bracket-override-bar { font-size: 12.5px; padding: 9px 12px; }
+  .bov-clear { margin-left: 0; width: 100%; }
+}
+
+/* ══════════════════════════════════════════════════════════
    LIVE SCORE STRIP
    Horizontal scroller of today's games. In-progress games sort
    first and pulse; finals grey out the losing side.
