@@ -681,6 +681,15 @@
                 </div>
                 <div id="draftPlayerGrid"></div>
               </div>
+
+              <!-- Your queue: feeds autopick when the timer expires -->
+              <div class="queue-panel" id="queuePanel">
+                <div class="queue-head">
+                  <span class="queue-title">Your Queue <span class="queue-count" id="queueCount"></span></span>
+                  <button class="queue-clear" id="queueClearBtn">Clear</button>
+                </div>
+                <div id="queueList"></div>
+              </div>
             </div>
           </div>
 
@@ -756,8 +765,6 @@
         <div class="page-header">
           <h2>Standings</h2>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button id="simulateBtn" class="btn-primary btn-sm commissioner-only">Simulate Stats</button>
-            <button id="resetStatsBtn" class="btn-ghost btn-sm commissioner-only" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-2px;margin-right:5px;"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Reset</button>
           </div>
         </div>
         <div class="standings-header-row">

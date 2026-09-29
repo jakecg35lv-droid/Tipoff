@@ -166,6 +166,7 @@ const defaultState = {
   leagueName: 'My League',
   managers: [],
   rounds: 8,
+  queues: {},               // manager -> ordered player ids
   bracketOverrides: {},   // "Region|rnd|match" -> team name, commissioner corrections
   currentPickIndex: 0,
   drafted: {},
@@ -181,13 +182,26 @@ const defaultState = {
   trades: [],
   waivers: [],
   prevRankings: [],
-  baselineStats: {},
   selectedTournament: null,
   maxManagers: 8,
   draftScheduledAt: null
 };
+// ── Fresh state, never a shared reference ─────────────────
+//  freshState() is SHALLOW: every copy ends up
+//  sharing defaultState's nested objects. Draft a player in one league
+//  and defaultState.drafted itself is mutated, so the next league you
+//  create starts with those picks already made — and the same goes for
+//  queues, bracketOverrides, managers, activityFeed and the scoring
+//  weights. Thirteen places copied it this way.
+//
+//  structuredClone gives each league genuinely its own objects.
+function freshState() {
+  if (typeof structuredClone === 'function') return structuredClone(defaultState);
+  return JSON.parse(JSON.stringify(defaultState));   // older browsers
+}
 
-let state = Object.assign({}, defaultState);
+
+let state = freshState();
 let timerInterval = null;
 let poolSortCol = 'fpts';
 let poolSortDir = 'desc';
@@ -235,8 +249,8 @@ function loadState() {
     const raw = localStorage.getItem('mmfantasy-state');
     if (raw) {
       const parsed = JSON.parse(raw);
-      state = Object.assign({}, defaultState, parsed);
-      state.scoring = Object.assign({}, defaultState.scoring, parsed.scoring || {});
+      state = Object.assign(freshState(), parsed);
+      state.scoring = Object.assign(freshState().scoring, parsed.scoring || {});
       state.scoring.weights = Object.assign({}, defaultState.scoring.weights, (parsed.scoring || {}).weights || {});
       rehydratePlayerPool(parsed.poolVersion);
       return true;
@@ -434,45 +448,6 @@ function calcFPTS(player) {
   if (active.includes('blocks')) total += (s.blocks || 0) * (w.blocks || 1);
   return Math.round(total * 10) / 10;
 }
-
-function managerFPTS(managerName) {
-  let total = 0;
-  Object.entries(state.drafted).forEach(([pid, d]) => {
-    if (d.manager === managerName) {
-      const p = (state.players || []).find(x => x.id === pid);
-      if (p) total += calcFPTS(p);
-    }
-  });
-  return Math.round(total * 10) / 10;
-}
-
-// Returns true if real/simulated game stats have been applied
-function hasRealStats() {
-  return !!(state.baselineStats && Object.keys(state.baselineStats).length > 0);
-}
-
-// FPTS calculated from baseline (pre-game projections)
-function managerProjectedFPTS(managerName) {
-  if (!hasRealStats()) return managerFPTS(managerName);
-  const w = state.scoring.weights;
-  const active = state.scoring.active || [];
-  let total = 0;
-  Object.entries(state.drafted).forEach(([pid, d]) => {
-    if (d.manager === managerName) {
-      const base = state.baselineStats[pid];
-      if (!base) return;
-      let pts = 0;
-      if (active.includes('points')) pts += (base.points || 0) * (w.points || 1);
-      if (active.includes('rebounds')) pts += (base.rebounds || 0) * (w.rebounds || 1);
-      if (active.includes('assists')) pts += (base.assists || 0) * (w.assists || 1);
-      if (active.includes('steals')) pts += (base.steals || 0) * (w.steals || 1);
-      if (active.includes('blocks')) pts += (base.blocks || 0) * (w.blocks || 1);
-      total += pts;
-    }
-  });
-  return Math.round(total * 10) / 10;
-}
-
 function managerRoster(managerName) {
   return Object.entries(state.drafted)
     .filter(([, d]) => d.manager === managerName)
@@ -878,7 +853,7 @@ function handleLogin() {
         if (prevSess && prevSess.uid && prevSess.uid !== uid) {
           localStorage.removeItem('mmfantasy-state');
           localStorage.removeItem('mmfantasy-leagues');
-          state = Object.assign({}, defaultState);
+          state = freshState();
           state.players = poolForCurrentTournament();
         }
         setSession(name, email, uid);
@@ -998,8 +973,8 @@ function handleSignup() {
 
 // ── SPLASH ────────────────────────────────────────────────
 function _applyLeagueState(saved) {
-  state = Object.assign({}, defaultState, saved);
-  state.scoring = Object.assign({}, defaultState.scoring, saved.scoring || {});
+  state = Object.assign(freshState(), saved);
+  state.scoring = Object.assign(freshState().scoring, saved.scoring || {});
   state.scoring.weights = Object.assign({}, defaultState.scoring.weights, (saved.scoring || {}).weights || {});
   rehydratePlayerPool(saved && saved.poolVersion);
 }
@@ -1024,14 +999,53 @@ const POOL_VERSION = '2026-09-21-espn';
 //  tournament. If a tournament is selected its pool is authoritative,
 //  even when that pool is empty (an unannounced field). Only with no
 //  tournament at all do we fall back to everybody.
+// ── Always hand out CLONES, never the file's own objects ──
+//  .slice() and .filter() copy the array but keep the same object
+//  references, so state.players[i] IS window.MM_PLAYERS[j]. The live
+//  stat listener writes player.stats.points directly, which means it
+//  was permanently overwriting data/players.js in memory:
+//
+//    · leave a league mid-tournament and join another one, and your
+//      new league's draft board shows the OLD league's running totals
+//    · switch tournaments and the same thing happens
+//    · the board never returns to season averages without a reload
+//
+//  Cloning on every pool build means each league starts from pristine
+//  file data and live stats only ever touch the pool in play.
+function clonePlayer(p) {
+  return Object.assign({}, p, {
+    stats: Object.assign({}, p.stats),
+    seasonAvg: p.seasonAvg ? Object.assign({}, p.seasonAvg) : undefined,
+  });
+}
+
 function poolForCurrentTournament() {
   const t = state && state.selectedTournament;
-  if (t) return playersForTournament(t);
-  return (window.MM_PLAYERS || []).slice();
+  const base = t ? playersForTournament(t) : (window.MM_PLAYERS || []);
+  return base.map(clonePlayer);
 }
 
 function rehydratePlayerPool(savedVersion) {
   state.players = poolForCurrentTournament();
+
+  // ── Snapshot the season per-game averages ───────────────
+  //  data/players.js ships PER-GAME averages. The live feed overwrites
+  //  player.stats with CUMULATIVE tournament totals, which means after
+  //  two games "points" is a running total, not a rate. The projection
+  //  engine multiplies a rate by games remaining, so once live data
+  //  arrived it would have been multiplying a cumulative total and
+  //  producing wildly inflated forecasts.
+  //
+  //  Keeping an untouched copy of the season rate on each player gives
+  //  the projection something honest to multiply.
+  state.players.forEach(function (p) {
+    if (!p.seasonAvg) {
+      p.seasonAvg = {
+        points: p.stats.points, rebounds: p.stats.rebounds, assists: p.stats.assists,
+        steals: p.stats.steals, blocks: p.stats.blocks,
+      };
+    }
+  });
 
   const valid = {};
   state.players.forEach(function (p) { valid[p.id] = true; });
@@ -1130,7 +1144,7 @@ function renderSavedLeagues() {
 }
 
 function createLeague() {
-  state = Object.assign({}, defaultState);
+  state = freshState();
   state.players = poolForCurrentTournament();
   state.leagueId = 'league_' + Date.now();
   state.leagueCode = Math.random().toString(36).toUpperCase().slice(2, 8);
@@ -1827,6 +1841,7 @@ function renderRosterRequirements() {
 
 function renderDraftGrid() {
   try { renderRosterRequirements(); } catch (e) { console.warn('renderRosterRequirements', e); }
+  try { wireQueue(); wireQueueStars(); renderQueue(); } catch (e) { console.warn('renderQueue', e); }
   const grid = document.getElementById('draftPlayerGrid');
   if (!grid) return;
   const search = (document.getElementById('draftSearch') ? document.getElementById('draftSearch').value : '').toLowerCase();
@@ -1841,12 +1856,20 @@ function renderDraftGrid() {
   grid.innerHTML = players.map((p, i) => {
     const isDrafted = !!state.drafted[p.id];
     const isLocked  = !isDrafted && _onClock && !playerIsEligible(p, _onClock);
+    const qPos = queuePosition(p.id);
     const fpts = calcFPTS(p);
     const seedCls = p.seed <= 4 ? ' seed-' + p.seed : '';
     return '<div class="pool-row' + (isDrafted ? ' drafted' : '') + (isLocked ? ' pool-row--locked' : '') + '" data-pid="' + p.id + '">' +
       '<span class="pool-rank">' + (i + 1) + '</span>' +
       '<div class="pool-player-cell">' + getSchoolLogoHTML(p.college, 26) +
-      '<div class="pool-player-info"><div class="pool-player-name">' + esc(p.name) + '</div><div class="pool-player-college">' + esc(p.college) + '</div></div></div>' +
+      '<div class="pool-player-info"><div class="pool-player-name">' + esc(p.name) +
+        (qPos ? '<span class="q-chip">Q' + qPos + '</span>' : '') +
+      '</div><div class="pool-player-college">' + esc(p.college) + '</div></div>' +
+      (isDrafted ? '' :
+        '<button class="q-star' + (qPos ? ' q-star--on' : '') + '" data-queue="' + esc(p.id) + '"' +
+        ' aria-label="' + (qPos ? 'Remove from queue' : 'Add to queue') + '" title="' +
+        (qPos ? 'Remove from queue' : 'Add to queue') + '">&#9733;</button>') +
+      '</div>' +
       '<span class="pool-seed-cell"><span class="seed-badge' + seedCls + '">' + p.seed + '</span></span>' +
       '<span class="pool-stat">' + p.stats.points + '</span>' +
       '<span class="pool-stat">' + p.stats.rebounds + '</span>' +
@@ -2144,6 +2167,7 @@ function confirmDraftPick() {
       ts: Date.now()
     };
     state.currentPickIndex++;
+    pruneQueues(pendingPickPlayerId);
     addActivity(esc(pick.manager) + ' drafted ' + esc(p.name) + ' (' + pick.label + ')');
     track('pick_made', {
       round: pick.round,
@@ -2475,7 +2499,6 @@ function renderStandings() {
   }).join('');
 
   // Hide the Simulate tool once the live feed is producing real stats
-  try { updateStatToolsVisibility(); } catch (e) { console.warn('updateStatToolsVisibility', e); }
 
   // Render projection breakdown panel below
   try { renderProjectionPanel(); } catch (e) { console.warn('renderProjectionPanel', e); }
@@ -2491,69 +2514,6 @@ function calcManagerCat(manager, cat) {
   });
   return Math.round(total * 10) / 10;
 }
-
-// ── Simulate Stats gating ─────────────────────────────────
-// Simulate is a pre-season testing tool. It permanently mutates player stats
-// and saves to Firestore, so it must be unreachable once the live SportsDataIO
-// feed is writing real numbers for the selected tournament.
-function liveStatsAreFlowing() {
-  if (window._hasLiveStatData) return true;
-  // Fallback: any player currently flagged as live-updated
-  return (state.players || []).some(p => p._liveUpdated);
-}
-
-function updateStatToolsVisibility() {
-  const simBtn = document.getElementById('simulateBtn');
-  const resetBtn = document.getElementById('resetStatsBtn');
-  const live = liveStatsAreFlowing();
-
-  if (simBtn) simBtn.style.display = live ? 'none' : '';
-
-  // Reset stays available only if a baseline exists AND we're not on live data
-  const hasBaseline = state.baselineStats && Object.keys(state.baselineStats).length > 0;
-  if (resetBtn) resetBtn.style.display = (!live && hasBaseline) ? '' : 'none';
-}
-
-function simulateScores() {
-  // Hard stop: never let simulated numbers land on top of real feed data
-  if (liveStatsAreFlowing()) {
-    toast('Live stats are active. Simulate is disabled.', 'error');
-    updateStatToolsVisibility();
-    return;
-  }
-  if (!confirm('Simulate adds random stats to every drafted player and saves to the league.\n\nThis is a testing tool. Continue?')) return;
-
-  // Save current rankings for delta display (persisted)
-  const currentRanked = state.managers.slice().sort((a, b) => managerFPTS(b) - managerFPTS(a));
-  state.prevRankings = currentRanked.slice();
-  simPrevRankings = currentRanked.slice();
-
-  // Save baseline stats on first simulate so we can reset later
-  if (!state.baselineStats || Object.keys(state.baselineStats).length === 0) {
-    state.baselineStats = {};
-    (state.players || []).forEach(p => {
-      state.baselineStats[p.id] = { points: p.stats.points, rebounds: p.stats.rebounds, assists: p.stats.assists, steals: p.stats.steals, blocks: p.stats.blocks };
-    });
-    updateStatToolsVisibility();
-  }
-
-  // Randomly increment stats for drafted players only
-  Object.keys(state.drafted).forEach(pid => {
-    const p = (state.players || []).find(x => x.id === pid);
-    if (!p) return;
-    p.stats.points = Math.round((p.stats.points + Math.random() * 8) * 10) / 10;
-    p.stats.rebounds = Math.round((p.stats.rebounds + Math.random() * 4) * 10) / 10;
-    p.stats.assists = Math.round((p.stats.assists + Math.random() * 2) * 10) / 10;
-    p.stats.steals = Math.round((p.stats.steals + Math.random() * 1) * 10) / 10;
-    p.stats.blocks = Math.round((p.stats.blocks + Math.random() * 0.8) * 10) / 10;
-  });
-  addActivity('Commissioner simulated tournament stats');
-  saveState();
-  renderStandings();
-  renderTeams();
-  toast('Stats simulated! Standings updated.', 'success');
-}
-
 function undoLastPick() {
   if (!isCommissioner()) return;
   if (state.currentPickIndex <= 0) { toast('No picks to undo.', 'info'); return; }
@@ -2574,33 +2534,6 @@ function undoLastPick() {
   render();
   toast('Last pick undone.', 'success');
 }
-
-function resetStats() {
-  if (!state.baselineStats || Object.keys(state.baselineStats).length === 0) {
-    toast('No baseline to reset to. Simulate first.', 'info');
-    return;
-  }
-  (state.players || []).forEach(p => {
-    const base = state.baselineStats[p.id];
-    if (base) {
-      p.stats.points = base.points;
-      p.stats.rebounds = base.rebounds;
-      p.stats.assists = base.assists;
-      p.stats.steals = base.steals;
-      p.stats.blocks = base.blocks;
-    }
-  });
-  state.baselineStats = {};
-  state.prevRankings = [];
-  simPrevRankings = [];
-  updateStatToolsVisibility();
-  addActivity('Commissioner reset stats to baseline');
-  saveState();
-  renderStandings();
-  renderTeams();
-  toast('Stats reset to baseline.', 'success');
-}
-
 // ── CHAT ──────────────────────────────────────────────────
 function getChatMessages() {
   if (!state.leagueId) return [];
@@ -2697,6 +2630,41 @@ function saveBracketState(data) {
 // NCAA field, so a college-only filter returns PJ Hall twice and two managers
 // can draft the same player. Always constrain by region as well.
 const NCAA_REGIONS = ['East', 'South', 'Midwest', 'West'];
+
+// ── Real vs projected ─────────────────────────────────────
+//  Used to be "has the Simulate button been pressed". Now it means
+//  what it says: has the live feed actually recorded a game yet. Until
+//  the first box score lands, every number on the standings page is a
+//  projection and the UI should say so.
+function hasRealStats() {
+  return (state.players || []).some(function (p) {
+    return (p._gamesPlayed > 0) || p._liveUpdated;
+  });
+}
+
+/**
+ * What this manager's roster is worth per game, from SEASON averages.
+ * Deliberately not derived from p.stats: once the feed is running those
+ * are cumulative tournament totals, and summing them here would just
+ * restate the actual score under a "projected" heading.
+ */
+function managerProjectedFPTS(managerName) {
+  const w = state.scoring.weights;
+  const active = state.scoring.active || [];
+  let total = 0;
+
+  Object.keys(state.drafted || {}).forEach(function (pid) {
+    if (state.drafted[pid].manager !== managerName) return;
+    const p = (state.players || []).find(function (x) { return x.id === pid; });
+    if (!p) return;
+    const rate = p.seasonAvg || p.stats || {};
+    active.forEach(function (cat) {
+      total += (rate[cat] || 0) * (w[cat] || 1);
+    });
+  });
+
+  return Math.round(total * 10) / 10;
+}
 
 // Every tournament in every section, flattened. Used to deactivate
 // stale entries and to validate pools.
@@ -3278,10 +3246,6 @@ function listenToLiveStats() {
       // Any player doc means the live feed is producing real stats for this
       // tournament. Once that's true the Simulate tool must disappear so it
       // can't overwrite real numbers.
-      if (!snapshot.empty) {
-        window._hasLiveStatData = true;
-        try { updateStatToolsVisibility(); } catch (e) { }
-      }
 
       snapshot.docChanges().forEach(change => {
         if (change.type === 'removed') return;
@@ -3361,6 +3325,15 @@ function setSelectedTournament(tournament) {
     state.pickTimerStartedAt = null;
     try { clearInterval(timerInterval); } catch (e) { }
     addActivity('Tournament changed to ' + tournament.name + '. Draft reset (' + picksMade + ' pick' + (picksMade === 1 ? '' : 's') + ' cleared).');
+  }
+
+  if (changing) {
+    // Overrides are keyed "Region|round|match". Region names come from
+    // the tournament, so a correction made in Maui would land on an
+    // unrelated Atlantis matchup after a switch. Queues self-heal
+    // (getQueue filters against the live pool) but these do not.
+    state.bracketOverrides = {};
+    state.queues = {};
   }
 
   // Wipe old bracket picks: new tournament = fresh bracket
@@ -4154,6 +4127,175 @@ function updateRingProgress() {
   ring.classList.toggle('urgency', state.timerRunning && rem > 0 && rem <= 10);
 }
 
+// ══════════════════════════════════════════════════════════
+// ⭐ PLAYER QUEUE
+//
+//  A per-manager ranked shortlist. When the timer expires, autopick
+//  takes the highest player in YOUR queue instead of whoever the
+//  algorithm rates best. This is the single thing that makes a short
+//  pick timer survivable on a phone, and it is what every mature
+//  fantasy platform does.
+//
+//  Queues live in league state, not localStorage. That is deliberate:
+//  when your timer runs out it may well be another manager's device
+//  that executes the autopick, so your queue has to be readable by
+//  their client. The tradeoff is that a queue is not a secret — it is
+//  in the league document like everything else. For a friends league
+//  that is acceptable; if it ever matters, it moves to a subcollection
+//  with per-user rules.
+// ══════════════════════════════════════════════════════════
+function getQueue(manager) {
+  if (!manager) return [];
+  const all = state.queues || {};
+  return (all[manager] || []).filter(function (pid) {
+    // Drop anyone already drafted or no longer in the pool, so a stale
+    // queue entry can never be auto-picked.
+    return !state.drafted[pid] && (state.players || []).some(function (p) { return p.id === pid; });
+  });
+}
+
+function myQueue() {
+  const s = getSession();
+  return getQueue(s ? s.name : null);
+}
+
+function setQueue(manager, ids) {
+  if (!manager) return;
+  state.queues = state.queues || {};
+  state.queues[manager] = ids;
+  saveState();
+}
+
+function toggleQueue(playerId) {
+  const s = getSession();
+  if (!s) return;
+  const q = getQueue(s.name);
+  const i = q.indexOf(playerId);
+  const p = (state.players || []).find(function (x) { return x.id === playerId; });
+
+  if (i === -1) {
+    q.push(playerId);
+    toast((p ? p.name : 'Player') + ' queued (#' + q.length + ')', 'success');
+  } else {
+    q.splice(i, 1);
+    toast((p ? p.name : 'Player') + ' removed from queue', 'info');
+  }
+  setQueue(s.name, q);
+  try { renderQueue(); } catch (e) { }
+  try { renderDraftGrid(); } catch (e) { }
+}
+
+function moveInQueue(playerId, dir) {
+  const s = getSession();
+  if (!s) return;
+  const q = getQueue(s.name);
+  const i = q.indexOf(playerId);
+  const j = i + dir;
+  if (i === -1 || j < 0 || j >= q.length) return;
+  const tmp = q[i]; q[i] = q[j]; q[j] = tmp;
+  setQueue(s.name, q);
+  renderQueue();
+}
+
+function clearQueue() {
+  const s = getSession();
+  if (!s) return;
+  if (!getQueue(s.name).length) return;
+  if (!confirm('Clear your whole queue?')) return;
+  setQueue(s.name, []);
+  renderQueue();
+  try { renderDraftGrid(); } catch (e) { }
+}
+
+function isQueued(playerId) {
+  const s = getSession();
+  return s ? getQueue(s.name).indexOf(playerId) !== -1 : false;
+}
+
+function queuePosition(playerId) {
+  const s = getSession();
+  if (!s) return 0;
+  return getQueue(s.name).indexOf(playerId) + 1;   // 0 when absent
+}
+
+// Remove a drafted player from EVERY queue, not just the drafter's.
+// Otherwise seven other managers keep a dead name in their shortlist.
+function pruneQueues(playerId) {
+  if (!state.queues) return;
+  let touched = false;
+  Object.keys(state.queues).forEach(function (m) {
+    const before = state.queues[m].length;
+    state.queues[m] = state.queues[m].filter(function (pid) { return pid !== playerId; });
+    if (state.queues[m].length !== before) touched = true;
+  });
+  return touched;
+}
+
+function renderQueue() {
+  const host = document.getElementById('queueList');
+  const countEl = document.getElementById('queueCount');
+  if (!host) return;
+
+  const s = getSession();
+  const q = s ? getQueue(s.name) : [];
+  if (countEl) countEl.textContent = q.length ? q.length : '';
+
+  if (!q.length) {
+    host.innerHTML = '<p class="queue-empty">Star players to build a shortlist. If your timer runs out, the top of your queue is picked instead of whoever the app thinks is best.</p>';
+    return;
+  }
+
+  host.innerHTML = q.map(function (pid, i) {
+    const p = (state.players || []).find(function (x) { return x.id === pid; });
+    if (!p) return '';
+    const eligible = playerIsEligible(p, s.name);
+    return '<div class="q-row' + (eligible ? '' : ' q-row--locked') + '" data-pid="' + esc(p.id) + '">' +
+      '<span class="q-rank">' + (i + 1) + '</span>' +
+      '<div class="q-info">' +
+        '<span class="q-name">' + esc(p.name) + '</span>' +
+        '<span class="q-meta">' + esc(p.position) + ' · ' + esc(p.college) + '</span>' +
+      '</div>' +
+      '<div class="q-actions">' +
+        '<button class="q-btn" data-qmove="-1" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>&#9650;</button>' +
+        '<button class="q-btn" data-qmove="1" aria-label="Move down"' + (i === q.length - 1 ? ' disabled' : '') + '>&#9660;</button>' +
+        '<button class="q-btn q-btn--x" data-qremove="1" aria-label="Remove from queue">&times;</button>' +
+      '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function wireQueueStars() {
+  const grid = document.getElementById('draftPlayerGrid');
+  if (!grid || grid.dataset.qWired === '1') return;
+  grid.dataset.qWired = '1';
+  grid.addEventListener('click', function (e) {
+    const btn = e.target.closest ? e.target.closest('[data-queue]') : null;
+    if (!btn) return;
+    e.stopPropagation();          // do not open the draft-confirm modal
+    toggleQueue(btn.getAttribute('data-queue'));
+  });
+}
+
+function wireQueue() {
+  const panel = document.getElementById('queuePanel');
+  if (!panel || panel.dataset.wired === '1') return;
+  panel.dataset.wired = '1';
+
+  panel.addEventListener('click', function (e) {
+    const row = e.target.closest ? e.target.closest('.q-row') : null;
+    if (!row) {
+      if (e.target.id === 'queueClearBtn') clearQueue();
+      return;
+    }
+    const pid = row.getAttribute('data-pid');
+    if (e.target.hasAttribute('data-qmove')) {
+      moveInQueue(pid, parseInt(e.target.getAttribute('data-qmove'), 10));
+    } else if (e.target.hasAttribute('data-qremove')) {
+      toggleQueue(pid);
+    }
+  });
+}
+
 function autoPickForCurrent() {
   const pick = currentPick();
   if (!pick) return;
@@ -4166,15 +4308,30 @@ function autoPickForCurrent() {
   const legal = players.filter(p => playerIsEligible(p, pick.manager));
   if (legal.length) players = legal;
 
-  const best = players[0];
+  // ── Queue first ────────────────────────────────────────
+  //  Walk this manager's shortlist in their order and take the first
+  //  entry that is still available AND keeps their roster legal. Only
+  //  fall through to best-available if the queue is empty or exhausted.
+  let best = null;
+  let fromQueue = false;
+  const queued = getQueue(pick.manager);
+  for (let i = 0; i < queued.length; i++) {
+    const cand = players.find(function (p) { return p.id === queued[i]; });
+    if (cand) { best = cand; fromQueue = true; break; }
+  }
+  if (!best) best = players[0];
   state.drafted[best.id] = { manager: pick.manager, round: pick.round, pick: pick.pick, pickNumber: pick.pickNumber, label: pick.label, ts: Date.now() };
   state.currentPickIndex++;
-  addActivity('Auto-pick: ' + esc(pick.manager) + ' was assigned ' + esc(best.name));
-  // A high rate here means the timer is too short or the missing
-  // player queue is hurting people.
+  pruneQueues(best.id);
+  addActivity('Auto-pick: ' + esc(pick.manager) + ' was assigned ' + esc(best.name) +
+    (fromQueue ? ' (from queue)' : ''));
+  // from_queue is the number that matters: if autopicks are mostly NOT
+  // from a queue, people are not using it and the timer is still the
+  // problem the queue was meant to solve.
   track('pick_autodrafted', {
     round: pick.round, pick_number: pick.pickNumber,
     seed: best.seed, position: best.position,
+    from_queue: fromQueue,
   });
   if (isDraftComplete()) {
     clearInterval(timerInterval);
@@ -4185,7 +4342,7 @@ function autoPickForCurrent() {
   }
   saveState();
   render();
-  toast(pick.manager + ' auto-picked ' + best.name, 'info');
+  toast(pick.manager + ' auto-picked ' + best.name + (fromQueue ? ' from their queue' : ''), 'info');
 }
 
 // ── ACTIVITY FEED RENDER ──────────────────────────────────
@@ -4813,7 +4970,7 @@ document.addEventListener('DOMContentLoaded', () => {
       window._auth.signOut().catch(e => console.warn('[Auth] signOut error:', e));
     }
     clearSession();
-    state = Object.assign({}, defaultState);
+    state = freshState();
     state.players = poolForCurrentTournament();
     showLanding();
   }
@@ -4974,10 +5131,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('gameModal')?.addEventListener('click', function (e) { if (e.target.id === 'gameModal') closeGameModal(); });
   document.getElementById('pdcOverlay')?.addEventListener('click', e => { if (e.target.id === 'pdcOverlay') closePDC(); });
   // Standings simulate + reset
-  document.getElementById('simulateBtn')?.addEventListener('click', simulateScores);
-  document.getElementById('resetStatsBtn')?.addEventListener('click', resetStats);
   // Show/hide simulate + reset based on whether live stats are flowing
-  updateStatToolsVisibility();
 
   // Draft undo
   document.getElementById('undoPickBtn')?.addEventListener('click', undoLastPick);
@@ -5092,7 +5246,6 @@ document.addEventListener('DOMContentLoaded', () => {
     state.currentPickIndex = 0;
     state.timerRunning = false;
     state.pickTimerStartedAt = null;
-    state.baselineStats = {};
     state.prevRankings = [];
     state.activityFeed = [];
     // Reset player stats back to data file defaults
@@ -5127,7 +5280,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (e) { }
     }
     clearInterval(timerInterval);
-    state = Object.assign({}, defaultState);
+    state = freshState();
     state.players = poolForCurrentTournament();
     document.getElementById('dissolveModal').style.display = 'none';
     showSplash();
@@ -5162,7 +5315,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // A different user logged in on this device — wipe the previous user's local data
           localStorage.removeItem('mmfantasy-state');
           localStorage.removeItem('mmfantasy-leagues');
-          state = Object.assign({}, defaultState);
+          state = freshState();
           state.players = poolForCurrentTournament();
         }
         if (!sess || differentUser) {
@@ -5893,7 +6046,7 @@ async function leaveCurrentLeague() {
   try { localStorage.removeItem('mmfantasy-code-' + code); } catch (e) { }
 
   if (_leagueUnsubscribe) { _leagueUnsubscribe(); _leagueUnsubscribe = null; }
-  state = Object.assign({}, defaultState);
+  state = freshState();
   state.players = poolForCurrentTournament();
   clearSession();
   showLanding();
@@ -6278,10 +6431,11 @@ function calcProjectedFPTS(managerName) {
     // Try exact match first, then normalized (handles Ole Miss → Mississippi etc.)
     const info = aliveInfo[p.college] || aliveInfo[normalizeName(p.college)];
     if (info && info.gamesRemaining > 0) {
-      // Use baseline stats for projection if simulation has inflated current stats
-      const base = state.baselineStats && state.baselineStats[pid];
-      const statSource = base ? Object.assign({}, p, { stats: base }) : p;
-      const perGame = calcFPTS(statSource);
+      // Multiply the SEASON per-game rate, never p.stats — once the live
+      // feed is running p.stats holds cumulative tournament totals, and
+      // projecting off a running total inflates it by games played.
+      const rate = p.seasonAvg || p.stats;
+      const perGame = calcFPTS(Object.assign({}, p, { stats: rate }));
       const proj = Math.round(perGame * info.gamesRemaining * 10) / 10;
       totalProj += proj;
       alivePlayers.push({ player: p, gamesRemaining: info.gamesRemaining, proj });

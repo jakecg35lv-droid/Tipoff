@@ -5728,3 +5728,134 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
 .pl-title { font-size: 20px; font-weight: 800; color: var(--text); }
 .pl-sub { font-size: 13.5px; color: var(--muted); max-width: 320px; line-height: 1.6; }
 .pl-btn { margin-top: 8px; font-size: 14px; padding: 12px 28px; }
+
+/* ══════════════════════════════════════════════════════════
+   PLAYER QUEUE
+   A ranked shortlist that autopick reads when a timer expires.
+══════════════════════════════════════════════════════════ */
+
+/* Star lives INSIDE the player cell, not as a new grid column —
+   the mobile board is down to four columns and cannot spare one. */
+.q-star {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 17px; line-height: 1;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease, transform .15s ease;
+}
+.q-star:hover { color: var(--gold, #f6a84e); background: rgba(255,255,255,0.06); }
+.q-star:active { transform: scale(0.9); }
+.q-star--on { color: var(--gold, #f6a84e); }
+
+.q-chip {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(246,168,78,0.16);
+  border: 1px solid rgba(246,168,78,0.36);
+  color: var(--gold, #f6a84e);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px; font-weight: 800;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
+}
+
+.queue-panel {
+  margin-top: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 16px);
+  overflow: hidden;
+}
+.queue-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.queue-title { font-size: 14px; font-weight: 800; color: var(--text); }
+.queue-count {
+  display: inline-block;
+  min-width: 20px; padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(246,168,78,0.18);
+  color: var(--gold, #f6a84e);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px; font-weight: 800;
+  text-align: center;
+}
+.queue-count:empty { display: none; }
+.queue-clear {
+  margin-left: auto;
+  min-height: 32px; padding: 0 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-2, rgba(255,255,255,0.14));
+  border-radius: 8px;
+  color: var(--text-2); font-size: 12px; font-weight: 700;
+  cursor: pointer;
+}
+.queue-clear:hover { background: rgba(255,255,255,0.09); color: var(--text); }
+
+.queue-empty {
+  padding: 18px 16px;
+  margin: 0;
+  font-size: 13px; line-height: 1.6;
+  color: var(--muted);
+}
+
+.q-row {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.q-row:last-child { border-bottom: none; }
+/* A queued player who would now make the roster illegal. Still listed —
+   autopick simply skips him — but dimmed so it is not a surprise. */
+.q-row--locked { opacity: 0.45; }
+
+.q-rank {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+  background: rgba(246,168,78,0.14);
+  color: var(--gold, #f6a84e);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px; font-weight: 800;
+}
+.q-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.q-name {
+  font-size: 13.5px; font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.q-meta { font-size: 11.5px; color: var(--muted); }
+
+.q-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.q-btn {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-2);
+  font-size: 10px; line-height: 1;
+  cursor: pointer;
+}
+.q-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); color: var(--text); }
+.q-btn:disabled { opacity: 0.28; cursor: default; }
+.q-btn--x { font-size: 15px; }
+.q-btn--x:hover { color: #f05252; border-color: rgba(240,82,82,0.3); }
+
+@media (max-width: 480px) {
+  /* 44px targets: reordering a queue mid-draft is a panicky, thumb-only
+     action and the arrows are the easiest thing to fat-finger. */
+  .q-btn { width: 40px; height: 40px; }
+  .q-star { width: 40px; height: 40px; font-size: 19px; }
+  .q-row { padding: 9px 12px; gap: 9px; }
+}
