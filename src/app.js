@@ -535,6 +535,9 @@ function navigateTo(page) {
   if (pageEl) { pageEl.style.display = ''; pageEl.classList.add('active-page'); }
   const navBtn = document.querySelector('.nav-btn[data-page="' + page + '"]');
   if (navBtn) navBtn.classList.add('active');
+  // Mobile: the sheet trigger is the only visible nav, so it has to
+  // carry the current page name or there is no orientation at all.
+  try { markNavSheetActive(page); } catch (e) { }
   if (page === 'players') {
     try { renderDraftGrid(); } catch (e) { console.error('renderDraftGrid', e); }
     try { renderDraftFeed(); } catch (e) { console.error('renderDraftFeed', e); }
@@ -4691,6 +4694,154 @@ function renderTutStep() {
 
 // ── HELPERS ───────────────────────────────────────────────
 /* ══════════════════════════════════════════════════════════
+   MOBILE NAV SHEET
+   Nine destinations will not fit across the bottom of a phone at a
+   readable size — the bar had ended up at 9px type with clipped
+   labels. One trigger button opens the whole menu as a vertical
+   sheet instead.
+
+   The tradeoff, stated plainly: every navigation on mobile is now
+   two taps instead of one, and the destinations are no longer
+   visible at a glance. The trigger carries the current page name so
+   people still know where they are.
+══════════════════════════════════════════════════════════ */
+
+const NAV_LABELS = {
+  home: 'Home', players: 'Draft', teams: 'Teams', standings: 'Standings',
+  bracket: 'Bracket', season: 'Season', chat: 'Chat', news: 'News',
+  settings: 'Settings', profile: 'Profile'
+};
+
+let _navSheetOpen = false;
+
+// ── Build the sheet from the sidebar ─────────────────────
+//  Cloning rather than duplicating the markup means adding a page to
+//  the sidebar adds it here too. The Season tab was a live reminder
+//  of how easily two hand-written nav lists drift apart.
+function buildNavSheet() {
+  const host = document.getElementById('navSheetItems');
+  if (!host) return;
+
+  const src = document.querySelectorAll('.sidebar-nav .nav-btn[data-page]');
+  host.innerHTML = '';
+
+  src.forEach(function (btn) {
+    const page = btn.dataset.page;
+    const svg = btn.querySelector('svg');
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'ns-item';
+    item.dataset.page = page;
+    item.innerHTML =
+      '<span class="ns-icon">' + (svg ? svg.outerHTML : '') + '</span>' +
+      '<span class="ns-label">' + esc(NAV_LABELS[page] || page) + '</span>' +
+      '<svg class="ns-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<polyline points="9 18 15 12 9 6" /></svg>';
+    item.addEventListener('click', function () {
+      closeNavSheet();
+      navigateTo(page);
+    });
+    host.appendChild(item);
+  });
+
+  // Profile and Sign Out live in the sidebar footer, not the nav list,
+  // but on mobile the sheet is the only way to reach them.
+  const footer = document.createElement('div');
+  footer.className = 'ns-footer';
+
+  const prof = document.createElement('button');
+  prof.type = 'button';
+  prof.className = 'ns-item ns-item-sub';
+  prof.innerHTML = '<span class="ns-label">View Profile</span>';
+  prof.addEventListener('click', function () { closeNavSheet(); navigateTo('profile'); });
+
+  const out = document.createElement('button');
+  out.type = 'button';
+  out.className = 'ns-item ns-item-sub ns-item-danger';
+  out.innerHTML = '<span class="ns-label">Sign Out</span>';
+  out.addEventListener('click', function () {
+    closeNavSheet();
+    const real = document.getElementById('navSignOutBtn');
+    if (real) real.click();
+  });
+
+  footer.appendChild(prof);
+  footer.appendChild(out);
+  host.appendChild(footer);
+}
+
+function markNavSheetActive(page) {
+  document.querySelectorAll('#navSheetItems .ns-item[data-page]').forEach(function (el) {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+  const label = document.getElementById('mobileNavLabel');
+  if (label) label.textContent = NAV_LABELS[page] || page;
+}
+
+function openNavSheet() {
+  const sheet = document.getElementById('navSheet');
+  const back = document.getElementById('navSheetBackdrop');
+  const btn = document.getElementById('mobileNavBtn');
+  if (!sheet || !back || !btn) return;
+
+  sheet.hidden = false;
+  back.hidden = false;
+  // Next frame so the transition has a start state to animate from.
+  requestAnimationFrame(function () {
+    sheet.classList.add('open');
+    back.classList.add('open');
+  });
+  btn.setAttribute('aria-expanded', 'true');
+  btn.classList.add('open');
+  document.body.classList.add('nav-sheet-open');
+  _navSheetOpen = true;
+}
+
+function closeNavSheet() {
+  const sheet = document.getElementById('navSheet');
+  const back = document.getElementById('navSheetBackdrop');
+  const btn = document.getElementById('mobileNavBtn');
+  if (!sheet || !back || !btn) return;
+
+  sheet.classList.remove('open');
+  back.classList.remove('open');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.classList.remove('open');
+  document.body.classList.remove('nav-sheet-open');
+  _navSheetOpen = false;
+
+  // Wait out the slide before hiding, or it snaps shut.
+  setTimeout(function () {
+    if (!_navSheetOpen) { sheet.hidden = true; back.hidden = true; }
+  }, 300);
+}
+
+function wireNavSheet() {
+  buildNavSheet();
+
+  const btn = document.getElementById('mobileNavBtn');
+  const back = document.getElementById('navSheetBackdrop');
+  if (btn) btn.addEventListener('click', function () {
+    if (_navSheetOpen) closeNavSheet(); else openNavSheet();
+  });
+  if (back) back.addEventListener('click', closeNavSheet);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && _navSheetOpen) { closeNavSheet(); if (btn) btn.focus(); }
+  });
+
+  // Rotating to landscape can cross the breakpoint and leave a sheet
+  // open over a sidebar that is visible again.
+  window.addEventListener('resize', function () {
+    if (window.innerWidth > 768 && _navSheetOpen) closeNavSheet();
+  });
+
+  const active = document.querySelector('.sidebar-nav .nav-btn.active');
+  markNavSheetActive(active ? active.dataset.page : 'home');
+}
+
+/* ══════════════════════════════════════════════════════════
    SEASON HISTORY
    A league keeps one code and one roster of managers all season,
    re-drafting for each tournament. Everything below turns that
@@ -5381,6 +5532,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // duplicate listeners (and fire the confirm dialog N times).
   const _closeOut = document.getElementById('closeOutBtn');
   if (_closeOut) _closeOut.addEventListener('click', closeOutTournament);
+
+  try { wireNavSheet(); } catch (e) { console.warn('wireNavSheet', e); }
 
   // Home grid cards
   document.querySelectorAll('.home-card[data-page]').forEach(card => {

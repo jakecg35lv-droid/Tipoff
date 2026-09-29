@@ -421,6 +421,33 @@
       </div>
     </aside>
 
+    <!-- ── MOBILE NAV ──────────────────────────────────
+         One button at the bottom; the whole menu arrives as a
+         vertical sheet. Hidden on desktop, where the sidebar is
+         always visible. The sheet's contents are cloned from
+         .sidebar-nav at runtime so there is exactly one list of
+         destinations to maintain. -->
+    <button class="mnav-trigger" id="mobileNavBtn" type="button"
+            aria-expanded="false" aria-controls="navSheet" aria-haspopup="menu">
+      <svg class="mnav-burger" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.2" stroke-linecap="round">
+        <line x1="4" y1="7" x2="20" y2="7" />
+        <line x1="4" y1="12" x2="20" y2="12" />
+        <line x1="4" y1="17" x2="20" y2="17" />
+      </svg>
+      <span class="mnav-label" id="mobileNavLabel">Home</span>
+      <svg class="mnav-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="18 15 12 9 6 15" />
+      </svg>
+    </button>
+
+    <div class="nav-sheet-backdrop" id="navSheetBackdrop" hidden></div>
+    <nav class="nav-sheet" id="navSheet" hidden aria-label="Main menu">
+      <div class="nav-sheet-grabber" aria-hidden="true"></div>
+      <div class="nav-sheet-items" id="navSheetItems"></div>
+    </nav>
+
     <!-- MAIN CONTENT -->
     <main class="main-content">
       <!-- Mobile sticky clock bar (hidden on desktop) -->
