@@ -184,7 +184,17 @@ const defaultState = {
   prevRankings: [],
   selectedTournament: null,
   maxManagers: 8,
-  draftScheduledAt: null
+  draftScheduledAt: null,
+
+  // ── Season history ───────────────────────────────────────
+  //  A MAP keyed by tournamentId, deliberately not an array.
+  //  Firestore's merge:true replaces arrays wholesale, so a manager on
+  //  a stale phone writing anything would blow away every tournament
+  //  archived since their last read. Maps merge key by key, so two
+  //  devices can each add a different tournament and both survive.
+  //
+  //  Shape of each entry: see archiveTournamentResult().
+  seasonHistory: {}
 };
 // ── Fresh state, never a shared reference ─────────────────
 //  freshState() is SHALLOW: every copy ends up
@@ -448,6 +458,26 @@ function calcFPTS(player) {
   if (active.includes('blocks')) total += (s.blocks || 0) * (w.blocks || 1);
   return Math.round(total * 10) / 10;
 }
+// ── A manager's total fantasy points ─────────────────────
+//  This function was called in eleven places — the home hero leader,
+//  the right panel, the standings table, the season archive — and
+//  defined in none of them. Every call threw a ReferenceError, and
+//  because renderStandings and renderRightPanel are both wrapped in
+//  try/catch by navigateTo, the whole Standings page rendered blank
+//  with nothing but a console warning to show for it.
+//
+//  It sums calcFPTS across the manager's roster, which is what all
+//  eleven call sites were already assuming it did.
+function managerFPTS(managerName) {
+  let total = 0;
+  Object.keys(state.drafted || {}).forEach(function (pid) {
+    if (state.drafted[pid].manager !== managerName) return;
+    const p = (state.players || []).find(function (x) { return x.id === pid; });
+    if (p) total += calcFPTS(p);
+  });
+  return Math.round(total * 10) / 10;
+}
+
 function managerRoster(managerName) {
   return Object.entries(state.drafted)
     .filter(([, d]) => d.manager === managerName)
@@ -529,6 +559,7 @@ function navigateTo(page) {
     setTimeout(() => { const inp = document.getElementById('chatInput'); if (inp) inp.focus(); }, 100);
   }
   if (page === 'standings') { try { renderStandings(); } catch (e) { console.error('renderStandings', e); } }
+  if (page === 'season') { try { renderSeason(); } catch (e) { console.error('renderSeason', e); } }
   if (page === 'profile') {
     try { renderProfile(); } catch (e) { console.error('renderProfile', e); }
     try { refreshProfilePage(); } catch (e) { console.error('refreshProfilePage', e); }
@@ -550,6 +581,7 @@ function navigateTo(page) {
 //  reads in plain language instead of needing a property filter.
 const PAGE_EVENTS = {
   standings: 'leaderboard_viewed',
+  season:    'season_viewed',
   bracket:   'bracket_viewed',
   news:      'news_viewed',
   teams:     'live_score_viewed',
@@ -3311,9 +3343,23 @@ function setSelectedTournament(tournament) {
     const ok = confirm(
       'Switching from ' + previous.name + ' to ' + tournament.name + ' replaces the entire player pool.\n\n' +
       'All ' + picksMade + ' pick' + (picksMade === 1 ? '' : 's') + ' will be cleared and the draft reset.\n\n' +
+      'Final standings and rosters are saved to Season History first, so ' +
+      previous.name + ' still counts toward the season.\n\n' +
       'Switch anyway?'
     );
     if (!ok) return;
+  }
+
+  // ── Archive BEFORE anything is cleared ───────────────────
+  //  The reset below is what makes switching safe: picks pointing at
+  //  players outside the new pool would be invisible and unscoreable.
+  //  But it also means the outgoing tournament leaves no trace, which
+  //  is exactly what a season-long record cannot afford. Freeze the
+  //  result first, then wipe. Order matters: archiveTournamentResult
+  //  reads state.drafted and state.players.
+  if (changing && picksMade > 0) {
+    try { archiveTournamentResult(previous); }
+    catch (e) { console.warn('[season] archive failed:', e && e.message); }
   }
 
   state.selectedTournament = tournament;
@@ -3345,7 +3391,12 @@ function setSelectedTournament(tournament) {
 
   // Filter player pool to this tournament's teams AND region (see
   // playersForTournament - college alone double-counts shared teams)
-  state.players = playersForTournament(tournament);
+  //  Cloned, not referenced. playersForTournament hands back the very
+  //  objects in window.MM_PLAYERS, so live stat writes would mutate
+  //  data/players.js in memory and leak into every later league in
+  //  this browser session. poolForCurrentTournament already guarded
+  //  this; direct callers must too.
+  state.players = poolForCurrentTournament();
 
   if (!state.players.length) {
     toast('No player pool for ' + tournament.name + ' yet. The field has not been announced.', 'error');
@@ -4639,6 +4690,321 @@ function renderTutStep() {
 }
 
 // ── HELPERS ───────────────────────────────────────────────
+/* ══════════════════════════════════════════════════════════
+   SEASON HISTORY
+   A league keeps one code and one roster of managers all season,
+   re-drafting for each tournament. Everything below turns that
+   sequence of one-off drafts into a season-long record.
+
+   Season champion = most tournament titles, cumulative fantasy
+   points as the tiebreak.
+══════════════════════════════════════════════════════════ */
+
+// ── Which school actually won the tournament ─────────────
+//  Best effort only. Returns a school name when the bracket has a
+//  single region whose final round produced exactly one winner; null
+//  for multi-region formats (NCAA) or an unfinished bracket. Never
+//  throws, because it runs inside the archive path.
+function tournamentWinningSchool() {
+  try {
+    const bs = getBracketState();
+    if (!bs || !bs.regions) return null;
+    const names = Object.keys(bs.regions);
+    if (names.length !== 1) return null;          // multi-region: no single final here
+    const rounds = bs.regions[names[0]] || [];
+    const last = rounds[rounds.length - 1];
+    if (!last || last.length !== 1) return null;
+    return last[0] || null;
+  } catch (e) { return null; }
+}
+
+// ── Freeze the current tournament into the season record ──
+//  Called when a tournament is closed out, or when the commissioner
+//  switches away from one that had picks. Keyed by tournament id, so
+//  re-archiving the same event replaces its entry rather than
+//  creating a duplicate — that makes it safe to call more than once.
+//
+//  Rosters are stored by value, not by player id. Player ids are
+//  stable but data/players.js gets regenerated between events, and a
+//  season record that silently loses a player when the file changes
+//  is worse than no record at all.
+function archiveTournamentResult(tournament) {
+  const t = tournament || state.selectedTournament;
+  if (!t || !t.id) return null;
+
+  const managers = (state.managers || []).filter(Boolean);
+  if (!managers.length) return null;
+
+  const picks = Object.keys(state.drafted || {}).length;
+  if (!picks) return null;                        // nothing happened; nothing to record
+
+  const results = managers.map(function (m) {
+    return {
+      manager: m,
+      fpts: managerFPTS(m),
+      cats: {
+        pts: calcManagerCat(m, 'points'),
+        reb: calcManagerCat(m, 'rebounds'),
+        ast: calcManagerCat(m, 'assists'),
+        stl: calcManagerCat(m, 'steals'),
+        blk: calcManagerCat(m, 'blocks')
+      },
+      roster: managerRoster(m).map(function (p) {
+        return {
+          id: p.id, name: p.name, college: p.college,
+          position: p.position, fpts: calcFPTS(p)
+        };
+      })
+    };
+  }).sort(function (a, b) { return b.fpts - a.fpts; });
+
+  results.forEach(function (r, i) { r.rank = i + 1; });
+
+  const record = {
+    tournamentId: t.id,
+    tournamentName: t.name || t.id,
+    dates: t.dates || '',
+    location: t.location || '',
+    completedAt: Date.now(),
+    champion: results[0] ? results[0].manager : null,
+    championFpts: results[0] ? results[0].fpts : 0,
+    winningSchool: tournamentWinningSchool(),
+    picksMade: picks,
+    results: results
+  };
+
+  if (!state.seasonHistory || typeof state.seasonHistory !== 'object' ||
+      Array.isArray(state.seasonHistory)) {
+    state.seasonHistory = {};                     // repair old/corrupt shapes
+  }
+  state.seasonHistory[t.id] = record;
+
+  addActivity(record.champion
+    ? esc(record.champion) + ' wins ' + esc(record.tournamentName) + ' (' + record.championFpts + ' FPTS)'
+    : esc(record.tournamentName) + ' closed out');
+
+  try {
+    track('tournament_completed', {
+      tournament: t.id,
+      managers: managers.length,
+      picks: picks
+    });
+  } catch (e) { }
+
+  return record;
+}
+
+// ── Completed tournaments, newest first ──────────────────
+function seasonRecords() {
+  const h = state.seasonHistory;
+  if (!h || typeof h !== 'object' || Array.isArray(h)) return [];
+  return Object.keys(h)
+    .map(function (k) { return h[k]; })
+    .filter(function (r) { return r && r.tournamentId; })
+    .sort(function (a, b) { return (b.completedAt || 0) - (a.completedAt || 0); });
+}
+
+// ── Season standings ─────────────────────────────────────
+//  Titles first, cumulative points as the tiebreak.
+//
+//  Built from everyone who appears in ANY archived tournament, unioned
+//  with the current roster. A manager who played the November events
+//  and then left the league still keeps their titles; someone who
+//  joined in December shows up with zero rather than being absent.
+function seasonStandings() {
+  const recs = seasonRecords();
+  const agg = {};
+
+  function slot(name) {
+    if (!agg[name]) {
+      agg[name] = {
+        manager: name, titles: 0, podiums: 0, events: 0,
+        fpts: 0, best: null, finishes: []
+      };
+    }
+    return agg[name];
+  }
+
+  (state.managers || []).filter(Boolean).forEach(slot);
+
+  recs.forEach(function (r) {
+    (r.results || []).forEach(function (row) {
+      const a = slot(row.manager);
+      a.events += 1;
+      a.fpts += row.fpts || 0;
+      a.finishes.push(row.rank);
+      if (row.rank === 1) a.titles += 1;
+      if (row.rank <= 3) a.podiums += 1;
+      if (a.best === null || row.rank < a.best) a.best = row.rank;
+    });
+  });
+
+  return Object.keys(agg).map(function (k) {
+    const a = agg[k];
+    a.fpts = Math.round(a.fpts * 10) / 10;
+    a.avgFinish = a.finishes.length
+      ? Math.round((a.finishes.reduce(function (s, n) { return s + n; }, 0) / a.finishes.length) * 10) / 10
+      : null;
+    return a;
+  }).sort(function (a, b) {
+    if (b.titles !== a.titles) return b.titles - a.titles;
+    return b.fpts - a.fpts;
+  });
+}
+
+// ── Commissioner: close out the current tournament ───────
+//  The explicit path. Switching tournaments archives automatically,
+//  but a league that plays one event and stops would otherwise never
+//  record it.
+function closeOutTournament() {
+  if (!isCommissioner()) { toast('Only the commissioner can close out a tournament.', 'error'); return; }
+  const t = state.selectedTournament;
+  if (!t) { toast('No tournament selected.', 'error'); return; }
+  if (!Object.keys(state.drafted || {}).length) { toast('No picks have been made yet.', 'error'); return; }
+
+  const already = state.seasonHistory && state.seasonHistory[t.id];
+  const ok = confirm(
+    (already ? 'Re-record ' : 'Close out ') + t.name + '?\n\n' +
+    'Final standings and every roster are saved to Season History' +
+    (already ? ', replacing the result already on file.' : '.') + '\n\n' +
+    'The draft stays exactly as it is. Nothing is deleted.'
+  );
+  if (!ok) return;
+
+  const rec = archiveTournamentResult(t);
+  if (!rec) { toast('Nothing to record yet.', 'error'); return; }
+
+  saveState();
+  render();
+  toast(rec.champion
+    ? rec.champion + ' wins ' + rec.tournamentName + '.'
+    : rec.tournamentName + ' recorded.', 'success');
+  navigateTo('season');
+}
+
+// ── Season page ──────────────────────────────────────────
+function renderSeason() {
+  const wrap = document.getElementById('seasonPage');
+  if (!wrap) return;
+
+  const standingsEl = wrap.querySelector('#seasonStandingsList');
+  const caseEl = wrap.querySelector('#seasonTrophyCase');
+  const metaEl = wrap.querySelector('#seasonMeta');
+  const recs = seasonRecords();
+  const session = getSession();
+  const me = session ? session.name : null;
+
+  if (metaEl) {
+    metaEl.textContent = recs.length
+      ? recs.length + ' tournament' + (recs.length === 1 ? '' : 's') + ' completed'
+      : 'No tournaments completed yet';
+  }
+
+  // ── Season standings ───────────────────────────────────
+  if (standingsEl) {
+    if (!recs.length) {
+      standingsEl.innerHTML =
+        '<div class="season-empty">' +
+        '<div class="season-empty-icon">&#127942;</div>' +
+        '<h4>Your season starts with the first tournament</h4>' +
+        '<p>Finish a draft, then have the commissioner close out the tournament. ' +
+        'The champion and every roster get saved here for the rest of the season.</p>' +
+        '</div>';
+    } else {
+      const rows = seasonStandings();
+      const medal = ['rank-gold', 'rank-silver', 'rank-bronze'];
+      standingsEl.innerHTML = rows.map(function (r, i) {
+        const badge = i < 3
+          ? '<span class="rank-medal ' + medal[i] + '">' + (i + 1) + '</span>'
+          : '<span class="rank-num">' + (i + 1) + '</span>';
+        const trophies = r.titles > 0
+          ? '<span class="season-trophies" title="' + r.titles + ' title' + (r.titles === 1 ? '' : 's') + '">' +
+            new Array(Math.min(r.titles, 5) + 1).join('&#127942;') +
+            (r.titles > 5 ? ' x' + r.titles : '') + '</span>'
+          : '<span class="season-trophies season-trophies-none">-</span>';
+        return '<div class="season-row' + (r.manager === me ? ' current-user' : '') + '">' +
+          '<span class="sr-rank">' + badge + '</span>' +
+          '<span class="sr-name">' + esc(r.manager) + '</span>' +
+          '<span class="ss-trophies">' + trophies + '</span>' +
+          '<span class="ss-num">' + r.titles + '</span>' +
+          '<span class="ss-num">' + r.podiums + '</span>' +
+          '<span class="ss-num">' + r.events + '</span>' +
+          '<span class="ss-num ss-pts">' + r.fpts + '</span>' +
+          '<span class="ss-num">' + (r.avgFinish === null ? '-' : r.avgFinish) + '</span>' +
+          '</div>';
+      }).join('');
+    }
+  }
+
+  // ── Trophy case ────────────────────────────────────────
+  if (caseEl) {
+    caseEl.innerHTML = recs.map(function (r) {
+      const podium = (r.results || []).slice(0, 3).map(function (row, i) {
+        return '<div class="tc-podium-row tc-p' + (i + 1) + '">' +
+          '<span class="tc-pos">' + (i + 1) + '</span>' +
+          '<span class="tc-mgr">' + esc(row.manager) + '</span>' +
+          '<span class="tc-fpts">' + row.fpts + '</span>' +
+          '</div>';
+      }).join('');
+
+      const full = (r.results || []).map(function (row) {
+        const roster = (row.roster || []).map(function (p) {
+          return '<li><span class="tc-pl-name">' + esc(p.name) + '</span>' +
+            '<span class="tc-pl-team">' + esc(p.college || '') + '</span>' +
+            '<span class="tc-pl-fpts">' + p.fpts + '</span></li>';
+        }).join('');
+        return '<div class="tc-full-row">' +
+          '<div class="tc-full-head"><span class="tc-full-rank">' + row.rank + '</span>' +
+          '<span class="tc-full-mgr">' + esc(row.manager) + '</span>' +
+          '<span class="tc-full-fpts">' + row.fpts + ' FPTS</span></div>' +
+          (roster ? '<ul class="tc-roster">' + roster + '</ul>' : '') +
+          '</div>';
+      }).join('');
+
+      return '<article class="trophy-card" data-tid="' + esc(r.tournamentId) + '">' +
+        '<header class="tc-head">' +
+        '<div class="tc-title"><h4>' + esc(r.tournamentName) + '</h4>' +
+        '<span class="tc-dates">' + esc(r.dates || '') + '</span></div>' +
+        (r.winningSchool ? '<span class="tc-school" title="Tournament winner">' + esc(r.winningSchool) + '</span>' : '') +
+        '</header>' +
+        '<div class="tc-champ">' +
+        '<span class="tc-champ-icon">&#127942;</span>' +
+        '<div><span class="tc-champ-label">Champion</span>' +
+        '<span class="tc-champ-name">' + esc(r.champion || '--') + '</span></div>' +
+        '<span class="tc-champ-fpts">' + r.championFpts + '<small>FPTS</small></span>' +
+        '</div>' +
+        '<div class="tc-podium">' + podium + '</div>' +
+        '<button class="tc-toggle" type="button">Full results &amp; rosters</button>' +
+        '<div class="tc-full" hidden>' + full + '</div>' +
+        '</article>';
+    }).join('');
+
+    caseEl.querySelectorAll('.tc-toggle').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const panel = btn.parentElement.querySelector('.tc-full');
+        if (!panel) return;
+        const open = !panel.hidden;
+        panel.hidden = open;
+        btn.textContent = open ? 'Full results & rosters' : 'Hide results';
+        btn.classList.toggle('open', !open);
+      });
+    });
+  }
+
+  // ── Close-out button, commissioner only ────────────────
+  const closeBtn = wrap.querySelector('#closeOutBtn');
+  if (closeBtn) {
+    const t = state.selectedTournament;
+    const picks = Object.keys(state.drafted || {}).length;
+    const show = isCommissioner() && t && picks > 0;
+    closeBtn.style.display = show ? '' : 'none';
+    if (show) {
+      const done = state.seasonHistory && state.seasonHistory[t.id];
+      closeBtn.textContent = done ? 'Re-record ' + t.name : 'Close out ' + t.name;
+    }
+  }
+}
+
 function esc(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -4997,6 +5363,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.nav-btn[data-page]').forEach(btn => {
     btn.addEventListener('click', () => navigateTo(btn.dataset.page));
   });
+
+  // Season: commissioner close-out. Bound once here rather than in
+  // renderSeason, which reruns on every navigation and would stack
+  // duplicate listeners (and fire the confirm dialog N times).
+  const _closeOut = document.getElementById('closeOutBtn');
+  if (_closeOut) _closeOut.addEventListener('click', closeOutTournament);
 
   // Home grid cards
   document.querySelectorAll('.home-card[data-page]').forEach(card => {

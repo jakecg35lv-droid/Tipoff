@@ -53,6 +53,7 @@
     news_viewed:            1,
     session_after_elimination: 1,
     tournament_completed:   1,
+    season_viewed:          1,
 
     // Retention plumbing
     app_returned:           1,

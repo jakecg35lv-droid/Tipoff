@@ -378,6 +378,13 @@
           </svg>
           Bracket
         </button>
+        <button class="nav-btn" data-page="season">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z" />
+            <path d="M7 6H5a2 2 0 0 0 0 4h2M17 6h2a2 2 0 0 1 0 4h-2" />
+          </svg>
+          Season
+        </button>
         <button class="nav-btn" data-page="chat">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -792,6 +799,32 @@
           </div>
           <div id="projList" class="proj-list"></div>
         </div>
+      </section>
+
+      <!-- ── SEASON ─────────────────────────────────── -->
+      <section id="seasonPage" class="page" style="display:none;">
+        <div class="page-header">
+          <div>
+            <h2>Season</h2>
+            <span class="page-sub" id="seasonMeta"></span>
+          </div>
+          <button class="btn btn-primary" id="closeOutBtn" type="button" style="display:none;"></button>
+        </div>
+
+        <div class="season-standings-header">
+          <span class="sh-rank">Rank</span>
+          <span class="sh-name">Manager</span>
+          <span class="ss-trophies">Titles</span>
+          <span class="ss-num">W</span>
+          <span class="ss-num">Top 3</span>
+          <span class="ss-num">Events</span>
+          <span class="ss-num ss-pts">FPTS</span>
+          <span class="ss-num">Avg</span>
+        </div>
+        <div id="seasonStandingsList" class="season-standings-list"></div>
+
+        <h3 class="season-section-title">Trophy Case</h3>
+        <div id="seasonTrophyCase" class="trophy-case"></div>
       </section>
 
       <!-- ── BRACKET ────────────────────────────────── -->

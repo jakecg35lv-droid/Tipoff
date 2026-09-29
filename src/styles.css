@@ -5859,3 +5859,187 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
   .q-star { width: 40px; height: 40px; font-size: 19px; }
   .q-row { padding: 9px 12px; gap: 9px; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   SEASON  —  standings + trophy case
+   Every class here is prefixed season-/ss-/tc- and was grepped
+   against the whole sheet before being used. The How It Works
+   page broke once because .steps was reused; not again.
+══════════════════════════════════════════════════════════ */
+
+.page-sub {
+  display: block; margin-top: 2px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+/* ── Season standings table ───────────────────────────── */
+.season-standings-header,
+.season-row {
+  display: grid;
+  grid-template-columns: 42px 1fr 96px 40px 52px 52px 76px 46px;
+  align-items: center; gap: 6px; padding: 12px 20px;
+}
+.season-standings-header {
+  font-size: 10px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.07em;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.season-standings-list {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  overflow: hidden;
+}
+.season-row {
+  border-bottom: 1px solid var(--border);
+  font-size: 14px; color: var(--text-2);
+  transition: background 0.14s;
+}
+.season-row:last-child { border-bottom: none; }
+.season-row:hover { background: rgba(255,255,255,0.025); }
+.season-row.current-user { background: rgba(242,107,33,0.06); }
+.season-row.current-user .sr-name { color: var(--blue-light); font-weight: 700; }
+
+.ss-num  { text-align: right; font-variant-numeric: tabular-nums; }
+.ss-pts  { font-weight: 700; color: var(--text); }
+.ss-trophies { text-align: left; font-size: 13px; letter-spacing: -1px; }
+.season-trophies-none { color: var(--muted); letter-spacing: 0; }
+
+/* ── Empty state ──────────────────────────────────────── */
+.season-empty { padding: 40px 24px; text-align: center; }
+.season-empty-icon { font-size: 34px; opacity: 0.55; margin-bottom: 10px; }
+.season-empty h4 {
+  margin: 0 0 6px; font-size: 15px; font-weight: 700; color: var(--text);
+}
+.season-empty p {
+  margin: 0 auto; max-width: 400px;
+  font-size: 13px; line-height: 1.55; color: var(--muted);
+}
+
+/* ── Trophy case ──────────────────────────────────────── */
+.season-section-title {
+  margin: 28px 0 12px;
+  font-size: 12px; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.trophy-case {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+}
+.trophy-card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 16px;
+  transition: border-color 0.16s, transform 0.16s;
+}
+.trophy-card:hover { border-color: rgba(246,197,78,0.35); transform: translateY(-1px); }
+
+.tc-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px;
+}
+.tc-title h4 { margin: 0; font-size: 15px; font-weight: 800; color: var(--text); }
+.tc-dates { font-size: 11px; color: var(--muted); }
+.tc-school {
+  flex-shrink: 0; padding: 3px 8px; border-radius: 999px;
+  background: rgba(246,197,78,0.12); color: var(--gold);
+  border: 1px solid rgba(246,197,78,0.28);
+  font-size: 10px; font-weight: 800; letter-spacing: 0.03em;
+}
+
+.tc-champ {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px; margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(246,197,78,0.10), rgba(246,197,78,0.02));
+  border: 1px solid rgba(246,197,78,0.22);
+  border-radius: var(--radius-sm);
+}
+.tc-champ-icon { font-size: 22px; line-height: 1; }
+.tc-champ-label {
+  display: block; font-size: 9px; font-weight: 800; color: var(--gold);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.tc-champ-name { display: block; font-size: 16px; font-weight: 800; color: var(--text); }
+.tc-champ-fpts {
+  margin-left: auto; text-align: right;
+  font-size: 19px; font-weight: 800; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.tc-champ-fpts small {
+  display: block; font-size: 9px; font-weight: 700; color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+.tc-podium { display: grid; gap: 4px; margin-bottom: 12px; }
+.tc-podium-row {
+  display: grid; grid-template-columns: 22px 1fr auto;
+  align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 6px;
+  font-size: 13px; color: var(--text-2);
+  background: rgba(255,255,255,0.02);
+}
+.tc-pos {
+  width: 18px; height: 18px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 800;
+  background: rgba(255,255,255,0.06); color: var(--muted);
+}
+.tc-p1 .tc-pos { background: rgba(246,197,78,0.2);  color: var(--gold); }
+.tc-p2 .tc-pos { background: rgba(192,200,220,0.16); color: #c0c8dc; }
+.tc-p3 .tc-pos { background: rgba(180,105,60,0.18);  color: #d08a5a; }
+.tc-mgr { font-weight: 600; }
+.tc-fpts { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text); }
+
+.tc-toggle {
+  width: 100%; padding: 9px; min-height: 40px;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer;
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  transition: color 0.14s, border-color 0.14s;
+}
+.tc-toggle:hover, .tc-toggle.open { color: var(--text); border-color: rgba(255,255,255,0.22); }
+
+.tc-full { margin-top: 12px; display: grid; gap: 10px; }
+.tc-full-row {
+  padding: 10px; border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+}
+.tc-full-head {
+  display: grid; grid-template-columns: 22px 1fr auto;
+  align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.tc-full-rank { font-size: 11px; font-weight: 800; color: var(--muted); }
+.tc-full-mgr  { font-size: 13px; font-weight: 700; color: var(--text); }
+.tc-full-fpts { font-size: 11px; font-weight: 700; color: var(--muted); }
+.tc-roster { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.tc-roster li {
+  display: grid; grid-template-columns: 1fr auto 46px;
+  gap: 8px; align-items: center;
+  font-size: 12px; color: var(--text-2);
+  padding: 3px 0; border-top: 1px solid rgba(255,255,255,0.04);
+}
+.tc-pl-name { font-weight: 600; }
+.tc-pl-team { font-size: 10px; color: var(--muted); }
+.tc-pl-fpts { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+
+/* ── Mobile ───────────────────────────────────────────── */
+@media (max-width: 700px) {
+  /* Drop Top 3 and Avg; eight numeric columns do not fit a phone. */
+  .season-standings-header,
+  .season-row { grid-template-columns: 34px 1fr 30px 44px 64px; padding: 11px 12px; gap: 5px; }
+  .season-standings-header .ss-trophies,
+  .season-row .ss-trophies { display: none; }
+  .season-standings-header > .ss-num:nth-of-type(2),
+  .season-row > .ss-num:nth-of-type(2),
+  .season-standings-header > .ss-num:last-child,
+  .season-row > .ss-num:last-child { display: none; }
+
+  .trophy-case { grid-template-columns: 1fr; }
+  .trophy-card { padding: 14px; }
+  .tc-champ-name { font-size: 15px; }
+  .tc-champ-fpts { font-size: 17px; }
+  .tc-roster li { grid-template-columns: 1fr auto 40px; }
+}
