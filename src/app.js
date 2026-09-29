@@ -4900,6 +4900,18 @@ function renderSeason() {
       : 'No tournaments completed yet';
   }
 
+  // ── Hide furniture that has nothing to describe ─────────
+  //  Column headers above an empty table, and a "Trophy Case"
+  //  heading over blank space, both read as something failing to
+  //  load. An empty page should look deliberate.
+  const empty = !recs.length;
+  const hdr = wrap.querySelector('.season-standings-header');
+  if (hdr) hdr.style.display = empty ? 'none' : '';
+  const caseTitle = wrap.querySelector('.season-section-title');
+  if (caseTitle) caseTitle.style.display = empty ? 'none' : '';
+  const table = wrap.querySelector('.season-table');
+  if (table) table.classList.toggle('is-empty', empty);
+
   // ── Season standings ───────────────────────────────────
   if (standingsEl) {
     if (!recs.length) {
@@ -4925,12 +4937,12 @@ function renderSeason() {
         return '<div class="season-row' + (r.manager === me ? ' current-user' : '') + '">' +
           '<span class="sr-rank">' + badge + '</span>' +
           '<span class="sr-name">' + esc(r.manager) + '</span>' +
-          '<span class="ss-trophies">' + trophies + '</span>' +
+          '<span class="ss-trophies ss-hide-sm">' + trophies + '</span>' +
           '<span class="ss-num">' + r.titles + '</span>' +
-          '<span class="ss-num">' + r.podiums + '</span>' +
+          '<span class="ss-num ss-hide-sm">' + r.podiums + '</span>' +
           '<span class="ss-num">' + r.events + '</span>' +
           '<span class="ss-num ss-pts">' + r.fpts + '</span>' +
-          '<span class="ss-num">' + (r.avgFinish === null ? '-' : r.avgFinish) + '</span>' +
+          '<span class="ss-num ss-hide-sm">' + (r.avgFinish === null ? '-' : r.avgFinish) + '</span>' +
           '</div>';
       }).join('');
     }

@@ -5874,66 +5874,114 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
 }
 
 /* ── Season standings table ───────────────────────────── */
+/*  One panel, not a floating header over a separate list.
+    The manager column is capped rather than pure 1fr: at 1fr it
+    swallowed every spare pixel on a desktop and pushed the numeric
+    columns into the middle of the row with a canyon of dead space
+    before them. */
+.season-table {
+  max-width: 940px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0.008));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+.season-table.is-empty { background: none; }
+
 .season-standings-header,
 .season-row {
   display: grid;
-  grid-template-columns: 42px 1fr 96px 40px 52px 52px 76px 46px;
-  align-items: center; gap: 6px; padding: 12px 20px;
+  grid-template-columns: 52px minmax(120px, 1.6fr) 104px 52px 62px 66px 88px 58px;
+  align-items: center; gap: 4px; padding: 13px 22px;
 }
 .season-standings-header {
   font-size: 10px; font-weight: 700; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.07em;
+  text-transform: uppercase; letter-spacing: 0.08em;
   border-bottom: 1px solid var(--border);
-  background: rgba(255,255,255,0.02);
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: rgba(255,255,255,0.022);
 }
-.season-standings-list {
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-  overflow: hidden;
-}
+.season-standings-list { background: none; }
+
 .season-row {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255,255,255,0.045);
   font-size: 14px; color: var(--text-2);
-  transition: background 0.14s;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+  animation: seasonRowIn 0.34s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
+.season-row:nth-child(1) { animation-delay: 0.02s; }
+.season-row:nth-child(2) { animation-delay: 0.06s; }
+.season-row:nth-child(3) { animation-delay: 0.10s; }
+.season-row:nth-child(4) { animation-delay: 0.14s; }
+.season-row:nth-child(5) { animation-delay: 0.18s; }
+.season-row:nth-child(n+6) { animation-delay: 0.22s; }
 .season-row:last-child { border-bottom: none; }
-.season-row:hover { background: rgba(255,255,255,0.025); }
-.season-row.current-user { background: rgba(242,107,33,0.06); }
+.season-row:hover { background: rgba(255,255,255,0.03); }
+.season-row.current-user {
+  background: rgba(242,107,33,0.055);
+  box-shadow: inset 3px 0 0 var(--orange, #f26b21);
+}
 .season-row.current-user .sr-name { color: var(--blue-light); font-weight: 700; }
 
-.ss-num  { text-align: right; font-variant-numeric: tabular-nums; }
+@keyframes seasonRowIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .season-row { animation: none; }
+}
+
+.ss-num  { text-align: right; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .ss-pts  { font-weight: 700; color: var(--text); }
-.ss-trophies { text-align: left; font-size: 13px; letter-spacing: -1px; }
+.ss-trophies { text-align: left; font-size: 13px; letter-spacing: -2px; }
 .season-trophies-none { color: var(--muted); letter-spacing: 0; }
 
 /* ── Empty state ──────────────────────────────────────── */
-.season-empty { padding: 40px 24px; text-align: center; }
-.season-empty-icon { font-size: 34px; opacity: 0.55; margin-bottom: 10px; }
+/*  Was a 40px-padded slab inside a bordered panel, which on a wide
+    screen rendered as a huge empty box. Now it is quiet text on the
+    page with no frame around it. */
+.season-empty { padding: 44px 24px 48px; text-align: center; }
+.season-empty-icon {
+  font-size: 30px; margin-bottom: 14px;
+  opacity: 0.4;
+  filter: grayscale(0.3);
+  animation: seasonTrophyIn 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+@keyframes seasonTrophyIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.94); }
+  to   { opacity: 0.4; transform: none; }
+}
 .season-empty h4 {
-  margin: 0 0 6px; font-size: 15px; font-weight: 700; color: var(--text);
+  margin: 0 0 8px; font-size: 16px; font-weight: 700;
+  color: var(--text); letter-spacing: -0.01em;
 }
 .season-empty p {
-  margin: 0 auto; max-width: 400px;
-  font-size: 13px; line-height: 1.55; color: var(--muted);
+  margin: 0 auto; max-width: 380px;
+  font-size: 13px; line-height: 1.65; color: var(--muted);
 }
 
 /* ── Trophy case ──────────────────────────────────────── */
 .season-section-title {
-  margin: 28px 0 12px;
-  font-size: 12px; font-weight: 800; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.1em;
+  margin: 34px 0 14px;
+  font-size: 11px; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.12em;
 }
 .trophy-case {
-  display: grid; gap: 14px;
+  display: grid; gap: 16px;
   grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
 }
 .trophy-card {
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 16px;
-  transition: border-color 0.16s, transform 0.16s;
+  background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.006));
+  border: 1px solid var(--border);
+  border-radius: 14px; padding: 18px;
+  transition: border-color 0.22s ease, transform 0.22s cubic-bezier(0.22,0.61,0.36,1),
+              box-shadow 0.22s ease;
 }
-.trophy-card:hover { border-color: rgba(246,197,78,0.35); transform: translateY(-1px); }
+.trophy-card:hover {
+  border-color: rgba(246,197,78,0.32);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px -12px rgba(0,0,0,0.6);
+}
 
 .tc-head {
   display: flex; align-items: flex-start; justify-content: space-between;
@@ -6001,7 +6049,15 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
 }
 .tc-toggle:hover, .tc-toggle.open { color: var(--text); border-color: rgba(255,255,255,0.22); }
 
-.tc-full { margin-top: 12px; display: grid; gap: 10px; }
+.tc-full {
+  margin-top: 12px; display: grid; gap: 10px;
+  animation: tcFullIn 0.26s cubic-bezier(0.22,0.61,0.36,1) both;
+}
+@keyframes tcFullIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .tc-full { animation: none; } }
 .tc-full-row {
   padding: 10px; border-radius: 8px;
   background: rgba(255,255,255,0.02);
@@ -6027,15 +6083,17 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
 
 /* ── Mobile ───────────────────────────────────────────── */
 @media (max-width: 700px) {
-  /* Drop Top 3 and Avg; eight numeric columns do not fit a phone. */
+  /*  Drop Titles, Top 3 and Avg: eight columns do not fit a phone.
+      Marked with .ss-hide-sm in the markup rather than selected
+      positionally — :nth-of-type counts SPANS, not elements carrying
+      the class, so the positional version hid the wrong cells. */
   .season-standings-header,
-  .season-row { grid-template-columns: 34px 1fr 30px 44px 64px; padding: 11px 12px; gap: 5px; }
-  .season-standings-header .ss-trophies,
-  .season-row .ss-trophies { display: none; }
-  .season-standings-header > .ss-num:nth-of-type(2),
-  .season-row > .ss-num:nth-of-type(2),
-  .season-standings-header > .ss-num:last-child,
-  .season-row > .ss-num:last-child { display: none; }
+  .season-row {
+    grid-template-columns: 38px minmax(0,1fr) 34px 50px 68px;
+    padding: 12px 14px; gap: 6px;
+  }
+  .ss-hide-sm { display: none; }
+  .season-table { border-radius: 12px; }
 
   .trophy-case { grid-template-columns: 1fr; }
   .trophy-card { padding: 14px; }
