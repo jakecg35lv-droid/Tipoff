@@ -5362,7 +5362,6 @@ var _newsFetching = false;
 
 function renderNews(forceRefresh) {
   var feed = document.getElementById('newsFeed');
-  var subtitle = document.getElementById('newsSubtitle');
   var refreshBtn = document.getElementById('newsRefreshBtn');
 
   if (!feed) return;
@@ -5373,11 +5372,10 @@ function renderNews(forceRefresh) {
     refreshBtn.addEventListener('click', function () { renderNews(true); });
   }
 
-  // Update subtitle
-  var t = state.selectedTournament;
-  if (subtitle) {
-    subtitle.textContent = (t && t.name) ? t.name : 'College Basketball';
-  }
+  // No subtitle. The feed is league-wide college basketball, so
+  // labelling it with the league's selected tournament promised a
+  // filter that was never applied — a Maui league saw Maui in the
+  // header and DePaul coaching news underneath.
 
   // Use cache unless forced
   if (_newsCache && !forceRefresh) {

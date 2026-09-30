@@ -2774,15 +2774,6 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
   align-items: center;
   justify-content: space-between;
 }
-.news-subtitle {
-  display: block;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-top: 2px;
-}
 .news-refresh-btn {
   background: var(--panel-solid);
   border: 1px solid var(--border);
