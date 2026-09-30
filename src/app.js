@@ -1480,6 +1480,9 @@ function renderHome() {
   // Ring progress initial render
   updateRingProgress();
 
+  // Swaps itself in for the hero card once the draft is done.
+  try { renderMyTeamCard(); } catch (e) { console.warn('renderMyTeamCard', e); }
+
   // Dynamic home card subtexts: live data on each re-render
   try {
     const chatUnread = (() => {
@@ -3042,6 +3045,10 @@ function listenToGameScores() {
       });
       try { renderLiveScores(); } catch (e) { console.warn('renderLiveScores', e); }
       try { applyAutoAdvance(); } catch (e) { console.warn('applyAutoAdvance', e); }
+      // The My Team card carries live scores and alive/out state, both
+      // of which this snapshot just changed. applyAutoAdvance runs
+      // first so elimination is current before the card reads it.
+      try { renderMyTeamCard(); } catch (e) { console.warn('renderMyTeamCard', e); }
     }, function (e) { console.warn('[Games] snapshot error:', e.message); });
 }
 
@@ -4694,6 +4701,143 @@ function renderTutStep() {
 
 // ── HELPERS ───────────────────────────────────────────────
 /* ══════════════════════════════════════════════════════════
+   MY TEAM CARD
+   Once the draft is complete the On the Clock hero has nothing left
+   to say: it showed "Draft Complete" beside a stopped clock reading
+   "-", plus commissioner buttons that no longer do anything, for the
+   entire length of the tournament. This takes that slot instead.
+══════════════════════════════════════════════════════════ */
+
+// How many roster rows the card shows before collapsing to a count.
+// Eight fits a desktop column; on a phone it would double the card's
+// height and push the stat tiles off screen.
+const MT_ROWS_DESKTOP = 8;
+const MT_ROWS_MOBILE = 5;
+
+// A player's live game, if one of their school's games is in progress.
+function liveGameForSchool(school) {
+  if (!school) return null;
+  const norm = normalizeName(school);
+  return liveGamesList().find(function (g) {
+    if (g.state !== 'in') return false;
+    const names = [g.home && g.home.school, g.away && g.away.school];
+    return names.some(function (n) {
+      return n && (n === school || normalizeName(n) === norm);
+    });
+  }) || null;
+}
+
+function renderMyTeamCard() {
+  const card = document.getElementById('myTeamCard');
+  const hero = document.querySelector('.home-hero-card');
+  if (!card) return;
+
+  const session = getSession();
+  const me = session ? session.name : null;
+  const show = isDraftComplete() && me && managerRoster(me).length > 0;
+
+  // Only one of the two occupies the slot, never both and never neither.
+  card.style.display = show ? '' : 'none';
+  if (hero) hero.style.display = show ? 'none' : '';
+  if (!show) return;
+
+  const alive = getAliveTeamsInfo() || {};
+  const isAlive = function (college) {
+    return !!(alive[college] || alive[normalizeName(college)]);
+  };
+
+  const roster = managerRoster(me).map(function (p) {
+    const game = liveGameForSchool(p.college);
+    return {
+      name: p.name,
+      college: p.college,
+      position: p.position,
+      fpts: calcFPTS(p),
+      alive: isAlive(p.college),
+      game: game
+    };
+  });
+
+  // Live first, then alive, then eliminated; points break ties inside
+  // each band. Someone checking mid-game wants the guys on the floor.
+  const band = function (r) { return r.game ? 0 : (r.alive ? 1 : 2); };
+  roster.sort(function (a, b) { return band(a) - band(b) || b.fpts - a.fpts; });
+
+  // Identity
+  const nameEl = document.getElementById('mtName');
+  if (nameEl) nameEl.textContent = me;
+
+  const ranked = state.managers.slice().sort(function (a, b) { return managerFPTS(b) - managerFPTS(a); });
+  const myRank = ranked.indexOf(me) + 1;
+  const rankEl = document.getElementById('mtRank');
+  if (rankEl) {
+    rankEl.innerHTML = myRank > 0
+      ? myRank + '<span class="mt-fig-ord">' + ordinalSuffix(myRank) + '</span>'
+      : '-';
+  }
+  const fptsEl = document.getElementById('mtFpts');
+  if (fptsEl) fptsEl.textContent = managerFPTS(me);
+
+  // Live strip: only when something of yours is actually on the floor.
+  const liveEl = document.getElementById('mtLive');
+  const playing = roster.filter(function (r) { return r.game; });
+  if (liveEl) {
+    if (!playing.length) {
+      liveEl.style.display = 'none';
+      liveEl.innerHTML = '';
+    } else {
+      const g = playing[0].game;
+      const clock = g.clock ? esc(g.clock) + ' · ' + ordinalHalf(g.period) : 'LIVE';
+      const score = esc((g.away && g.away.school) || 'TBD') + ' ' + ((g.away && g.away.score) != null ? g.away.score : 0) +
+        ' – ' + esc((g.home && g.home.school) || 'TBD') + ' ' + ((g.home && g.home.score) != null ? g.home.score : 0);
+      liveEl.style.display = '';
+      liveEl.innerHTML =
+        '<span class="mt-live-dot" aria-hidden="true"></span>' +
+        '<span class="mt-live-text">' + playing.length + ' playing now</span>' +
+        '<span class="mt-live-game">' + score + ' · ' + clock + '</span>';
+    }
+  }
+
+  // Roster rows
+  const limit = window.innerWidth <= 768 ? MT_ROWS_MOBILE : MT_ROWS_DESKTOP;
+  const shown = roster.slice(0, limit);
+  const rosterEl = document.getElementById('mtRoster');
+  if (rosterEl) {
+    rosterEl.innerHTML = shown.map(function (r) {
+      const status = r.game
+        ? '<span class="mt-status mt-status--live">LIVE</span>'
+        : (r.alive
+          ? '<span class="mt-status mt-status--alive">ALIVE</span>'
+          : '<span class="mt-status mt-status--out">OUT</span>');
+      return '<div class="mt-row' + (r.alive ? '' : ' mt-row--out') + '">' +
+        '<div class="mt-player">' +
+        '<div class="mt-player-name">' + esc(r.name) + '</div>' +
+        '<div class="mt-player-meta">' + esc(r.college || '') +
+        (r.position ? ' · ' + esc(r.position) : '') + '</div>' +
+        '</div>' +
+        status +
+        '<div class="mt-pts">' + r.fpts + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  // Footer
+  const aliveCount = roster.filter(function (r) { return r.alive; }).length;
+  const hidden = roster.length - shown.length;
+  const countEl = document.getElementById('mtFootCount');
+  if (countEl) {
+    countEl.textContent = (hidden > 0 ? hidden + ' more · ' : '') +
+      aliveCount + ' of ' + roster.length + ' alive';
+  }
+}
+
+function ordinalSuffix(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
+
+/* ══════════════════════════════════════════════════════════
    MOBILE NAV SHEET
    Nine destinations will not fit across the bottom of a phone at a
    readable size — the bar had ended up at 9px type with clipped
@@ -5532,6 +5676,19 @@ document.addEventListener('DOMContentLoaded', () => {
   if (_closeOut) _closeOut.addEventListener('click', closeOutTournament);
 
   try { wireNavSheet(); } catch (e) { console.warn('wireNavSheet', e); }
+
+  const _mtLink = document.getElementById('mtFootLink');
+  if (_mtLink) _mtLink.addEventListener('click', function () { navigateTo('teams'); });
+
+  // The card shows 8 rows on a desktop and 5 on a phone, so crossing
+  // the breakpoint has to re-render or the count stays wrong.
+  let _mtWide = window.innerWidth > 768;
+  window.addEventListener('resize', function () {
+    const wide = window.innerWidth > 768;
+    if (wide === _mtWide) return;
+    _mtWide = wide;
+    try { renderMyTeamCard(); } catch (e) { }
+  });
 
   // Home grid cards
   document.querySelectorAll('.home-card[data-page]').forEach(card => {

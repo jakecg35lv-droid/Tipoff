@@ -6195,3 +6195,129 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
      tappable as the close affordance. */
   .mnav-trigger { z-index: 120; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   MY TEAM CARD
+   Occupies the On the Clock hero's slot once the draft is done.
+   Every class is prefixed .mt- / .myteam- and was grepped against
+   the whole sheet before use.
+══════════════════════════════════════════════════════════ */
+.myteam-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+
+/* ── Head: identity left, rank + points right ─────────── */
+.mt-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 14px; margin-bottom: 14px;
+}
+.mt-eyebrow {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--orange, #f26b21);
+}
+.mt-name {
+  font-size: 20px; font-weight: 800; color: var(--text);
+  letter-spacing: -0.01em; margin-top: 2px;
+}
+.mt-figures { display: flex; align-items: stretch; gap: 14px; flex-shrink: 0; }
+.mt-fig { text-align: right; }
+.mt-fig-val {
+  font-size: 23px; font-weight: 800; color: var(--text);
+  line-height: 1.1; font-variant-numeric: tabular-nums;
+}
+.mt-fig-ord { font-size: 12px; font-weight: 700; color: var(--muted); margin-left: 1px; }
+.mt-fig-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--muted); margin-top: 1px;
+}
+.mt-fig-div { width: 1px; background: var(--border); }
+
+/* ── Live strip: present only when someone is playing ─── */
+.mt-live {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 11px; margin-bottom: 12px;
+  background: rgba(242,107,33,0.10);
+  border: 1px solid rgba(242,107,33,0.26);
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+.mt-live-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  background: var(--orange, #f26b21);
+  animation: mtPulse 1.8s ease-in-out infinite;
+}
+@keyframes mtPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .mt-live-dot { animation: none; } }
+.mt-live-text { color: #f0a67d; font-weight: 700; }
+.mt-live-game {
+  margin-left: auto; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── Roster rows ──────────────────────────────────────── */
+.mt-roster {
+  display: grid; gap: 1px;
+  background: var(--border);
+  border-radius: 10px; overflow: hidden;
+}
+.mt-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 62px 58px;
+  align-items: center; gap: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+  transition: background 0.16s ease;
+}
+.mt-row:hover { background: rgba(255,255,255,0.03); }
+/* Eliminated players stay readable: their points still count toward
+   the total above, so hiding or greying them out entirely would make
+   the arithmetic look wrong. */
+.mt-row--out { opacity: 0.55; }
+
+.mt-player { min-width: 0; }
+.mt-player-name {
+  font-size: 14px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mt-player-meta { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+
+.mt-status {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.07em;
+  text-align: right;
+}
+.mt-status--live  { color: var(--orange, #f26b21); }
+.mt-status--alive { color: var(--green, #3fa971); }
+.mt-status--out   { color: var(--muted); }
+
+.mt-pts {
+  font-size: 14.5px; font-weight: 700; color: var(--text);
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+
+/* ── Foot ─────────────────────────────────────────────── */
+.mt-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.mt-foot-count { font-size: 12px; color: var(--muted); }
+.mt-foot-link {
+  background: none; border: none; padding: 6px 2px; min-height: 32px;
+  font-family: inherit; font-size: 12.5px; font-weight: 700;
+  color: var(--orange, #f26b21); cursor: pointer;
+  transition: opacity 0.14s ease;
+}
+.mt-foot-link:hover { opacity: 0.75; }
+
+@media (max-width: 768px) {
+  .myteam-card { padding: 15px 14px; border-radius: 14px; }
+  .mt-name { font-size: 18px; }
+  .mt-fig-val { font-size: 20px; }
+  .mt-row { grid-template-columns: minmax(0,1fr) 52px 50px; padding: 10px; }
+  .mt-live-game { font-size: 11.5px; }
+}

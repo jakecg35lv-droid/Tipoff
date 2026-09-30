@@ -532,6 +532,40 @@
           </div>
         </div>
 
+        <!-- ── MY TEAM ─────────────────────────────────
+             Replaces the On the Clock hero once the draft is done.
+             The draft lasts a night; the tournament lasts days, so the
+             biggest element on the page should not be a dead timer for
+             the entire part that matters. -->
+        <div class="myteam-card" id="myTeamCard" style="display:none;">
+          <div class="mt-head">
+            <div>
+              <div class="mt-eyebrow">My Team</div>
+              <div class="mt-name" id="mtName">-</div>
+            </div>
+            <div class="mt-figures">
+              <div class="mt-fig">
+                <div class="mt-fig-val" id="mtRank">-</div>
+                <div class="mt-fig-label">Rank</div>
+              </div>
+              <div class="mt-fig-div" aria-hidden="true"></div>
+              <div class="mt-fig">
+                <div class="mt-fig-val" id="mtFpts">-</div>
+                <div class="mt-fig-label">FPTS</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-live" id="mtLive" style="display:none;"></div>
+
+          <div class="mt-roster" id="mtRoster"></div>
+
+          <div class="mt-foot">
+            <span class="mt-foot-count" id="mtFootCount"></span>
+            <button class="mt-foot-link" id="mtFootLink" type="button">View full roster &rsaquo;</button>
+          </div>
+        </div>
+
         <!-- Stat tiles -->
         <div class="home-stats-grid" id="homeStatsGrid">
           <div class="stat-tile">
