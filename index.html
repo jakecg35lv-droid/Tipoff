@@ -1545,28 +1545,35 @@
       </button>
 
       <!-- Scoreboard -->
-      <div class="gm-scoreboard">
-        <div class="gm-team-col gm-team-top">
+      <!-- The two team columns are the roster selector: tapping one
+           shows that team's box score below. Both rosters stacked at
+           once made the modal a long scroll with no way to compare. -->
+      <div class="gm-scoreboard" role="tablist" aria-label="Select team">
+        <button type="button" class="gm-team-col gm-team-top is-active"
+                id="gmTopTab" data-gm-tab="top" role="tab" aria-selected="true"
+                aria-controls="gmTopStats">
           <div class="gm-logo" id="gmTopLogo"></div>
           <div class="gm-team-name" id="gmTopName">TBD</div>
           <div class="gm-score" id="gmTopScore">-</div>
-        </div>
+        </button>
         <div class="gm-mid-col">
           <div class="gm-status-badge" id="gmStatus">PRE-GAME</div>
           <div class="gm-period" id="gmPeriod"></div>
           <div class="gm-round-label" id="gmRoundLabel"></div>
         </div>
-        <div class="gm-team-col gm-team-bot">
+        <button type="button" class="gm-team-col gm-team-bot"
+                id="gmBotTab" data-gm-tab="bot" role="tab" aria-selected="false"
+                aria-controls="gmBotStats">
           <div class="gm-logo" id="gmBotLogo"></div>
           <div class="gm-team-name" id="gmBotName">TBD</div>
           <div class="gm-score" id="gmBotScore">-</div>
-        </div>
+        </button>
       </div>
 
       <!-- Stats Tables -->
       <div class="gm-stats-wrap">
         <!-- Top team stats -->
-        <div class="gm-team-stats-block" id="gmTopStats">
+        <div class="gm-team-stats-block is-active" id="gmTopStats" role="tabpanel" aria-labelledby="gmTopTab">
           <div class="gm-stats-team-label" id="gmTopStatsLabel"></div>
           <div class="gm-stats-table">
             <div class="gm-stats-header">
@@ -1582,10 +1589,8 @@
           </div>
         </div>
 
-        <div class="gm-stats-divider"></div>
-
         <!-- Bot team stats -->
-        <div class="gm-team-stats-block" id="gmBotStats">
+        <div class="gm-team-stats-block" id="gmBotStats" role="tabpanel" aria-labelledby="gmBotTab">
           <div class="gm-stats-team-label" id="gmBotStatsLabel"></div>
           <div class="gm-stats-table">
             <div class="gm-stats-header">

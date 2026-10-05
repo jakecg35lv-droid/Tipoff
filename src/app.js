@@ -4021,7 +4021,28 @@ function openGameModal(topName, botName, roundLabel) {
   buildRows(topName, 'gmTopRows');
   buildRows(botName, 'gmBotRows');
 
+  // Always reopen on the top team rather than whichever was last
+  // viewed — a modal that remembers a selection from a different game
+  // shows the wrong roster the moment you open a second matchup.
+  setGameModalTeam('top');
+
   modal.style.display = 'flex';
+}
+
+// ── Which team's box score is showing ────────────────────
+function setGameModalTeam(which) {
+  const want = which === 'bot' ? 'bot' : 'top';
+
+  document.querySelectorAll('.gm-scoreboard [data-gm-tab]').forEach(function (tab) {
+    const on = tab.dataset.gmTab === want;
+    tab.classList.toggle('is-active', on);
+    tab.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+
+  const top = document.getElementById('gmTopStats');
+  const bot = document.getElementById('gmBotStats');
+  if (top) top.classList.toggle('is-active', want === 'top');
+  if (bot) bot.classList.toggle('is-active', want === 'bot');
 }
 
 function closeGameModal() {
@@ -5821,6 +5842,19 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('pdcClose')?.addEventListener('click', closePDC);
   document.getElementById('gmClose')?.addEventListener('click', closeGameModal);
   document.getElementById('gameModal')?.addEventListener('click', function (e) { if (e.target.id === 'gameModal') closeGameModal(); });
+
+  // Team selector. Delegated off the scoreboard so it survives the
+  // modal being rebuilt, and keyboard-navigable like a real tablist.
+  document.querySelector('.gm-scoreboard')?.addEventListener('click', function (e) {
+    const tab = e.target.closest('[data-gm-tab]');
+    if (tab) setGameModalTeam(tab.dataset.gmTab);
+  });
+  document.querySelector('.gm-scoreboard')?.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const next = e.key === 'ArrowRight' ? 'bot' : 'top';
+    setGameModalTeam(next);
+    document.getElementById(next === 'bot' ? 'gmBotTab' : 'gmTopTab')?.focus();
+  });
   document.getElementById('pdcOverlay')?.addEventListener('click', e => { if (e.target.id === 'pdcOverlay') closePDC(); });
   // Standings simulate + reset
   // Show/hide simulate + reset based on whether live stats are flowing

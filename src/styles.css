@@ -2498,9 +2498,28 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
   background: rgba(255,255,255,0.03); border-radius: 14px;
   padding: 18px 16px;
 }
+/*  Now a <button> acting as a tab, so the browser's button styling
+    has to be reset or it renders as a grey chrome control. */
 .gm-team-col {
   flex: 1; display: flex; flex-direction: column;
   align-items: center; gap: 6px; text-align: center;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 12px; padding: 10px 8px;
+  font-family: inherit; color: inherit;
+  cursor: pointer; min-height: 44px;
+  transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+.gm-team-col:hover { background: rgba(255,255,255,0.04); }
+/*  Unselected team dims rather than disappears: you still need to
+    read the other side's name and score to know what you can switch to. */
+.gm-team-col:not(.is-active) { opacity: 0.5; }
+.gm-team-col.is-active {
+  background: rgba(242,107,33,0.10);
+  border-color: rgba(242,107,33,0.30);
+}
+.gm-team-col:focus-visible {
+  outline: 2px solid var(--orange, #f26b21);
+  outline-offset: 2px;
 }
 .gm-team-name {
   font-size: 12px; font-weight: 700; color: var(--text);
@@ -2523,7 +2542,15 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
 .gm-period { font-size: 11px; color: var(--muted); }
 .gm-round-label { font-size: 10px; color: var(--muted); margin-top: 2px; }
 .gm-stats-wrap { display: flex; flex-direction: column; gap: 16px; }
-.gm-team-stats-block { display: flex; flex-direction: column; gap: 8px; }
+/*  One roster at a time. Both stacked made the modal a long scroll
+    and gave no way to put the two teams side by side mentally. */
+.gm-team-stats-block { display: none; flex-direction: column; gap: 8px; }
+.gm-team-stats-block.is-active {
+  display: flex;
+  animation: gmFadeIn 0.2s ease both;
+}
+@keyframes gmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .gm-team-stats-block.is-active { animation: none; } }
 .gm-stats-team-label {
   font-size: 12px; font-weight: 800; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--blue);
@@ -2547,7 +2574,7 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
 .gst-stat { text-align: center; }
 .gst-fpts { color: var(--blue); font-weight: 700; }
 .gst-live { color: var(--muted); }
-.gm-stats-divider { height: 1px; background: var(--border); }
+/*  .gm-stats-divider removed with the stacked layout. */
 .gm-no-players { font-size: 12px; color: var(--muted); padding: 8px 0; }
 .gm-live-note {
   font-size: 11px; color: var(--muted); text-align: center;
