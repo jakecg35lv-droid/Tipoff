@@ -1191,6 +1191,18 @@ function createLeague() {
   try { localStorage.setItem('mmfantasy-code-' + state.leagueCode, state.leagueId); } catch (e) { }
   addActivity((state.commissioner || 'Commissioner') + ' created the league');
   saveState();
+
+  // Claim the commissioner's display name immediately. Without this
+  // the first joiner who happens to share the commissioner's name
+  // finds it unowned, is let through, and the two share a roster.
+  const _uid = (window._fbUser && window._fbUser.uid) || (session && session.uid) || null;
+  if (window._db && _uid && state.commissioner) {
+    const map = {};
+    map[state.commissioner] = _uid;
+    window._db.collection('leagues').doc(state.leagueCode)
+      .set({ managerUids: map }, { merge: true })
+      .catch(function (e) { console.warn('[Create] uid claim failed:', e.message); });
+  }
   track('league_created', Object.assign(
     { max_managers: state.maxManagers || 8, rounds: state.rounds || 8 },
     window.Analytics ? window.Analytics.acquisition() : {}
@@ -1287,14 +1299,57 @@ function handleJoin() {
   function _finalize(saved) {
     const session = getSession();
     const name = session ? session.name : 'Player';
-    const max = saved.maxManagers || 8;
-    if (!saved.managers.includes(name) && saved.managers.length >= max) {
-      errEl.textContent = 'This league is full (' + max + '/' + max + ' managers).';
+    const myUid = (window._fbUser && window._fbUser.uid) || (session && session.uid) || null;
+
+    // A league doc written before managers existed, or one that got
+    // partially merged, has no array here. Reading .includes off
+    // undefined threw, which left the button stuck on "Joining…"
+    // with nothing but a console error to explain it.
+    if (!Array.isArray(saved.managers)) saved.managers = [];
+
+    const fail = function (msg) {
+      errEl.textContent = msg;
       errEl.style.display = 'block';
       if (btn) { btn.textContent = 'Join'; btn.disabled = false; }
+    };
+
+    if (code === state.leagueCode) { fail('You are already in this league.'); return; }
+
+    const max = saved.maxManagers || 8;
+    const already = saved.managers.indexOf(name) !== -1;
+
+    // ── Display-name collision ───────────────────────────
+    //  managers is a list of NAMES, and everything downstream keys
+    //  off them: picks, standings, queues, rosters. Two people called
+    //  "Jake" would silently share one team. managerUids records who
+    //  owns each name so a genuine rejoin still works while a
+    //  stranger with the same name is turned away.
+    const uids = (saved.managerUids && typeof saved.managerUids === 'object') ? saved.managerUids : {};
+    if (already) {
+      const owner = uids[name];
+      if (owner && myUid && owner !== myUid) {
+        fail('Someone in this league already uses the name "' + name +
+             '". Change your display name in Settings, then try again.');
+        return;
+      }
+    }
+
+    if (!already && saved.managers.length >= max) {
+      fail('This league is full (' + max + '/' + max + ' managers).');
       return;
     }
-    if (!saved.managers.includes(name)) saved.managers.push(name);
+    if (!already) saved.managers.push(name);
+
+    // Claim the name. Written separately from saveState because
+    // _saveLeagueToFirestore sends state, and managerUids is league
+    // metadata that no single client should overwrite wholesale.
+    if (window._db && myUid) {
+      const claim = {};
+      claim['managerUids.' + name] = myUid;
+      window._db.collection('leagues').doc(code).update(claim)
+        .catch(function (e) { console.warn('[Join] uid claim failed:', e.message); });
+    }
+
     _applyLeagueState(saved);
     saveState();
     document.getElementById('joinModal').style.display = 'none';
@@ -5990,21 +6045,60 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('dissolveCancelBtn')?.addEventListener('click', () => {
     document.getElementById('dissolveModal').style.display = 'none';
   });
-  document.getElementById('dissolveConfirmBtn')?.addEventListener('click', () => {
-    if (state.leagueId) {
-      localStorage.removeItem('mmfantasy-state');
-      localStorage.removeItem('mmfantasy-league-' + state.leagueId);
-      localStorage.removeItem('mmfantasy-bracket-' + state.leagueId);
-      localStorage.removeItem('mmfantasy-code-' + state.leagueCode);
-      // Remove from index
-      try {
-        const raw = localStorage.getItem('mmfantasy-leagues');
-        if (raw) {
-          const leagues = JSON.parse(raw).filter(l => l.leagueId !== state.leagueId);
-          localStorage.setItem('mmfantasy-leagues', JSON.stringify(leagues));
-        }
-      } catch (e) { }
+  // ── Delete league ────────────────────────────────────────
+  //  This used to clear localStorage and nothing else, which made the
+  //  button's promise ("permanently delete the league and all draft
+  //  data") false in three separate ways:
+  //    1. The users/{uid}.leagues entry survived, so the deleted
+  //       league kept appearing in My Leagues forever.
+  //    2. The leagues/{code} document survived, so every other
+  //       manager still had the league intact and anyone with the
+  //       code could rejoin and resurrect it.
+  //    3. The Firestore snapshot listener kept running against a
+  //       league this client had supposedly left.
+  document.getElementById('dissolveConfirmBtn')?.addEventListener('click', async () => {
+    const code = state.leagueCode;
+    const leagueId = state.leagueId;
+
+    if (!isCommissioner()) {
+      toast('Only the commissioner can delete the league.', 'error');
+      document.getElementById('dissolveModal').style.display = 'none';
+      return;
     }
+
+    // Stop listening before the document disappears.
+    if (_leagueUnsubscribe) { _leagueUnsubscribe(); _leagueUnsubscribe = null; }
+
+    // Remote first: if this fails the user should know the league is
+    // still out there rather than silently losing only their own copy.
+    if (code) {
+      try { await forgetLeagueMembership(code); }
+      catch (e) { console.warn('[Delete] membership removal failed:', e.message); }
+
+      if (window._db) {
+        try {
+          await window._db.collection('leagues').doc(code).delete();
+        } catch (e) {
+          console.warn('[Delete] league doc delete failed:', e.message);
+          toast('Removed locally, but the league could not be deleted from the server.', 'error');
+        }
+      }
+    }
+
+    if (leagueId) {
+      localStorage.removeItem('mmfantasy-state');
+      localStorage.removeItem('mmfantasy-league-' + leagueId);
+      localStorage.removeItem('mmfantasy-bracket-' + leagueId);
+    }
+    if (code) localStorage.removeItem('mmfantasy-code-' + code);
+    try {
+      const raw = localStorage.getItem('mmfantasy-leagues');
+      if (raw) {
+        const leagues = JSON.parse(raw).filter(l => l.leagueId !== leagueId && l.leagueCode !== code);
+        localStorage.setItem('mmfantasy-leagues', JSON.stringify(leagues));
+      }
+    } catch (e) { }
+
     clearInterval(timerInterval);
     state = freshState();
     state.players = poolForCurrentTournament();
