@@ -6348,3 +6348,58 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
   .mt-row { grid-template-columns: minmax(0,1fr) 52px 50px; padding: 10px; }
   .mt-live-game { font-size: 11.5px; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   SIGNUP ON DESKTOP
+   The card is a single mobile-first column: 90px logo, 32px
+   title, then six stacked fields. On a phone that is correct.
+   On a laptop it runs past the bottom of the viewport, so the
+   Create Account button is below the fold on the screen whose
+   entire job is getting people to press it.
+
+   Everything here is inside min-width:769px. The phone layout is
+   not touched.
+══════════════════════════════════════════════════════════ */
+@media (min-width: 769px) {
+  #signupScreen .auth-card {
+    max-width: 560px;
+    padding: 26px 32px 28px;
+  }
+
+  /* Logo and headings carry most of the wasted height. */
+  #signupScreen .auth-logo { margin-bottom: 10px; }
+  #signupScreen .logo-mark { width: 56px; height: 56px; }
+  #signupScreen .auth-title { font-size: 25px; }
+  #signupScreen .auth-sub { font-size: 13px; margin-bottom: 18px; }
+
+  /* Two columns. The four short fields pair up; anything that
+     needs the full width opts out below. */
+  #signupScreen .auth-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 16px;
+    align-items: start;
+  }
+  /*  .fg-wide rather than :nth-of-type — nth-of-type counts DIVs,
+      so inserting any div above it would silently move the span to
+      the wrong field. */
+  #signupScreen .auth-form > .fg-wide,
+  #signupScreen .auth-form > #signupError,
+  #signupScreen .auth-form > .tos-check-row,
+  #signupScreen .auth-form > #signupSubmitBtn {
+    grid-column: 1 / -1;
+  }
+
+  #signupScreen .form-group label { font-size: 12px; }
+  #signupScreen .form-group input { padding: 10px 12px; font-size: 14px; }
+  #signupScreen .field-hint { font-size: 11px; line-height: 1.4; }
+
+  #signupScreen .tos-check-row { padding: 10px 12px; }
+  #signupScreen #signupSubmitBtn { padding: 13px 24px; margin-top: 2px; }
+  #signupScreen .auth-switch { margin-top: 14px; font-size: 13px; }
+
+  /* The card animates in with a translate; on a short laptop the
+     screen's centering plus that transform could clip the top.
+     Let the screen scroll rather than hide anything. */
+  #signupScreen.screen { align-items: safe center; overflow-y: auto; }
+}
