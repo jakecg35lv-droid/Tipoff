@@ -6603,6 +6603,37 @@ async function renderMyLeagues() {
     console.warn('[Leagues] read failed:', e.message);
   }
 
+  // ── Prune leagues that no longer exist ───────────────────
+  //  Delete League used to leave its membership entry behind, so
+  //  deleted leagues haunted this list forever. Fixing the delete
+  //  path stops NEW ghosts; it does nothing about the ones already
+  //  written. Checking each league still exists makes the list
+  //  self-healing, and also covers a league deleted by a different
+  //  commissioner or on another device, which the delete fix alone
+  //  could never catch.
+  if (window._db && leagues.length) {
+    const checked = await Promise.all(leagues.map(async function (l) {
+      if (!l || !l.code) return null;
+      if (l.code === state.leagueCode) return l;      // we are in it; it exists
+      try {
+        const doc = await window._db.collection('leagues').doc(l.code).get();
+        return doc.exists ? l : null;
+      } catch (e) {
+        // A read that failed for network or permission reasons is not
+        // evidence the league is gone. Keep it rather than deleting
+        // someone's league from their list over a dropped connection.
+        return l;
+      }
+    }));
+
+    const alive = checked.filter(Boolean);
+    if (alive.length !== leagues.length) {
+      leagues = alive;
+      try { await ref.set({ leagues: alive }, { merge: true }); }
+      catch (e) { console.warn('[Leagues] prune write failed:', e.message); }
+    }
+  }
+
   // Always show the league we are actually in, even if the user doc
   // has not caught up yet.
   if (state.leagueCode && !leagues.some(l => l && l.code === state.leagueCode)) {
