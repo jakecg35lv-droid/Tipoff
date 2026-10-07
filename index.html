@@ -1357,10 +1357,27 @@
             <input type="text" id="settingsEditLeagueName" placeholder="League name" style="width:auto;" />
             <button id="saveLeagueNameBtn" class="btn-save">Save Name</button>
           </div>
-          <hr class="divider" />
-          <button id="restartLeagueBtn" class="btn-ghost" style="margin-top:8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-2px;margin-right:5px;"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Restart League</button>
-          <p class="muted" style="font-size:12px;margin-top:6px;">Clears all picks and resets the draft. Keeps the same managers, settings, and league code.</p>
-          <button id="dissolveLeagueBtn" class="btn-red" style="margin-top:12px;">Delete League</button>
+          <!-- Action rows, matching the Account and Danger Zone pattern:
+               title, description, then the control. The description used
+               to sit underneath the button it described, with inline
+               font sizes that matched nothing else on the page. -->
+          <div class="set-divide"></div>
+
+          <div class="set-row set-row--stack">
+            <div class="set-row-main">
+              <span class="set-row-title">Restart League</span>
+              <span class="set-row-sub">Clears all picks and resets the draft to round one. Managers, settings and the league code stay the same.</span>
+            </div>
+            <button id="restartLeagueBtn" class="set-row-btn">Restart</button>
+          </div>
+
+          <div class="set-row set-row--stack">
+            <div class="set-row-main">
+              <span class="set-row-title">Delete League</span>
+              <span class="set-row-sub">Permanently deletes this league for every manager in it. This cannot be undone.</span>
+            </div>
+            <button id="dissolveLeagueBtn" class="set-row-btn set-row-btn--danger">Delete</button>
+          </div>
         </div>
 
         <!-- ══ DANGER ZONE ══ -->

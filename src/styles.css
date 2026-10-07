@@ -6469,3 +6469,87 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
      phone is a worse tap target than a full-width bar. */
   .btn-save { width: 100%; margin-left: 0; min-height: 44px; font-size: 14px; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   SETTINGS — alignment and rhythm pass
+   The page had two heading systems fighting each other: a mono
+   .set-label sitting outside the card, and an Inter .panel-title
+   sitting inside it, with some sections using one and some both.
+   Worse, .set-label carried margin-left:4px while panel content sat
+   at 28px, so no two lines on the page shared a left edge. That
+   mismatch is what reads as text "floating".
+
+   Everything below is scoped to #settingsPage so the shared .panel
+   and .panel-title used on other pages are untouched.
+══════════════════════════════════════════════════════════ */
+
+/* One left edge for the whole page. */
+#settingsPage .set-label {
+  margin: 34px 0 10px;
+  padding-left: 2px;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+}
+#settingsPage .set-label:first-of-type { margin-top: 6px; }
+
+#settingsPage .panel {
+  padding: 20px 22px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+}
+/* Row panels manage their own insets, so they keep zero padding. */
+#settingsPage .set-panel,
+#settingsPage .panel--danger { padding: 0; }
+
+/* Card title: sits on the card, separated by a hairline so the card
+   reads as titled content rather than a title floating over a list. */
+#settingsPage .panel-title {
+  font-size: 15px; font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+#settingsPage .panel-sub {
+  font-size: 12.5px; line-height: 1.6;
+  color: var(--muted);
+  margin: -4px 0 16px;
+}
+
+/* Rows share the card's inset instead of their own 22px. */
+#settingsPage .set-row { padding: 14px 22px; gap: 16px; }
+
+#settingsPage .set-divide {
+  height: 1px; background: var(--border);
+  margin: 18px -22px 0;
+}
+/*  A row inside a PADDED panel pulls back out to the card edge so its
+    divider lines up with the row panels above. Scoped away from
+    .set-panel and .panel--danger, which have zero padding — applying a
+    negative margin there would push their rows outside the card. */
+#settingsPage .panel:not(.set-panel):not(.panel--danger) > .set-row {
+  margin-left: -22px; margin-right: -22px;
+  border-bottom: none;
+}
+#settingsPage .panel:not(.set-panel):not(.panel--danger) > .set-row + .set-row {
+  border-top: 1px solid var(--border);
+}
+
+/* ── Mobile ───────────────────────────────────────────────
+   There were no settings-specific mobile rules at all: cards kept
+   28px side padding and every row stayed a single flex line, so a
+   long description squeezed its button into a sliver. */
+@media (max-width: 768px) {
+  #settingsPage .panel { padding: 16px 14px; border-radius: 12px; }
+  #settingsPage .set-panel,
+  #settingsPage .panel--danger { padding: 0; }
+  #settingsPage .set-row { padding: 13px 14px; gap: 12px; }
+  #settingsPage .panel:not(.set-panel):not(.panel--danger) > .set-row { margin-left: -14px; margin-right: -14px; }
+  #settingsPage .set-divide { margin: 16px -14px 0; }
+  #settingsPage .set-label { margin: 26px 0 8px; }
+
+  /* Title and description on one line, control on its own full-width
+     line beneath. Keeps the hit target big and the text readable. */
+  #settingsPage .set-row--stack { flex-direction: column; align-items: stretch; gap: 10px; }
+  #settingsPage .set-row--stack .set-row-btn { width: 100%; min-height: 42px; }
+}
