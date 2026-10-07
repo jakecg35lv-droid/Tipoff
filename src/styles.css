@@ -6419,3 +6419,53 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
   font-size: 12.5px; line-height: 1.6;
   color: var(--muted);
 }
+
+/* ══════════════════════════════════════════════════════════
+   SETTINGS SAVE BUTTONS
+   These were .btn-primary: full-width orange gradient slabs with a
+   glow, the same treatment as Create Account. Five of them stacked
+   down one settings page shouted louder than anything the user was
+   actually trying to read, and gave no hierarchy — "Save Timer" is
+   not a more important action than reading your own league code.
+
+   A settings save is a secondary action. It gets a quiet tinted
+   button, sized to its label and aligned right where a save belongs.
+══════════════════════════════════════════════════════════ */
+.btn-save {
+  display: block;
+  margin: 16px 0 0 auto;        /* right-aligned: the end of the form */
+  width: auto;
+  padding: 9px 18px;
+  min-height: 38px;
+  background: rgba(242,107,33,0.10);
+  border: 1px solid rgba(242,107,33,0.32);
+  border-radius: var(--radius-xs);
+  color: var(--orange, #f26b21);
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px; font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+.btn-save:hover {
+  background: rgba(242,107,33,0.18);
+  border-color: rgba(242,107,33,0.55);
+  color: #ff8445;
+}
+.btn-save:active { background: rgba(242,107,33,0.24); }
+.btn-save:focus-visible {
+  outline: 2px solid var(--orange, #f26b21);
+  outline-offset: 2px;
+}
+.btn-save:disabled {
+  opacity: 0.45; cursor: not-allowed;
+  background: rgba(255,255,255,0.04);
+  border-color: var(--border); color: var(--muted);
+}
+
+@media (max-width: 768px) {
+  /* Full width on touch: a 38px auto-width target in the corner of a
+     phone is a worse tap target than a full-width bar. */
+  .btn-save { width: 100%; margin-left: 0; min-height: 44px; font-size: 14px; }
+}
