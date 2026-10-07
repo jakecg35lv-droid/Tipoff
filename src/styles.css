@@ -3166,28 +3166,6 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
 }
 .ds-remove-btn:hover { color: #f05252; background: rgba(240,82,82,0.1); }
 
-.ds-add-row { display: flex; gap: 8px; }
-.ds-add-input {
-  flex: 1;
-  background: var(--panel-2); border: 1px solid var(--border);
-  border-radius: var(--radius-xs); color: var(--text-1);
-  padding: 10px 14px; font-size: 15px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.ds-add-input:focus { border-color: var(--border-active); box-shadow: 0 0 0 3px rgba(242,107,33,0.12); outline: none; }
-.ds-add-input::placeholder { color: var(--muted); }
-.ds-add-btn {
-  width: 44px; height: 44px; flex-shrink: 0;
-  border-radius: var(--radius-xs);
-  border: 1.5px solid rgba(242,107,33,0.4);
-  background: rgba(242,107,33,0.12);
-  color: var(--blue-light);
-  font-size: 24px; line-height: 1;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s, border-color 0.15s;
-}
-.ds-add-btn:hover { background: rgba(242,107,33,0.22); border-color: rgba(242,107,33,0.7); }
 .scoring-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
 .scoring-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -6402,4 +6380,42 @@ input:focus, select:focus { outline: 2px solid rgba(242,107,33,0.45); outline-of
      screen's centering plus that transform could clip the top.
      Let the screen scroll rather than hide anything. */
   #signupScreen.screen { align-items: safe center; overflow-y: auto; }
+}
+
+/* ── My Leagues: remove control ───────────────────────────
+   Sits at the end of the row. Dim until hover so the list stays
+   calm, but always rendered rather than appearing on hover only —
+   a control you cannot see does not exist on a touch screen. */
+.ml-remove {
+  margin-left: auto; flex-shrink: 0;
+  display: grid; place-items: center;
+  width: 32px; height: 32px; min-width: 32px;
+  background: transparent;
+  border: 1px solid transparent; border-radius: 8px;
+  color: var(--muted); cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.16s ease, color 0.16s ease,
+              background 0.16s ease, border-color 0.16s ease;
+}
+.ml-row:hover .ml-remove { opacity: 1; }
+.ml-remove:hover {
+  color: var(--red, #ef6b6b);
+  background: rgba(239,107,107,0.10);
+  border-color: rgba(239,107,107,0.30);
+}
+.ml-remove:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--orange, #f26b21);
+  outline-offset: 2px;
+}
+@media (max-width: 768px) {
+  /* Always fully visible on touch: there is no hover to reveal it. */
+  .ml-remove { opacity: 0.8; width: 38px; height: 38px; min-width: 38px; }
+}
+
+/* Replaces the old manual add-manager row in Draft Setup. */
+.ds-join-hint {
+  margin: 12px 0 0;
+  font-size: 12.5px; line-height: 1.6;
+  color: var(--muted);
 }

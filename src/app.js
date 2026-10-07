@@ -1872,20 +1872,8 @@ function initDraftSetup() {
   document.getElementById('dsRoundsMinus')?.addEventListener('click', () => updateRoundsDisplay(-1));
   document.getElementById('dsRoundsPlus')?.addEventListener('click', () => updateRoundsDisplay(1));
 
-  // Add manager
-  const addInput = document.getElementById('dsAddManagerInput');
-  const addBtn = document.getElementById('dsAddManagerBtn');
-  function addManager() {
-    const name = (addInput?.value || '').trim();
-    if (!name) return;
-    if (!window._dsManagers) window._dsManagers = (state.managers || []).slice();
-    if (window._dsManagers.includes(name)) { toast('Already in the list', 'error'); return; }
-    window._dsManagers.push(name);
-    if (addInput) addInput.value = '';
-    renderDraftSetupList();
-  }
-  addBtn?.addEventListener('click', addManager);
-  addInput?.addEventListener('keydown', e => { if (e.key === 'Enter') addManager(); });
+  // Manual "add manager" removed. Joining with the league code is the
+  // only way into a league, so this panel reorders and removes only.
 }
 
 function renderDraftOrderStrip() {
@@ -5784,20 +5772,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Draft setup (Settings panel)
   document.getElementById('setupSaveBtn')?.addEventListener('click', () => {
-    const picksExist = Object.keys(state.drafted).length > 0;
-    if (picksExist && !confirm('Saving a new draft order will clear all current picks. Continue?')) return;
     const name = document.getElementById('setupLeagueName')?.value.trim();
     const mgrs = (window._dsManagers || []).filter(Boolean);
     const rounds = parseInt(document.getElementById('setupRounds')?.value) || 8;
-    if (name) state.leagueName = name;
-    if (mgrs.length) {
-      if (!mgrs.includes(state.commissioner)) mgrs.unshift(state.commissioner);
-      state.managers = mgrs;
+
+    if (mgrs.length && !mgrs.includes(state.commissioner)) mgrs.unshift(state.commissioner);
+
+    // ── Only clear picks when the draft is genuinely invalidated ──
+    //  This used to wipe state.drafted unconditionally, so renaming
+    //  the league from this panel destroyed the whole draft. Picks
+    //  are tied to a manager and a slot, so only a changed order,
+    //  a changed roster, or fewer rounds can actually break them.
+    const orderChanged = mgrs.length > 0 &&
+      mgrs.join('\u0000') !== (state.managers || []).join('\u0000');
+    const fewerRounds = rounds < (state.rounds || 8);
+    const picksExist = Object.keys(state.drafted || {}).length > 0;
+    const willClear = picksExist && (orderChanged || fewerRounds);
+
+    if (willClear) {
+      const why = orderChanged ? 'Changing the draft order' : 'Reducing the number of rounds';
+      if (!confirm(why + ' clears all ' + Object.keys(state.drafted).length +
+                   ' picks and resets the draft. Continue?')) return;
     }
+
+    if (name) state.leagueName = name;
+    if (mgrs.length) state.managers = mgrs;
     state.rounds = rounds;
-    state.currentPickIndex = 0;
-    state.drafted = {};
-    addActivity('Draft setup saved: ' + state.managers.length + ' managers, ' + rounds + ' rounds');
+
+    if (willClear) {
+      state.currentPickIndex = 0;
+      state.drafted = {};
+    }
+
+    addActivity('Draft setup saved: ' + state.managers.length + ' managers, ' + rounds + ' rounds' +
+      (willClear ? ' (draft reset)' : ''));
     saveState();
     render();
     toast('Draft setup saved!', 'success');
@@ -6658,14 +6666,86 @@ async function renderMyLeagues() {
       '<span class="ml-name">' + esc(l.name || 'League') + '</span>' +
       '<span class="ml-meta">Code ' + esc(l.code) + '</span>' +
       '</div>' +
-      (active ? '<span class="ml-current-pill">Current</span>' : '') +
+      (active
+        ? '<span class="ml-current-pill">Current</span>'
+        : '<button type="button" class="ml-remove" data-code="' + esc(l.code) +
+          '" aria-label="Remove ' + esc(l.name || 'league') + '" title="Remove from this list">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" ' +
+          'stroke-linecap="round" width="15" height="15">' +
+          '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+          '</button>') +
       '</div>';
   }).join('');
 
   host.querySelectorAll('.ml-row').forEach(function (row) {
     if (row.classList.contains('ml-row--active')) return;
-    row.addEventListener('click', function () { switchToLeague(row.dataset.code); });
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('.ml-remove')) return;   // the × is not a switch
+      switchToLeague(row.dataset.code);
+    });
   });
+
+  host.querySelectorAll('.ml-remove').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      removeLeagueFromList(btn.dataset.code);
+    });
+  });
+}
+
+// ── Remove a league from My Leagues ──────────────────────
+//  Needed because the old Delete League only cleared localStorage:
+//  every league ever "deleted" still exists in Firestore and is still
+//  a legitimate membership, so the existence check cannot prune it.
+//  This is also the control a user needs anyway — leaving a league you
+//  are not currently in was simply not possible before.
+async function removeLeagueFromList(code) {
+  if (!code) return;
+  if (code === state.leagueCode) {
+    toast('Switch to another league before removing this one.', 'error');
+    return;
+  }
+
+  // Are we the commissioner of it? Decides whether this deletes the
+  // league for everyone or just removes it from our own list.
+  let amCommissioner = false;
+  let leagueName = code;
+  if (window._db) {
+    try {
+      const doc = await window._db.collection('leagues').doc(code).get();
+      if (doc.exists) {
+        const d = doc.data() || {};
+        leagueName = d.leagueName || code;
+        const myUid = (window._fbUser && window._fbUser.uid) || null;
+        const session = getSession();
+        amCommissioner = (myUid && d._commissionerUid === myUid) ||
+          (!d._commissionerUid && session && d.commissioner === session.name);
+      }
+    } catch (e) { console.warn('[Leagues] lookup failed:', e.message); }
+  }
+
+  const msg = amCommissioner
+    ? 'Delete "' + leagueName + '" (' + code + ')?\n\n' +
+      'You are the commissioner, so this deletes the league for every ' +
+      'manager in it. This cannot be undone.'
+    : 'Remove "' + leagueName + '" (' + code + ') from your list?\n\n' +
+      'The league keeps running for everyone else. You can rejoin with the code.';
+  if (!confirm(msg)) return;
+
+  try { await forgetLeagueMembership(code); }
+  catch (e) { console.warn('[Leagues] membership removal failed:', e.message); }
+
+  if (amCommissioner && window._db) {
+    try { await window._db.collection('leagues').doc(code).delete(); }
+    catch (e) {
+      console.warn('[Leagues] delete failed:', e.message);
+      toast('Removed from your list, but the league could not be deleted.', 'error');
+    }
+  }
+
+  try { localStorage.removeItem('mmfantasy-code-' + code); } catch (e) { }
+  toast(amCommissioner ? 'League deleted.' : 'Removed from your list.', 'success');
+  renderMyLeagues();
 }
 
 function switchToLeague(code) {

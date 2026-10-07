@@ -1303,11 +1303,12 @@
           </div>
           <ul id="draftOrderList" class="ds-order-list"></ul>
 
-          <!-- Add manager -->
-          <div class="ds-add-row">
-            <input type="text" id="dsAddManagerInput" class="ds-add-input" placeholder="Add manager name..." />
-            <button type="button" id="dsAddManagerBtn" class="ds-add-btn" aria-label="Add manager">+</button>
-          </div>
+          <!-- Managers arrive by joining with the league code. The
+               manual "add manager" field predated join-by-code and
+               created accountless phantoms: they held a roster slot,
+               sat in the draft order, and autopick drafted eight
+               players for someone who could never log in to see them. -->
+          <p class="ds-join-hint">Managers appear here when they join with your league code. Share it from League Management below.</p>
 
           <button id="setupSaveBtn" class="btn-primary" style="margin-top:20px; width:100%;">Save Draft Setup</button>
         </div>
