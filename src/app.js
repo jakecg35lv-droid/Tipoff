@@ -4586,7 +4586,7 @@ function sendRpChatMessage() {
 // ── TUTORIAL ──────────────────────────────────────────────
 const TUT_STEPS = [
   { type: 'welcome', title: 'Welcome, Commissioner', body: "You're setting up a Tipoff Fantasy league. This takes about 60 seconds." },
-  { type: 'name', title: 'League Name', body: 'What do you want to call your league?', input: [{ id: 'tut-league-name', label: 'League Name', placeholder: 'e.g. March Madness 2026', default: 'My League', key: 'leagueName' }] },
+  { type: 'name', title: 'League Name', body: 'What do you want to call your league?', input: [{ id: 'tut-league-name', label: 'League Name', placeholder: 'e.g. The Office League', default: 'My League', key: 'leagueName' }] },
   { type: 'tournament', title: 'Choose Tournament', body: "Which tournament is this league drafting for? This sets your player pool and bracket format." },
   { type: 'size', title: 'League Size', body: 'How many managers will join? Once the league is full, no one else can join with the code.', size: true },
   { type: 'rounds', title: 'Draft Rounds', body: 'How many rounds in the snake draft? Each round, every manager picks one player.', input: [{ id: 'tut-rounds', label: 'Number of Rounds', placeholder: '8', default: 8, type: 'number', key: 'rounds' }] },
@@ -5531,10 +5531,14 @@ function renderFeaturedCard(article) {
   const tag = esc(articleTeamTag(article));
   const time = relativeTime(article.lastModified || article.published);
   const url = (article.links && article.links.web && article.links.web.href) || '#';
-  const img = article.images && article.images[0] && article.images[0].url;
 
+  // ── No images ────────────────────────────────────────────
+  //  These used to render <img src> straight off a.espncdn.com:
+  //  ESPN's photographs, served on ESPN's bandwidth, inside our
+  //  product UI. Headlines and links are the part worth having, and
+  //  they carry none of the copyright exposure.
   return '<a class="news-featured" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' +
-    (img ? '<div class="news-featured-img-wrap"><img class="news-featured-img" src="' + esc(img) + '" alt="" loading="lazy"><span class="news-featured-badge">Top Story</span></div>' : '') +
+    '<span class="news-featured-badge news-featured-badge--bare">Top Story</span>' +
     '<div class="news-featured-content">' +
     '<div class="news-card-meta">' +
     '<span class="news-card-tag">' + tag + '</span>' +
@@ -5551,10 +5555,8 @@ function renderNewsCard(article) {
   const tag = esc(articleTeamTag(article));
   const time = relativeTime(article.lastModified || article.published);
   const url = (article.links && article.links.web && article.links.web.href) || '#';
-  const img = article.images && article.images[0] && article.images[0].url;
 
   return '<a class="news-card" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' +
-    (img ? '<img class="news-card-img" src="' + esc(img) + '" alt="" loading="lazy">' : '<div class="news-card-img news-card-img--placeholder"></div>') +
     '<div class="news-card-content">' +
     '<div class="news-card-meta">' +
     '<span class="news-card-tag">' + tag + '</span>' +

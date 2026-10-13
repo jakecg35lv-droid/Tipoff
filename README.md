@@ -1,6 +1,6 @@
-# MM Fantasy App
+# Tipoff Fantasy
 
-March Madness Fantasy — snake draft, live scoring, bracket tracking.
+Tipoff Fantasy — snake draft, live scoring, bracket tracking for college basketball tournaments.
 
 ## Quick Start
 

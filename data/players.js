@@ -22,8 +22,8 @@
 //    hasStats  false = no prior-season line (true freshman). The draft
 //              board should badge these rather than rank them last;
 //              a top recruit with 0.0 across the board is not a scrub.
-//    hs        present and false ONLY when ESPN has no headshot.
-//              Build the URL with headshotURL(player) in app.js.
+//    hs        legacy field, unused. Headshots were removed; player
+//              identity renders from initials and school colours.
 //    stats     PER-GAME averages for the 2025-26 season.
 //    seed      tournament seed, carried from TOURNAMENTS.seededTeams
 //              in app.js. ESPN does not supply these.
@@ -326,11 +326,11 @@ window.MM_PLAYERS = [
 
 ];
 
-// ── Headshot URL ──────────────────────────────────────────
-//  Every ESPN headshot lives at a predictable path, so storing the
-//  full URL on 240 players would add ~23KB of pure repetition.
-//  `hs: false` marks the handful ESPN has no photo for.
-window.headshotURL = function (player) {
-  if (!player || !player.espnId || player.hs === false) return null;
-  return 'https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/' + player.espnId + '.png';
-};
+// ── Headshot URL — REMOVED ────────────────────────────────
+//  This built hotlinks to a.espncdn.com player headshots. It was
+//  never called anywhere in the app, but a helper that serves another
+//  company's photographs of college athletes is a standing copyright
+//  and NIL exposure for zero benefit. Player identity is rendered
+//  from initials and school colours instead.
+//
+//  The `hs` field on player records is now unused and harmless.

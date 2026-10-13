@@ -1,7 +1,7 @@
 {
   "name": "Tipoff Fantasy",
   "short_name": "Tipoff",
-  "description": "March Madness fantasy draft: pick your players, track the bracket.",
+  "description": "Snake-draft fantasy for college basketball tournaments: pick your players, track the bracket.",
   "start_url": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
