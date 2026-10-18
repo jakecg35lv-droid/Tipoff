@@ -70,6 +70,9 @@
             </button>
           </div>
         </div>
+        <div class="auth-forgot-row">
+          <a id="forgotPwLink" href="#" class="auth-forgot-link">Forgot password?</a>
+        </div>
         <div id="loginError" class="auth-error" style="display:none;"></div>
         <button id="loginSubmitBtn" class="btn-primary btn-full">Sign In</button>
       </div>
@@ -1626,6 +1629,33 @@
       </div>
 
       <p class="gm-live-note">Live stats will update automatically once the data feed is connected.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+     FORGOT PASSWORD
+     Firebase sends the reset mail and hosts the reset page, so this
+     only has to collect an address and report back honestly.
+  ════════════════════════════════════════════ -->
+  <div id="resetModal" class="modal-backdrop" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="resetTitle">
+    <div class="reset-card">
+      <button class="reset-close" id="resetClose" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+
+      <h3 class="reset-title" id="resetTitle">Reset your password</h3>
+      <p class="reset-sub">Enter the email on your account. We'll send you a link to set a new password.</p>
+
+      <div class="form-group">
+        <label for="resetEmail">Email</label>
+        <input type="email" id="resetEmail" placeholder="you@example.com" autocomplete="email" />
+      </div>
+
+      <div id="resetError" class="auth-error" style="display:none;"></div>
+      <div id="resetSent" class="reset-sent" style="display:none;"></div>
+
+      <button id="resetSendBtn" class="btn-primary btn-full">Send reset link</button>
+      <button id="resetBackBtn" class="reset-back" type="button">Back to sign in</button>
     </div>
   </div>
 

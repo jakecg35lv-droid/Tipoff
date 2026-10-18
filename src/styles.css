@@ -12203,3 +12203,71 @@ select:focus {
 
 /* Headline carries the card now, so give it room to. */
 .news-card-title { font-size: 14.5px; line-height: 1.4; }
+
+/* ══════════════════════════════════════════════════════════
+   FORGOT PASSWORD
+══════════════════════════════════════════════════════════ */
+.auth-forgot-row { display: flex; justify-content: flex-end; margin-top: -6px; }
+.auth-forgot-link {
+  font-size: 13px; font-weight: 600;
+  color: var(--muted); text-decoration: none;
+  padding: 6px 2px;              /* real tap target without moving the row */
+  transition: color 0.16s ease;
+}
+.auth-forgot-link:hover { color: var(--orange, #f26b21); }
+
+.reset-card {
+  position: relative;
+  width: 100%; max-width: 400px;
+  margin: auto;
+  background: var(--panel-solid, #0d1728);
+  border: 1px solid var(--border-2, rgba(255,255,255,0.14));
+  border-radius: 16px;
+  padding: 26px 24px 22px;
+  box-shadow: 0 24px 60px -16px rgba(0,0,0,0.75);
+}
+.reset-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  background: transparent; border: none; border-radius: 8px;
+  color: var(--muted); cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+.reset-close:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+
+.reset-title {
+  margin: 0 0 6px; padding-right: 30px;
+  font-size: 19px; font-weight: 800; color: var(--text);
+  letter-spacing: -0.01em;
+}
+.reset-sub {
+  margin: 0 0 18px;
+  font-size: 13px; line-height: 1.6; color: var(--muted);
+}
+.reset-sent {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  background: rgba(52,211,153,0.10);
+  border: 1px solid rgba(52,211,153,0.28);
+  border-radius: 10px;
+  font-size: 13px; line-height: 1.6;
+  color: var(--green, #34d399);
+  overflow-wrap: anywhere;
+}
+.reset-card .btn-primary { margin-top: 16px; }
+.reset-back {
+  display: block; width: 100%;
+  margin-top: 10px; padding: 10px; min-height: 40px;
+  background: none; border: none;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  color: var(--muted); cursor: pointer;
+  transition: color 0.16s ease;
+}
+.reset-back:hover { color: var(--text); }
+
+@media (max-width: 768px) {
+  .reset-card { max-width: none; margin: auto 12px; padding: 22px 18px 18px; }
+  /* 16px floor stops iOS zooming the field on focus. */
+  .reset-card .form-group input { font-size: 16px; }
+}

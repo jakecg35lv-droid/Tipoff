@@ -860,6 +860,83 @@ function _afterLoginNav() {
   }, 420);
 }
 
+/* ══════════════════════════════════════════════════════════
+   FORGOT PASSWORD
+   Firebase owns the hard parts: it generates the token, sends the
+   mail and hosts the page where the new password is set. This just
+   collects an address.
+══════════════════════════════════════════════════════════ */
+
+function openResetModal(prefill) {
+  const modal = document.getElementById('resetModal');
+  if (!modal) return;
+  const input = document.getElementById('resetEmail');
+  const err = document.getElementById('resetError');
+  const sent = document.getElementById('resetSent');
+  const btn = document.getElementById('resetSendBtn');
+
+  // Carry over whatever they already typed on the sign-in form.
+  if (input) input.value = (prefill || '').trim();
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+  if (sent) { sent.style.display = 'none'; sent.textContent = ''; }
+  if (btn) { btn.textContent = 'Send reset link'; btn.disabled = false; btn.style.display = ''; }
+
+  modal.style.display = 'flex';
+  setTimeout(function () { if (input) input.focus(); }, 60);
+}
+
+function closeResetModal() {
+  const modal = document.getElementById('resetModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function handlePasswordReset() {
+  const input = document.getElementById('resetEmail');
+  const err = document.getElementById('resetError');
+  const sent = document.getElementById('resetSent');
+  const btn = document.getElementById('resetSendBtn');
+  const email = ((input && input.value) || '').trim();
+
+  const fail = function (msg) {
+    if (err) { err.textContent = msg; err.style.display = 'block'; }
+    if (btn) { btn.textContent = 'Send reset link'; btn.disabled = false; }
+  };
+
+  if (err) err.style.display = 'none';
+  if (!email || email.indexOf('@') === -1) { fail('Enter a valid email address.'); return; }
+  if (!window._auth) { fail('Not connected. Check your connection and try again.'); return; }
+
+  if (btn) { btn.textContent = 'Sending…'; btn.disabled = true; }
+
+  // ── The same answer either way ───────────────────────────
+  //  Firebase distinguishes auth/user-not-found from success, and it
+  //  is tempting to pass that through. Doing so turns this box into
+  //  an account checker: type an address, learn whether that person
+  //  has an account here. We report the identical message for both,
+  //  so the form cannot be used to enumerate users.
+  const succeed = function () {
+    if (sent) {
+      sent.textContent = 'If an account exists for ' + email +
+        ', a reset link is on its way. Check your spam folder if it does not arrive in a few minutes.';
+      sent.style.display = 'block';
+    }
+    if (btn) btn.style.display = 'none';
+  };
+
+  window._auth.sendPasswordResetEmail(email)
+    .then(succeed)
+    .catch(function (e) {
+      const code = e && e.code;
+      if (code === 'auth/user-not-found') { succeed(); return; }
+      if (code === 'auth/invalid-email') { fail('That email address is not valid.'); return; }
+      if (code === 'auth/too-many-requests') {
+        fail('Too many attempts. Wait a few minutes and try again.');
+        return;
+      }
+      fail(_fbErrorMsg(code));
+    });
+}
+
 function handleLogin() {
   const email = (document.getElementById('loginEmail').value || '').trim();
   const password = (document.getElementById('loginPassword').value || '');
@@ -5656,6 +5733,27 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('loginPassword')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
   document.getElementById('loginEmail')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
   document.getElementById('showSignupLink')?.addEventListener('click', e => { e.preventDefault(); showSignup(); });
+
+  // ── Forgot password ──────────────────────────────────────
+  document.getElementById('forgotPwLink')?.addEventListener('click', e => {
+    e.preventDefault();
+    const typed = (document.getElementById('loginEmail') || {}).value || '';
+    openResetModal(typed);
+  });
+  document.getElementById('resetSendBtn')?.addEventListener('click', handlePasswordReset);
+  document.getElementById('resetClose')?.addEventListener('click', closeResetModal);
+  document.getElementById('resetBackBtn')?.addEventListener('click', closeResetModal);
+  document.getElementById('resetModal')?.addEventListener('click', e => {
+    if (e.target.id === 'resetModal') closeResetModal();
+  });
+  document.getElementById('resetEmail')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') handlePasswordReset();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const m = document.getElementById('resetModal');
+    if (m && m.style.display === 'flex') closeResetModal();
+  });
   document.getElementById('showLoginLink')?.addEventListener('click', e => { e.preventDefault(); showLogin(); });
   document.getElementById('signupSubmitBtn')?.addEventListener('click', handleSignup);
 
