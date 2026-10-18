@@ -1714,7 +1714,23 @@ function makeAvatarHTML(name, size) {
   const color = getAvatarColor(name);
   const initials = getInitials(name);
   const fontSize = Math.round(size * 0.38);
-  const pic = getStoredAvatar();
+
+  // ── The photo belongs to one person, not to every name ───
+  //  This took a `name` argument and then ignored it, handing
+  //  getStoredAvatar() — this device's own uploaded picture — to
+  //  every manager it rendered. Your face appeared on your friend's
+  //  row in the standings, on his pick in the draft order, and on
+  //  his chat messages.
+  //
+  //  Other managers' photos are deliberately unreachable: the
+  //  firestore rules make users/{uid} readable only by that uid, so
+  //  nobody can pull somebody else's avatar. Initials on a colour
+  //  derived from their name is the honest answer, and it stays
+  //  stable for them across every surface.
+  const session = getSession();
+  const isMe = !!(session && session.name && name === session.name);
+  const pic = isMe ? getStoredAvatar() : null;
+
   if (pic) {
     return '<div class="avatar" style="width:' + size + 'px;height:' + size + 'px;background:' + color + ';overflow:hidden;">' +
       '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;" alt="" />' +
