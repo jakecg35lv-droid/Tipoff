@@ -26,6 +26,7 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Bebas+Neue&display=swap"
     rel="stylesheet" />
   <link rel="stylesheet" href="src/styles.css" />
+  <link rel="stylesheet" href="src/season/season.css" />
 </head>
 
 <body>
@@ -273,6 +274,9 @@
      SPLASH SCREEN
 ════════════════════════════════════════════ -->
   <div id="splashScreen" class="screen" style="display:none;">
+    <button id="splashBackArrow" class="splash-back-arrow" type="button" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
 
     <div class="splash-hero">
       <div class="splash-logo">
@@ -284,11 +288,11 @@
       <div class="splash-actions">
         <button id="createLeagueSplashBtn" class="btn-primary btn-lg">+ Create League</button>
         <button id="joinLeagueSplashBtn" class="btn-ghost btn-lg">Join League</button>
-        <button id="splashBackBtn" class="btn-sign-out" style="margin-top:8px;">Back</button>
       </div>
     </div>
     <div class="splash-leagues">
       <h3 class="splash-leagues-title">Your Leagues</h3>
+      <div id="seasonLeagueSlot"></div>
       <div id="savedLeaguesList" class="saved-leagues-list">
         <p class="no-leagues">No leagues yet. Create or join one above.</p>
       </div>
@@ -312,6 +316,9 @@
       </div>
     </div>
   </div>
+
+  <!-- REGULAR SEASON (lab): self-contained, rendered by src/season/season.js -->
+  <div id="seasonApp" style="display:none;"></div>
 
   <!-- ═══════════════════════════════════════════
      MAIN APP
@@ -414,6 +421,12 @@
       </nav>
       <div class="sidebar-footer">
         <button class="sidebar-profile-btn" id="sidebarUser" data-page="profile"></button>
+        <button class="nav-btn back-leagues-btn" id="navBackLeaguesBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          All Leagues
+        </button>
         <button class="nav-btn signout-btn" id="navSignOutBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -1721,6 +1734,8 @@
        No-ops until a PostHog key is set in analytics.js. -->
   <script src="src/analytics.js"></script>
   <script src="src/app.js"></script>
+  <script src="data/conference-players.js"></script>
+  <script src="src/season/season.js"></script>
 
   <!-- Service Worker Registration -->
   <script>

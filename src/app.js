@@ -5067,7 +5067,18 @@ function buildNavSheet() {
     if (real) real.click();
   });
 
+  const leagues = document.createElement('button');
+  leagues.type = 'button';
+  leagues.className = 'ns-item ns-item-sub';
+  leagues.innerHTML = '<span class="ns-label">All Leagues</span>';
+  leagues.addEventListener('click', function () {
+    closeNavSheet();
+    const real = document.getElementById('navBackLeaguesBtn');
+    if (real) real.click();
+  });
+
   footer.appendChild(prof);
+  footer.appendChild(leagues);
   footer.appendChild(out);
   host.appendChild(footer);
 }
@@ -5828,6 +5839,21 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('signOutBtn')?.addEventListener('click', doSignOut);
   document.getElementById('navSignOutBtn')?.addEventListener('click', doSignOut);
   document.getElementById('splashBackBtn')?.addEventListener('click', showLanding);
+  document.getElementById('splashBackArrow')?.addEventListener('click', showLanding);
+
+  // All Leagues: leave the league view (it stays saved) and go back to
+  // the splash list, where you can open another league or create/join one.
+  function backToLeagues() {
+    try { saveState(); } catch (e) { console.warn('backToLeagues save', e); }
+    if (_leagueUnsubscribe) { _leagueUnsubscribe(); _leagueUnsubscribe = null; }
+    if (_gamesUnsub) { _gamesUnsub(); _gamesUnsub = null; }
+    if (_liveStatsUnsub) { _liveStatsUnsub(); _liveStatsUnsub = null; }
+    clearInterval(timerInterval); timerInterval = null;
+    state = freshState();
+    state.players = poolForCurrentTournament();
+    showSplash();
+  }
+  document.getElementById('navBackLeaguesBtn')?.addEventListener('click', backToLeagues);
 
   // Splash
   document.getElementById('createLeagueSplashBtn')?.addEventListener('click', () => {

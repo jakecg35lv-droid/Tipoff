@@ -12271,3 +12271,27 @@ select:focus {
   /* 16px floor stops iOS zooming the field on focus. */
   .reset-card .form-group input { font-size: 16px; }
 }
+
+/* Splash: back arrow (top-left) returns to the landing screen */
+.splash-back-arrow {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  left: max(16px, env(safe-area-inset-left));
+  z-index: 5;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-2, rgba(255,255,255,.18));
+  background: rgba(255, 255, 255, .05);
+  color: var(--text, #e6eef8);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .15s, border-color .15s, transform .15s;
+}
+.splash-back-arrow svg { width: 20px; height: 20px; }
+.splash-back-arrow:hover { background: rgba(255, 255, 255, .10); border-color: var(--text-2, #adc0d4); }
+.splash-back-arrow:active { transform: scale(.94); }
+.splash-back-arrow:focus-visible { outline: 2px solid var(--orange, #f26b21); outline-offset: 2px; }
+#splashScreen { position: relative; }
