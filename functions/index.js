@@ -41,7 +41,9 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // ── SportsDataIO Config ────────────────────────────────────────
-const API_KEY  = 'fcdd1c3aece74a0f8684e3958035ec80';
+//  API key removed. It was a deactivated SportsDataIO trial key
+//  published in a public repo. The live pipeline is ESPN and needs
+//  no credential; nothing in this file appends a key any more.
 const BASE     = 'https://api.sportsdata.io/v3/cbb';
 const STATS    = `${BASE}/stats/json`;
 const SCORES   = `${BASE}/scores/json`;
@@ -182,14 +184,17 @@ function makeApiClient(health, now) {
     }
 
     state.calls++;
-    // Only SportsDataIO wants a key. Appending it to ESPN URLs worked
-    // by accident (they ignore unknown params) but published a dead
-    // credential in every request. Keep it scoped.
-    let target = url;
-    if (url.indexOf('sportsdata.io') !== -1) {
-      target += (url.includes('?') ? '&' : '?') + 'key=' + API_KEY;
-    }
-    const res = await fetch(target);
+    // ── No API key is appended any more ──────────────────────
+    //  The SportsDataIO trial was deactivated long ago, but its key
+    //  stayed hardcoded in this file — in a PUBLIC repository, which
+    //  is how it ends up in secret scanners and in anyone's git
+    //  clone. The live pipeline is ESPN, which needs no credential.
+    //
+    //  The remaining SportsDataIO endpoints below (probe, probeGames,
+    //  rosters, runSync, getTeamDirectory) are dead code kept only
+    //  for reference. Without a key they now fail with 401, which is
+    //  the honest result given the account no longer exists.
+    const res = await fetch(url);
 
     if (res.status === 401 || res.status === 403 || res.status === 429) {
       state.failures++;
