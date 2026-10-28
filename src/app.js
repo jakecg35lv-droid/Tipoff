@@ -2096,6 +2096,16 @@ function renderRecentPicks() {
 function openDraftConfirm(playerId) {
   const p = (state.players || []).find(x => x.id === playerId);
   if (!p || state.drafted[playerId]) return;
+
+  // Refuse before the modal opens, so the reason lands on the tap
+  // rather than after someone has committed to a player.
+  if (!draftHasStarted()) {
+    toast(isCommissioner()
+      ? 'Start the draft before making a pick.'
+      : 'The draft has not started yet. The commissioner starts it.', 'error');
+    return;
+  }
+
   // Enforce: only the current manager on the clock can pick
   const pick = currentPick();
   const session = getSession();
@@ -2311,10 +2321,32 @@ function playerIsEligible(player, manager) {
   return checkRosterRule(player, manager).ok;
 }
 
+// ── Has the draft actually begun? ────────────────────────
+//  currentPick() only answers "is the draft finished", so it happily
+//  returns Round 1 Pick 1 before anyone has pressed Start. That let a
+//  manager draft out of a room that still said "Waiting for draft to
+//  begin" — and because picks are turn-ordered, whoever clicked first
+//  simply took the first pick regardless of the draft order.
+//
+//  pickTimerStartedAt survives a pause, so a paused draft still counts
+//  as started and can be resumed normally.
+function draftHasStarted() {
+  return !!(state.timerRunning || state.pickTimerStartedAt || state.currentPickIndex > 0);
+}
+
 function confirmDraftPick() {
   if (!pendingPickPlayerId) return;
   const pick = currentPick();
   if (!pick) { toast('Draft is complete or not started', 'error'); return; }
+  if (!draftHasStarted()) {
+    toast(isCommissioner()
+      ? 'Start the draft before making a pick.'
+      : 'The draft has not started yet. The commissioner starts it.', 'error');
+    const m = document.getElementById('draftConfirmModal');
+    if (m) m.style.display = 'none';
+    pendingPickPlayerId = null;
+    return;
+  }
   const p = (state.players || []).find(x => x.id === pendingPickPlayerId);
   if (!p || state.drafted[pendingPickPlayerId]) { toast('Player already drafted', 'error'); return; }
 
@@ -4517,6 +4549,10 @@ function wireQueue() {
 function autoPickForCurrent() {
   const pick = currentPick();
   if (!pick) return;
+  //  Also reachable from the commissioner's Autopick button, which
+  //  works before the draft is started. The timer path only fires
+  //  once the clock is running, so this never blocks a real autopick.
+  if (!draftHasStarted()) { toast('Start the draft first.', 'error'); return; }
   let players = getSortedPlayers('', '').filter(p => !state.drafted[p.id]);
   if (players.length === 0) return;
 
@@ -6004,6 +6040,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('skipPickBtn')?.addEventListener('click', () => {
     const pick = currentPick();
     if (!pick) return;
+    if (!draftHasStarted()) { toast('Start the draft first.', 'error'); return; }
     addActivity(esc(pick.manager) + ' skipped ' + esc(pick.label));
     state.currentPickIndex++;
     if (isDraftComplete()) {
