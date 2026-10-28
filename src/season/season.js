@@ -70,7 +70,142 @@
     });
   }
   function f1(n) { return (Math.round(n * 10) / 10).toFixed(1); }
-  function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* lab: ignore */ } }
+
+  /* ══════════════════════════════════════════════════════
+     FIRESTORE SYNC
+     The module was written for this: one plain-JSON document per
+     league. seasonLeagues/{code} holds the shared state; every
+     client keeps a local copy in localStorage as a cache and for
+     offline reads.
+
+     WHY A REVISION COUNTER
+       Every client holds the WHOLE blob, so a naive write is
+       last-write-wins and silently clobbers whatever it did not
+       know about. `rev` increments on every push; a snapshot older
+       than what we already have is ignored, and a snapshot newer
+       than ours replaces local state wholesale.
+
+     WHY GAMES ARE EXCLUDED
+       state.games grows to roughly 300KB across a full season,
+       which crowds Firestore's 1MB document ceiling. It lives in
+       seasonLeagues/{code}/weeks/{n} instead — which is also the
+       shape the server-side stats job will write.
+  ══════════════════════════════════════════════════════ */
+  var SYNC = { code: null, unsub: null, rev: 0, applying: false, timer: null };
+
+  function syncDb() { return window._db || null; }
+  function seasonDoc(code) {
+    var db = syncDb();
+    return db ? db.collection('seasonLeagues').doc(String(code).toUpperCase()) : null;
+  }
+  function myUid() {
+    return (window._fbUser && window._fbUser.uid) || null;
+  }
+
+  // The blob that travels. Games are stripped; everything else is
+  // already plain JSON by design.
+  function syncPayload() {
+    var copy = JSON.parse(JSON.stringify(state || {}));
+    delete copy.games;
+    return copy;
+  }
+
+  function pushState() {
+    if (SYNC.applying) return;                 // echo of a snapshot we just applied
+    if (!state || !state.league || !state.league.code) return;
+    var ref = seasonDoc(state.league.code);
+    if (!ref) return;
+
+    SYNC.rev += 1;
+    var payload = {
+      rev: SYNC.rev,
+      state: syncPayload(),
+      updatedAt: Date.now(),
+      updatedBy: myUid() || 'anon'
+    };
+    ref.set(payload, { merge: true })
+      .catch(function (e) { console.warn('[Season] push failed:', e && e.message); });
+  }
+
+  // Writes are debounced: a draft pick touches state several times
+  // in a row, and each one does not need its own round trip.
+  function schedulePush() {
+    if (SYNC.timer) clearTimeout(SYNC.timer);
+    SYNC.timer = setTimeout(function () { SYNC.timer = null; pushState(); }, 400);
+  }
+
+  function subscribeSeason(code) {
+    unsubscribeSeason();
+    var ref = seasonDoc(code);
+    if (!ref) return;
+    SYNC.code = code;
+    SYNC.unsub = ref.onSnapshot(function (doc) {
+      if (!doc.exists) return;
+      var d = doc.data() || {};
+      if (typeof d.rev !== 'number' || d.rev <= SYNC.rev) return;   // stale or our own echo
+      if (!d.state) return;
+
+      SYNC.rev = d.rev;
+      SYNC.applying = true;
+      try {
+        var games = (state && state.games) || {};   // keep locally cached games
+        state = d.state;
+        state.games = games;
+        markMine();
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { }
+        if (typeof render === 'function') { try { render(); } catch (e) { } }
+      } finally {
+        SYNC.applying = false;
+      }
+    }, function (e) { console.warn('[Season] snapshot error:', e && e.message); });
+  }
+
+  // ── Draft authority ──────────────────────────────────────
+  //  Multiplayer only matters once the league is actually shared.
+  //  Offline or signed out, every client is trivially the host and
+  //  the draft behaves exactly as it did in the lab.
+  var HOST_TAKEOVER_MS = 6000;   // grace before the host covers a silent human
+
+  function multiplayer() {
+    return !!(syncDb() && state && state.league && state.league.code && SYNC.unsub);
+  }
+  function isHost() {
+    if (!state || !state.league) return true;
+    var host = state.league.host;
+    if (!host) return true;              // league made before hosts existed
+    var uid = myUid();
+    return !!(uid && uid === host);
+  }
+
+  // ── Whose team is "mine" depends on the device ───────────
+  //  Everything downstream reads team.isUser. With one player that
+  //  was safe to bake into the stored state; with several it is a
+  //  per-client fact, so it is recomputed from uid whenever state
+  //  arrives from anywhere.
+  function markMine() {
+    if (!state || !state.teams) return;
+    var uid = myUid();
+    var claimed = false;
+    state.teams.forEach(function (t) {
+      if (!t) return;
+      t.isUser = !!(uid && t.uid === uid);
+      if (t.isUser) claimed = true;
+    });
+    // Signed out, or a league created before uids existed: fall back
+    // to seat 0 so a solo player still sees a team rather than none.
+    if (!claimed && !uid && state.teams[0]) state.teams[0].isUser = true;
+  }
+
+  function unsubscribeSeason() {
+    if (SYNC.unsub) { try { SYNC.unsub(); } catch (e) { } SYNC.unsub = null; }
+    SYNC.code = null;
+    SYNC.rev = 0;
+  }
+
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* quota or private mode */ }
+    schedulePush();
+  }
   function load() {
     try { var raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
   }
@@ -229,9 +364,13 @@
     var r = mulberry32(Date.now() >>> 0);
     for (var i = names.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)); var t = names[i]; names[i] = names[j]; names[j] = t; }
     for (var k = 0; k < n; k++) {
+      //  uid is what makes a seat human. The creator claims seat 0;
+      //  the rest stay bots until somebody joins with the code and
+      //  claims one. isUser is a LOCAL view (see markMine) because
+      //  "the user" is a different person on every device.
       teams.push({
         id: 't' + k, name: k === 0 ? (opts.teamName || sessionName() + "'s Team") : names[k - 1],
-        isUser: k === 0, roster: []
+        isUser: k === 0, uid: k === 0 ? myUid() : null, bot: k !== 0, roster: []
       });
     }
     // Randomize draft order (user not always first)
@@ -253,6 +392,10 @@
         format: fmt, conferences: fmt === 'conference' && opts.conferences && opts.conferences.length ? opts.conferences.slice() : null,
         start: cal.start, regWeeks: regWeeks, playoffWeeks: cal.playoffWeeks, weeks: regWeeks + cal.playoffWeeks,
         code: code6(), scoring: defaultScoring(),
+        //  The creator's device drives bot picks and the draft clock.
+        //  Without a single authority every client runs the same
+        //  timers and they race each other on every pick.
+        host: myUid(),
         slots: SLOTS.slice(), weights: WEIGHTS, seed: (Date.now() % 1e9) | 0
       },
       teams: teams,
@@ -264,6 +407,10 @@
       games: {}, lineups: {}, results: []
     };
     save();
+    // save() pushes the document; subscribing now means the creator
+    // is in multiplayer mode immediately rather than only after a
+    // reopen, which is what decides whether draft authority applies.
+    if (state.league.code) subscribeSeason(state.league.code);
   }
 
   // Circle-method round robin, cycled to fill the season.
@@ -509,9 +656,34 @@
     }
     if (!draftLive()) return;
     var d = draftCfg(), now = Date.now(), t = team(onClock());
-    if (!t.isUser && d.botAt && now >= d.botAt) { livePick(t.id, botChoose(t.id), 'bot'); afterPick(); return; }
+
+    /* ── Who is allowed to make this pick ──────────────────
+       Every client runs this tick. Solo, that is harmless. With
+       several people in a league it is not: `!t.isUser` is true on
+       YOUR device whenever SOMEONE ELSE is on the clock, so without
+       a guard your client would happily draft for your friend as
+       though he were a bot — and his client would do the same to
+       you, at the same moment, for the same slot.
+
+       The rule:
+         • a human seat is picked for by its own device only
+         • bot seats are picked for by the host alone
+         • if a human's device is gone, the host takes over after a
+           grace period so a disconnect cannot stall the draft    */
+    var mp = multiplayer();
+    var seatIsHuman = !!(t && t.uid);
+    var mineToPick = t.isUser;
+    var hostCovers = isHost() && (!seatIsHuman || now >= d.endsAt + HOST_TAKEOVER_MS);
+    var mayAct = !mp || mineToPick || hostCovers;
+
+    if (!mayAct) { paintClock(); return; }
+
+    // Bot clock: only ever for a seat with nobody behind it.
+    if (!seatIsHuman && d.botAt && now >= d.botAt) {
+      livePick(t.id, botChoose(t.id), 'bot'); afterPick(); return;
+    }
     if (now >= d.endsAt) {
-      if (t.isUser) {
+      if (mineToPick) {
         var qid = queueChoice(), pid = qid || botChoose(t.id);
         ui.confirmId = null;
         livePick(t.id, pid, 'auto');
@@ -3334,6 +3506,10 @@
     root = document.getElementById('seasonApp');
     if (!root) return;
     state = load();
+    markMine();
+    // Reconnect to the shared league so other managers' picks and
+    // lineups arrive while this device is open.
+    if (state && state.league && state.league.code) subscribeSeason(state.league.code);
     resetPool();
     ui.setup = { name: 'Season League', team: sessionName() === 'You' ? 'My Team' : sessionName() + "'s Team", teams: 8, roster: 10, weeks: 12, timer: 90,
       format: 'conference', confMode: 'mix', conferences: MAJORS.slice() };
@@ -3356,6 +3532,9 @@
   }
   function close() {
     clearInterval(open._tick);
+    // Drop the listener; leaving it running would keep applying
+    // remote state to a module nobody is looking at.
+    unsubscribeSeason();
     var pa = document.getElementById('ssPickAnnounce'); if (pa) pa.style.display = 'none';
     if (root) { root.style.display = 'none'; root.innerHTML = ''; }
     document.body.classList.remove('ss-open');
@@ -3419,12 +3598,85 @@
   //  draftAt, member } or null.
   var bypassJoin = false;
   function lookupSeasonLeague(code) {
+    code = String(code || '').trim().toUpperCase();
+    if (!code) return Promise.resolve(null);
+
+    // Already the league open on this device.
     var s = load();
     if (s && s.league && s.league.code === code) {
       return Promise.resolve({ code: code, name: s.league.name, format: s.league.format, conferences: s.league.conferences,
         numTeams: s.league.numTeams, joined: 1, draftAt: s.draft && s.draft.scheduledAt, member: true });
     }
-    return Promise.resolve(null); // lab: no shared database yet
+
+    // Otherwise ask the shared database.
+    var ref = seasonDoc(code);
+    if (!ref) return Promise.resolve(null);
+    return ref.get().then(function (doc) {
+      if (!doc.exists) return null;
+      var d = doc.data() || {};
+      var st = d.state || {};
+      var lg = st.league || {};
+      var teams = st.teams || [];
+      var uid = myUid();
+      var taken = teams.filter(function (t) { return t && t.uid; }).length;
+      return {
+        code: code,
+        name: lg.name || 'Season League',
+        format: lg.format,
+        conferences: lg.conferences,
+        numTeams: lg.numTeams || teams.length,
+        joined: taken,
+        draftAt: st.draft && st.draft.scheduledAt,
+        member: !!(uid && teams.some(function (t) { return t && t.uid === uid; })),
+        _doc: d
+      };
+    }).catch(function (e) {
+      console.warn('[Season] lookup failed:', e && e.message);
+      return null;
+    });
+  }
+
+  // ── Join: claim a seat in a league that already exists ──
+  //  Seats are the bot teams the league was created with. Claiming
+  //  one swaps the bot for a person; `uid` is what marks a seat as
+  //  human, so a rejoin from the same account finds its own team
+  //  rather than taking a second one.
+  function joinSeasonLeague(code) {
+    code = String(code || '').trim().toUpperCase();
+    var ref = seasonDoc(code);
+    var uid = myUid();
+    if (!ref) return Promise.reject(new Error('Not connected.'));
+    if (!uid) return Promise.reject(new Error('Sign in first.'));
+
+    return ref.get().then(function (doc) {
+      if (!doc.exists) throw new Error('No league with that code.');
+      var d = doc.data() || {};
+      var st = d.state;
+      if (!st || !st.teams) throw new Error('That league is not ready yet.');
+
+      var mine = st.teams.filter(function (t) { return t && t.uid === uid; })[0];
+      if (!mine) {
+        var seat = st.teams.filter(function (t) { return t && !t.uid; })[0];
+        if (!seat) throw new Error('That league is full.');
+        seat.uid = uid;
+        seat.name = sessionName();
+        seat.bot = false;
+      }
+
+      SYNC.rev = (typeof d.rev === 'number' ? d.rev : 0) + 1;
+      return ref.set({ rev: SYNC.rev, state: st, updatedAt: Date.now(), updatedBy: uid }, { merge: true })
+        .then(function () {
+          SYNC.applying = true;
+          try {
+            state = st;
+            state.games = state.games || {};
+            markMine();
+            try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { }
+          } finally { SYNC.applying = false; }
+          subscribeSeason(code);
+          return state;
+        });
+    });
   }
   function showSeasonJoin(info, code) {
     var bd = document.createElement('div');
@@ -3437,8 +3689,8 @@
         : '<label class="tut-label" for="sjTeam">Your team name</label><input id="sjTeam" class="tut-input" maxlength="30" value="' + esc(sessionName() === 'You' ? 'My Team' : sessionName() + "'s Team") + '" />' +
           '<div class="sj-actions"><button class="btn-ghost" data-sj="cancel">Cancel</button><button class="btn-primary" data-sj="join">Join League</button></div>')
       : '<span class="ss-splash-tag">Season league</span><h3 id="sjTitle">Invite code ' + esc(code) + '</h3>' +
-        '<p>Season leagues aren’t online in the lab yet. When multiplayer is live, this invite opens the league so you can pick your team name and join.</p>' +
-        '<div class="sj-actions"><button class="btn-primary" data-sj="cancel">Got it</button></div>') +
+        '<p>No league found with that code. Check it with whoever invited you — codes are six characters and are case-insensitive.</p>' +
+        '<div class="sj-actions"><button class="btn-primary" data-sj="cancel">Close</button></div>') +
       '</div>';
     document.body.appendChild(bd);
     requestAnimationFrame(function () { bd.classList.add('in'); });
@@ -3446,7 +3698,36 @@
       var b = e.target.closest('[data-sj]');
       if (!b && e.target !== bd) return;
       var act = b ? b.getAttribute('data-sj') : 'cancel';
-      if (act === 'join') return; // wired with multiplayer
+
+      if (act === 'join') {
+        if (b.disabled) return;
+        b.disabled = true; b.textContent = 'Joining…';
+        var nameEl = bd.querySelector('#sjTeam');
+        var teamName = (nameEl && nameEl.value || '').trim();
+
+        joinSeasonLeague(code).then(function () {
+          // Name the seat we just claimed, then let the league open.
+          if (teamName && state && state.teams) {
+            var mine = state.teams.filter(function (t) { return t && t.isUser; })[0];
+            if (mine) { mine.name = teamName; save(); }
+          }
+          bd.remove();
+          open();
+        }).catch(function (err) {
+          b.disabled = false; b.textContent = 'Join League';
+          var msg = bd.querySelector('.sj-error');
+          if (!msg) {
+            msg = document.createElement('p');
+            msg.className = 'sj-error';
+            msg.style.cssText = 'color:#f05252;font-size:13px;margin:10px 0 0;';
+            var card = bd.querySelector('.sj-card');
+            if (card) card.appendChild(msg);
+          }
+          msg.textContent = (err && err.message) || 'Could not join. Try again.';
+        });
+        return;
+      }
+
       bd.remove();
       if (act === 'open') open();
     });

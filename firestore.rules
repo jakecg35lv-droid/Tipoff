@@ -33,6 +33,31 @@ service cloud.firestore {
       }
     }
 
+    // ── Season leagues ───────────────────────────────────────
+    //  Regular-season mode. One document per league, keyed by the
+    //  six-character code, exactly like tournament leagues: the code
+    //  is the access control, which is why it is random.
+    //
+    //  Deliberately a SEPARATE collection from /leagues. Season and
+    //  tournament state have different shapes, and a bug in one must
+    //  not be able to write over the other.
+    match /seasonLeagues/{code} {
+      allow read, write: if request.auth != null;
+
+      //  Weekly box scores live here rather than in the parent
+      //  document, which would otherwise approach the 1MB ceiling
+      //  across a full season. Written by the stats job, read by
+      //  clients — so clients must not be able to invent scores.
+      match /weeks/{week} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+
+      match /{sub=**} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
     // ── Live tournament stats ────────────────────────────────
     //  Written only by the Cloud Function, which uses the Admin
     //  SDK and bypasses these rules entirely. Clients read only.
