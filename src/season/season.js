@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════
-   TIPOFF FANTASY — Regular Season (LAB)
+   TIPOFF FANTASY — Regular Season
 
    A self-contained season-long mode: commissioner picks roster size
    (8–12), everyone snake-drafts, then each week is a head-to-head
@@ -158,6 +158,19 @@
         SYNC.applying = false;
       }
     }, function (e) { console.warn('[Season] snapshot error:', e && e.message); });
+  }
+
+  // ── Dev tools gate ───────────────────────────────────────
+  //  The week simulator is the only thing that advances a week until
+  //  the real stats pipeline lands, so it cannot simply be deleted.
+  //  It is hidden from users instead: add ?dev=1 once and it stays on
+  //  for this browser. Nothing here is reachable by a normal visitor.
+  function devMode() {
+    try {
+      if (/[?&]dev=1/.test(location.search)) localStorage.setItem('tipoff-season-dev', '1');
+      if (/[?&]dev=0/.test(location.search)) localStorage.removeItem('tipoff-season-dev');
+      return localStorage.getItem('tipoff-season-dev') === '1';
+    } catch (e) { return false; }
   }
 
   // ── Draft authority ──────────────────────────────────────
@@ -1498,7 +1511,7 @@
             '<img src="logo-icon.png" class="logo-mark sidebar-logo-img" width="42" height="42" alt="Tipoff Fantasy" />' +
             '<span class="sidebar-logo-text"><strong>TIPOFF</strong><span class="slt-light">FANTASY</span></span>' +
           '</div>' +
-          '<div class="ss-mode-tag"><span>Regular season</span><em title="Offline lab build. Games are simulated.">Lab</em></div>' +
+          '<div class="ss-mode-tag"><span>Regular season</span><em title="Scores are simulated until the live stats feed is connected.">Preview</em></div>' +
           '<nav class="sidebar-nav">' + (state ? navBtns : '') + '</nav>' +
           '<div class="sidebar-footer">' +
             '<button class="nav-btn signout-btn" data-act="exit">' + ICON.back + 'All Leagues</button>' +
@@ -1515,14 +1528,14 @@
             '<nav class="ss-tb-nav" aria-label="Season">' + navItems().filter(function (n) { return n[0] !== 'settings'; }).map(function (n) {
               return '<button class="ss-tb-pill' + (ui.page === n[0] ? ' on' : '') + '" data-act="nav" data-page="' + n[0] + '">' + n[1] + '</button>';
             }).join('') + '</nav>' +
-            '<div class="ss-tb-right"><button class="ss-lab-chip" data-act="labtoggle" aria-expanded="' + !!ui.lab + '" title="Lab simulator">Lab</button>' +
+            '<div class="ss-tb-right">' + (devMode() ? '<button class="ss-lab-chip" data-act="labtoggle" aria-expanded="' + !!ui.lab + '" title="Week simulator (dev)">Dev</button>' : '') +
               '<button class="ss-tb-icon' + (ui.page === 'settings' ? ' on' : '') + '" data-act="nav" data-page="settings" aria-label="Settings">' + appIcon('settings') + '</button>' +
               '<button class="ss-tb-icon" data-act="exit" aria-label="All leagues">' + ICON.back + '</button></div></header>' + ticker() : '') +
           '<div class="mobile-clock-bar ss-mobile-bar">' +
             '<button class="ss-mb-back" data-act="exit" aria-label="All leagues">' + ICON.back + '</button>' +
             '<div class="mcb-clock-info"><div class="mcb-label">' + (state ? mobileBarLabel() : 'Regular season') + '</div>' +
             '<div class="mcb-manager">' + (state ? mobileBarValue() : 'New league') + '</div></div>' +
-            (state ? '<button class="ss-lab-chip" data-act="labtoggle" aria-expanded="' + !!ui.lab + '" title="Lab simulator">Lab</button>' : '<span class="ss-lab-chip">Lab</span>') +
+            (devMode() && state ? '<button class="ss-lab-chip" data-act="labtoggle" aria-expanded="' + !!ui.lab + '" title="Week simulator (dev)">Dev</button>' : '') +
           '</div>' +
           '<section class="page ' + (changed ? 'active-page' : 'ss-static') + '">' + page + '</section>' +
         '</main>' +
@@ -2175,7 +2188,7 @@
     var ctrls = (pre ? '<button class="g-btn solid" data-act="startdraft">Start Draft</button>' :
         paused ? '<button class="g-btn solid" data-act="resumedraft">Resume</button>' :
         (canPick ? '<button class="g-btn solid" data-act="autopick">Autopick</button>' : '') + '<button class="g-btn" data-act="pausedraft">Pause</button>') +
-      (!pre ? '<button class="g-btn ghost" data-act="simdraft"' + (mine ? ' disabled' : '') + ' title="Lab: jump past bot picks">Skip to my pick</button>' : '');
+      (!pre && devMode() ? '<button class="g-btn ghost" data-act="simdraft"' + (mine ? ' disabled' : '') + ' title="Dev: jump past bot picks">Skip to my pick</button>' : '');
     var hero = '<section class="g-card dg-hero' + (canPick ? ' hot' : '') + '">' +
       '<div class="dg-hl"><div class="dg-kick">' + (pre ? 'Snake draft' : canPick ? '<span class="ss-live sm">Your pick</span>' : '<span class="ss-live sm' + (paused ? ' off' : '') + '">' + (paused ? 'Paused' : 'Live') + '</span>') + '</div>' +
         '<h1>' + title + '</h1><p>' + sub + '</p><div class="g-ctrl">' + ctrls + '</div></div>' +
@@ -2213,7 +2226,7 @@
       }).join('') : '<p class="g-note">Picks show up here as they happen.</p>') + '</div></section>';
 
     return hero + '<div class="dg-body">' + pool + '<div class="dg-side">' + queue + roster + recentCard + '</div></div>' +
-      '<p class="ss-lab-note dg-labnote">Lab: bots pick 2–5 seconds into their clock.</p>' + confirmModal();
+      '<p class="ss-lab-note dg-labnote">Open seats are filled by auto-pick.</p>' + confirmModal();
   }
   function ordinal(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
   function confirmModal() {
@@ -2505,14 +2518,15 @@
   }
   // Lab only: stands in for the live game feed until the pipeline exists.
   function labPanel() {
+    if (!devMode()) return '';
     if (!state || state.phase === 'draft' || state.phase === 'done') return '';
     var over = state.day > 6;
     var btns = over
       ? '<button class="g-btn solid" data-act="nextweek">' + (state.week >= state.league.weeks ? 'Finish Season' : state.week + 1 > regWeeks() ? 'Start ' + weekLabel(state.week + 1) : 'Start Week ' + (state.week + 1)) + '</button>'
       : '<button class="g-btn solid" data-act="simday">Play ' + DAYS_FULL[state.day] + '</button><button class="g-btn" data-act="simweek">Rest of Week</button>';
     return '<div class="ss-labpanel"' + (ui.lab ? '' : ' hidden') + ' role="dialog" aria-label="Lab game simulator">' +
-      '<div class="ss-lp-h"><b>Lab simulator</b><button class="ss-lp-x" data-act="labtoggle" aria-label="Close">×</button></div>' +
-      '<p>Stands in for real games until live stats are connected. Not part of the real app.</p>' +
+      '<div class="ss-lp-h"><b>Week simulator</b><button class="ss-lp-x" data-act="labtoggle" aria-label="Close">×</button></div>' +
+      '<p>Developer tool. Advances the week from simulated box scores until the live stats feed is connected.</p>' +
       '<div class="ss-lp-btns">' + btns + '</div></div>';
   }
   function weekBar() {
@@ -2906,7 +2920,7 @@
       (canShare ? '<button class="g-btn iv-share" data-act="ivshare">Share invite…</button>' : '') +
       '<div class="pc-sec"><h3>Managers</h3><div class="iv-list">' + rows + '</div></div>' +
       '<p class="iv-note">Friends enter the code under <b>Join League</b>, or tap the link. Draft day: ' + (draftCfg().scheduledAt ? esc(fmtWhen(draftCfg().scheduledAt)) : 'not scheduled yet (Settings → Schedule Draft)') + '.</p>' +
-      '<p class="iv-lab">Lab: joining goes live with multiplayer. The code and link won’t change.</p>' +
+      '<p class="iv-lab">Anyone with this code can claim an open seat in your league.</p>' +
     '</div></div>';
   }
   function copyToClipboard(t) {
@@ -3028,7 +3042,7 @@
       '<section class="g-card ch-wrap"><div class="ch-list" id="ssChatList">' + (c.msgs.length ? chatRows(c.msgs) : empty) + '</div>' +
       '<form class="ch-form" onsubmit="return false"><input id="ssChatInput" class="ch-input" type="text" maxlength="500" autocomplete="off" placeholder="Message ' + esc(state.league.name) + '" value="' + esc(ui.chatDraft || '') + '" />' +
       '<button class="ch-send" type="submit" data-act="chatsend" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button></form></section>' +
-      '<p class="ch-note">Lab: messages are saved on this device. Everyone in the league sees them once multiplayer is on.</p>';
+      '<p class="ch-note">Messages are shared with everyone in your league.</p>';
   }
   function sendChat() {
     var inp = document.getElementById('ssChatInput');
@@ -3406,8 +3420,16 @@
         var so = document.getElementById('signOutBtn'); if (so) so.click();
         return;
       case 'joinleague':
-        var jc = (document.getElementById('ssJoinCode') || {}).value || '';
-        notify(jc.trim().length === 6 ? 'Joining by code needs the live database. It’s off in the lab.' : 'Enter the 6-character league code.', 'info');
+        var jc = ((document.getElementById('ssJoinCode') || {}).value || '').trim().toUpperCase();
+        if (jc.length !== 6) { notify('Enter the 6-character league code.', 'info'); return; }
+        //  Was a dead end while the lab had no shared database. It
+        //  resolves against Firestore now, so the same dialog the
+        //  invite link uses is reused here.
+        notify('Looking up ' + jc + '…', 'info');
+        lookupSeasonLeague(jc).then(function (info) {
+          if (!info) { notify('No league found with that code.', 'error'); return; }
+          showSeasonJoin(info, jc);
+        }).catch(function () { notify('Could not reach the league database.', 'error'); });
         return;
       case 'savescoring':
         var scn = state.league.scoring || defaultScoring();
