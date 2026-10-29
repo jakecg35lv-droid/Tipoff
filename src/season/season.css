@@ -267,11 +267,56 @@ body.ss-open > *:not(#seasonApp):not(script):not(#toastContainer):not(.mode-back
 .mode-opt i { font-style: normal; font-size: 12px; font-weight: 600; color: #8399b1; margin-top: auto; padding-top: 8px; }
 .mode-cancel { display: block; width: 100%; margin-top: 10px; padding: 12px; background: none; border: 0; cursor: pointer; color: #8399b1; font: 600 14px 'Inter', sans-serif; }
 .mode-cancel:hover { color: #e8eff8; }
+
+/* ── Join-by-code, inside the Start a league dialog ──────────
+   The only entry point for someone who is in no league yet, so it
+   has to be visible without scrolling and usable one-handed. */
+.mode-join {
+  margin-top: 18px; padding-top: 16px;
+  border-top: 1px solid rgba(173, 192, 212, .14);
+}
+.mode-join-label {
+  display: block; margin-bottom: 8px;
+  font-size: 13px; font-weight: 600; color: #b3c4d6;
+}
+.mode-join-row { display: flex; gap: 8px; align-items: stretch; }
+.mode-join-input {
+  flex: 1 1 auto; min-width: 0;            /* or the button pushes out of the card */
+  padding: 0 14px; height: 48px;
+  border-radius: 12px;
+  border: 1px solid rgba(173, 192, 212, .2);
+  background: #0a1626; color: #e8eff8;
+  /* 16px floor: anything smaller makes iOS Safari zoom the page on focus */
+  font: 700 16px/1 'Inter', system-ui, sans-serif;
+  letter-spacing: .18em; text-transform: uppercase;
+}
+.mode-join-input::placeholder { color: #5c7390; letter-spacing: .18em; font-weight: 600; }
+.mode-join-input:focus {
+  outline: none; border-color: #f26b21;
+  box-shadow: 0 0 0 3px rgba(242, 107, 33, .18);
+}
+.mode-join-btn {
+  flex: 0 0 auto; min-width: 92px; height: 48px; padding: 0 18px;
+  border: 0; border-radius: 12px; cursor: pointer;
+  background: #f26b21; color: #fff;
+  font: 700 15px 'Inter', system-ui, sans-serif;
+  transition: background-color .15s, opacity .15s;
+}
+.mode-join-btn:hover:not(:disabled) { background: #ff8a45; }
+.mode-join-btn:focus-visible { outline: 2px solid #ff8a45; outline-offset: 2px; }
+.mode-join-btn:disabled { opacity: .55; cursor: default; }
+.mode-join-msg {
+  margin: 8px 0 0; min-height: 17px;
+  font-size: 13px; line-height: 1.35; color: #8399b1;
+}
+.mode-join-msg.is-err { color: #ff8a7a; }
+
 @media (max-width: 520px) {
   .mode-opts { grid-template-columns: 1fr; }
   .mode-opt { display: grid; grid-template-columns: 40px 1fr; column-gap: 14px; row-gap: 2px; }
   .mode-ic { grid-row: span 3; margin: 0; }
   .mode-opt i { padding-top: 4px; }
+  .mode-join-btn { min-width: 76px; padding: 0 14px; }
 }
 
 /* ══ Season league entry on the splash ════════════════════ */

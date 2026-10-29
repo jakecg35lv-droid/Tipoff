@@ -437,6 +437,48 @@
     // is in multiplayer mode immediately rather than only after a
     // reopen, which is what decides whether draft authority applies.
     if (state.league.code) subscribeSeason(state.league.code);
+
+    //  save()'s push is debounced by 400ms and its failure path only
+    //  warns. So a league could sit on screen with a code the creator
+    //  reads out loud while no document ever reached the server — and
+    //  the first anyone learned of it was a friend being told "no
+    //  league found". Write once, now, and wait for the answer.
+    confirmLeagueSaved();
+  }
+
+  //  Writes the new league immediately and tells the creator the truth
+  //  either way. Separate from pushState so the debounce, the revision
+  //  counter and the echo guard are left exactly as they are.
+  function confirmLeagueSaved() {
+    var ref = state && state.league && state.league.code ? seasonDoc(state.league.code) : null;
+    if (!ref) {
+      try { notify('Not connected to the league database. This league is only on this device, so nobody can join it.', 'error'); } catch (_) { }
+      return Promise.resolve(false);
+    }
+    if (!myUid()) {
+      try { notify('Sign in to share this league. While signed out it stays on this device.', 'error'); } catch (_) { }
+      return Promise.resolve(false);
+    }
+    return ref.set({
+      rev: SYNC.rev || 1,
+      state: syncPayload(),
+      updatedAt: Date.now(),
+      updatedBy: myUid()
+    }, { merge: true }).then(function () {
+      SYNC.rev = SYNC.rev || 1;
+      return true;
+    }).catch(function (e) {
+      var c = (e && e.code) || '';
+      console.warn('[Season] league create write failed:', c, e && e.message);
+      SYNC.warnedDenied = true;   // pushState has already said its piece
+      try {
+        notify(c === 'permission-denied'
+          ? 'This league could not be saved to the server, so the code will not work for anyone else. Firestore rules for seasonLeagues may not be deployed yet.'
+          : 'This league could not be saved to the server (' + (c || 'network error') + '). The code will not work for anyone else until it saves.',
+          'error');
+      } catch (_) { }
+      return false;
+    });
   }
 
   // Circle-method round robin, cycled to fill the season.
@@ -461,7 +503,25 @@
   // ── Draft ───────────────────────────────────────────────
   function onClock() { return state.draft.order[state.draft.pick]; }
   function team(id) { for (var i = 0; i < state.teams.length; i++) if (state.teams[i].id === id) return state.teams[i]; }
-  function userTeam() { return state.teams[0]; }
+  //  Seat 0 is the CREATOR's team, not "my" team. Returning it
+  //  unconditionally meant a joiner who claimed seat 3 spent the whole
+  //  season setting lineups, drafting and dropping on the host's
+  //  roster — 41 call sites all pointed at the wrong person. The seat
+  //  that is mine is the one markMine() flagged from my uid.
+  function userTeam() {
+    if (!state || !state.teams || !state.teams.length) return null;
+    for (var i = 0; i < state.teams.length; i++) {
+      if (state.teams[i] && state.teams[i].isUser) return state.teams[i];
+    }
+    //  No seat claimed by this account: recompute once in case a
+    //  snapshot arrived before auth did, then fall back to seat 0 so a
+    //  solo/offline player still sees a team rather than a blank app.
+    markMine();
+    for (var j = 0; j < state.teams.length; j++) {
+      if (state.teams[j] && state.teams[j].isUser) return state.teams[j];
+    }
+    return state.teams[0];
+  }
   function drafted() {
     var s = {};
     state.teams.forEach(function (t) { t.roster.forEach(function (id) { s[id] = true; }); });
@@ -3603,8 +3663,20 @@
         notify('Looking up ' + jc + '…', 'info');
         lookupSeasonLeague(jc).then(function (info) {
           if (info && info.error) { notify(joinErrorText(info.error), 'error'); return; }
-          if (!info) { notify('No league found with that code.', 'error'); return; }
-          showSeasonJoin(info, jc);
+          if (info) { showSeasonJoin(info, jc); return; }
+          //  The hint under this box says tournament leagues live in
+          //  All Leagues, so a tournament code typed here used to be
+          //  rejected outright. Hand it to the tournament flow instead
+          //  of blaming the code.
+          close();
+          var tInput = document.getElementById('joinCodeInput');
+          var tBtn = document.getElementById('joinConfirmBtn');
+          var tModal = document.getElementById('joinModal');
+          if (!tInput || !tBtn) { notify('No league found with that code.', 'error'); return; }
+          if (tModal) tModal.style.display = 'flex';
+          tInput.value = jc;
+          bypassJoin = true;
+          try { tBtn.click(); } finally { bypassJoin = false; }
         }).catch(function () { notify('Could not reach the league database.', 'error'); });
         return;
       case 'savescoring':
@@ -3771,13 +3843,81 @@
             '<svg class="mode-ic" viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="9" width="36" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M6 18h36M15 5v8M33 5v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><rect x="13" y="25" width="6" height="6" rx="1.5" fill="currentColor"/><rect x="29" y="25" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>' +
             '<b>Regular season</b><span>Draft 8 to 12 players and face a new opponent every week with lock-in scoring.</span><i>November through March</i></button>' +
         '</div>' +
+        //  Joining had no reachable entry point for the one person who
+        //  needs it: the season join box lived in season Settings, which
+        //  you can only open once you are ALREADY in a season league.
+        //  Someone handed a code had nowhere to type it. One box here
+        //  serves both modes, because codes are unique across them.
+        '<div class="mode-join">' +
+          '<label class="mode-join-label" for="modeJoinCode">Got a code from a friend?</label>' +
+          '<div class="mode-join-row">' +
+            '<input type="text" id="modeJoinCode" class="mode-join-input" placeholder="ABC123" maxlength="6" ' +
+              'autocapitalize="characters" autocomplete="off" spellcheck="false" inputmode="text" />' +
+            '<button type="button" class="mode-join-btn" data-mode="join">Join</button>' +
+          '</div>' +
+          '<p class="mode-join-msg" id="modeJoinMsg" role="status" aria-live="polite"></p>' +
+        '</div>' +
         '<button class="mode-cancel" data-mode="cancel">Cancel</button>' +
       '</div>';
     document.body.appendChild(bd);
     requestAnimationFrame(function () { bd.classList.add('in'); });
-    function onKey(ev) { if (ev.key === 'Escape') { finish('cancel'); } }
+    function onKey(ev) {
+      if (ev.key === 'Escape') { finish('cancel'); return; }
+      //  Phone keyboards show "Go", not a Join button they can see
+      //  while the keyboard is up. Enter has to work.
+      if (ev.key === 'Enter' && ev.target && ev.target.id === 'modeJoinCode') {
+        ev.preventDefault(); finish('join');
+      }
+    }
     document.addEventListener('keydown', onKey);
+    //  Resolve a code without closing the dialog, so a typo can be
+    //  corrected in place instead of starting the flow over.
+    function tryJoin() {
+      var inp = bd.querySelector('#modeJoinCode');
+      var msg = bd.querySelector('#modeJoinMsg');
+      var btn = bd.querySelector('.mode-join-btn');
+      var code = ((inp && inp.value) || '').trim().toUpperCase();
+      function say(text, kind) {
+        if (!msg) return;
+        msg.textContent = text || '';
+        msg.className = 'mode-join-msg' + (kind ? ' is-' + kind : '');
+      }
+      if (!/^[A-Z0-9]{6}$/.test(code)) { say('League codes are six letters and numbers.', 'err'); if (inp) inp.focus(); return; }
+      if (!myUid()) { say('Sign in first, then join with your code.', 'err'); return; }
+      if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+      say('Looking up ' + code + '…', '');
+
+      function reset() { if (btn) { btn.disabled = false; btn.textContent = 'Join'; } }
+
+      lookupSeasonLeague(code).then(function (info) {
+        if (info && info.error) { reset(); say(joinErrorText(info.error), 'err'); return; }
+        if (info) {
+          // A season league. Hand off to the join sheet.
+          document.removeEventListener('keydown', onKey);
+          bd.remove();
+          showSeasonJoin(info, code);
+          return;
+        }
+        //  Not a season code. It may still be a tournament code, so
+        //  hand it to the tournament join modal pre-filled rather than
+        //  telling the user it does not exist.
+        document.removeEventListener('keydown', onKey);
+        bd.remove();
+        var tInput = document.getElementById('joinCodeInput');
+        var tBtn = document.getElementById('joinConfirmBtn');
+        var tModal = document.getElementById('joinModal');
+        if (!tInput || !tBtn) { notify('No league found with that code.', 'error'); return; }
+        if (tModal) tModal.style.display = 'flex';
+        tInput.value = code;
+        bypassJoin = true;
+        try { tBtn.click(); } finally { bypassJoin = false; }
+      }).catch(function () {
+        reset(); say('Could not reach the league database.', 'err');
+      });
+    }
+
     function finish(mode) {
+      if (mode === 'join') { tryJoin(); return; }
       document.removeEventListener('keydown', onKey);
       bd.remove();
       if (mode === 'tournament') {
