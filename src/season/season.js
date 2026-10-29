@@ -768,6 +768,9 @@
     state.day = 0;
     updateInjuries(state.week);
     state.games[state.week] = generateWeekGames(state.week);
+    //  Simulation first so the week is never empty, then replaced by
+    //  real box scores if the feed has any for these dates.
+    upgradeWeekToReal(state.week);
     state.lineups[state.week] = {};
     state.teams.forEach(function (t) {
       var prev = state.lineups[state.week - 1] && state.lineups[state.week - 1][t.id];
@@ -813,6 +816,165 @@
   }
 
   // Simulated weekly schedule + box scores. One school = one schedule.
+  /* ══════════════════════════════════════════════════════
+     REAL BOX SCORES
+     generateWeekGames invents a week from season averages. This
+     replaces it with what actually happened, read from the shared
+     seasonStats collection the Cloud Function writes.
+
+     It never blocks. startWeek() still fills the week from the
+     simulation immediately, then this upgrades it in place when the
+     real data arrives and re-renders. A league drafted before the
+     season opens therefore still works, and starts showing real
+     games the moment there are any.
+
+     Shape out is identical to the simulation, because everything
+     downstream reads state.games[week][playerId] and nothing else.
+  ══════════════════════════════════════════════════════ */
+  var SEASON_STATS_ID = '2026-27';
+
+  function weekRange(week) {
+    var st = state && state.league && state.league.start
+      ? new Date(state.league.start[0], state.league.start[1], state.league.start[2])
+      : SEASON_START;
+    var a = new Date(st.getTime() + (week - 1) * 7 * 864e5);
+    var b = new Date(a.getTime() + 6 * 864e5);
+    var iso = function (d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+        '-' + String(d.getDate()).padStart(2, '0');
+    };
+    return { startISO: iso(a), endISO: iso(b), start: a };
+  }
+
+  // Which 0-6 day of the league week an ET date falls on.
+  function dayIndexFor(dateISO, week) {
+    var r = weekRange(week);
+    var parts = String(dateISO).split('-');
+    var d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+    var diff = Math.round((d - r.start) / 864e5);
+    return diff >= 0 && diff <= 6 ? diff : -1;
+  }
+
+  function normSchool(s) {
+    return String(s || '').toLowerCase()
+      .replace(/&amp;/g, '&').replace(/[.']/g, '')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  //  Rostered players only. Reading all 1,027 player documents every
+  //  week to find the eighty that matter would be wasteful.
+  function rosteredPlayers() {
+    var ids = {};
+    (state.teams || []).forEach(function (t) {
+      (t.roster || []).forEach(function (pid) { ids[pid] = true; });
+    });
+    return Object.keys(ids);
+  }
+
+  function loadRealWeek(week) {
+    var db = syncDb();
+    if (!db || !state) return Promise.resolve(null);
+
+    var r = weekRange(week);
+    var statsRef = db.collection('seasonStats').doc(SEASON_STATS_ID);
+
+    return statsRef.collection('games')
+      .where('date', '>=', r.startISO)
+      .where('date', '<=', r.endISO)
+      .get()
+      .then(function (snap) {
+        if (snap.empty) return null;              // nothing real for this week
+
+        // school -> the games it played this week
+        var bySchool = {};
+        snap.forEach(function (doc) {
+          var g = doc.data() || {};
+          [['home', 'away'], ['away', 'home']].forEach(function (pair) {
+            var me = g[pair[0]] || {}, them = g[pair[1]] || {};
+            var key = normSchool(me.school);
+            if (!key) return;
+            (bySchool[key] = bySchool[key] || []).push({
+              gameId: doc.id,
+              day: dayIndexFor(g.date, week),
+              opp: them.school || 'TBD',
+              home: pair[0] === 'home',
+              ts: me.score, os: them.score,
+              time: g.startsAt || '',
+              completed: !!g.completed
+            });
+          });
+        });
+
+        var ids = rosteredPlayers();
+        if (!ids.length) return { bySchool: bySchool, lines: {} };
+
+        return Promise.all(ids.map(function (pid) {
+          var p = P(pid);
+          var espnId = (p && p.espnId) || String(pid).replace(/^e/, '');
+          return statsRef.collection('players').doc(String(espnId)).get()
+            .then(function (d) { return { pid: pid, data: d.exists ? d.data() : null }; })
+            .catch(function () { return { pid: pid, data: null }; });
+        })).then(function (rows) {
+          var lines = {};
+          rows.forEach(function (row) { if (row.data) lines[row.pid] = row.data; });
+          return { bySchool: bySchool, lines: lines };
+        });
+      })
+      .catch(function (e) {
+        console.warn('[Season] real stats read failed:', e && e.message);
+        return null;
+      });
+  }
+
+  //  Turns the two collections into the exact structure the
+  //  simulation produced, so nothing downstream changes.
+  function buildRealWeek(week, real) {
+    var out = {};
+    rosteredPlayers().forEach(function (pid) {
+      var p = P(pid);
+      if (!p) return;
+      var sched = real.bySchool[normSchool(p.college)] || [];
+      if (!sched.length) return;
+
+      var rec = real.lines[pid] || {};
+      var played = rec.games || {};
+      var liveLine = rec.live || null;
+
+      out[pid] = sched.filter(function (g) { return g.day >= 0; }).map(function (g) {
+        var raw = played[g.gameId] ||
+          (liveLine && liveLine.gameId === g.gameId ? liveLine : null);
+        //  The team played but this player has no line: a genuine DNP,
+        //  which is a zero rather than a missing game.
+        var dnp = !raw;
+        var line = {
+          points: raw ? raw.pts : 0, rebounds: raw ? raw.reb : 0,
+          assists: raw ? raw.ast : 0, steals: raw ? raw.stl : 0,
+          blocks: raw ? raw.blk : 0
+        };
+        return {
+          day: g.day, line: line, fpts: Math.round(fpts(line) * 10) / 10, dnp: dnp,
+          opp: g.opp, home: g.home, time: g.time, ts: g.ts, os: g.os,
+          real: true, final: g.completed
+        };
+      });
+    });
+    return out;
+  }
+
+  //  Called after the simulated week is already in place. Swaps in
+  //  real games if any exist, then repaints.
+  function upgradeWeekToReal(week) {
+    if (!state || !syncDb()) return;
+    loadRealWeek(week).then(function (real) {
+      if (!real || !state || state.week !== week) return;
+      var built = buildRealWeek(week, real);
+      if (!Object.keys(built).length) return;
+      state.games[week] = built;
+      save();
+      try { render(); } catch (e) { }
+    });
+  }
+
   function generateWeekGames(week) {
     var bySchool = {};
     pool().forEach(function (p) { (bySchool[p.college] = bySchool[p.college] || []).push(p); });
@@ -3533,6 +3695,15 @@
     // lineups arrive while this device is open.
     if (state && state.league && state.league.code) subscribeSeason(state.league.code);
     resetPool();
+
+    //  Pull real box scores for the current week on open, then keep
+    //  checking while the app is up: games finish, and a week that
+    //  was simulated at kickoff becomes real as results land.
+    if (state && state.week) upgradeWeekToReal(state.week);
+    clearInterval(open._statsTick);
+    open._statsTick = setInterval(function () {
+      if (state && state.week) upgradeWeekToReal(state.week);
+    }, 90000);
     ui.setup = { name: 'Season League', team: sessionName() === 'You' ? 'My Team' : sessionName() + "'s Team", teams: 8, roster: 10, weeks: 12, timer: 90,
       format: 'conference', confMode: 'mix', conferences: MAJORS.slice() };
     ui.page = 'home'; ui.wiz = state ? null : 0; ui.explain = state && !explainerSeen() ? 0 : null; ui.sheet = false; ui.swapSlot = null; ui.search = ''; ui.filterPos = ''; ui.filterConf = ''; ui.confirmId = null; ui.faId = null; ui.tr = null; ui.ptab = 'fa'; ui.fstatus = ''; ui.fsort = 'proj';
@@ -3554,6 +3725,7 @@
   }
   function close() {
     clearInterval(open._tick);
+    clearInterval(open._statsTick);
     // Drop the listener; leaving it running would keep applying
     // remote state to a module nobody is looking at.
     unsubscribeSeason();

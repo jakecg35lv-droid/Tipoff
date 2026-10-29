@@ -58,6 +58,20 @@ service cloud.firestore {
       }
     }
 
+    // ── Season box scores ────────────────────────────────────
+    //  Written by the syncSeasonStats function with the Admin SDK,
+    //  which bypasses these rules. Clients read only — otherwise a
+    //  manager could invent his own stat line.
+    match /seasonStats/{season} {
+      allow read: if request.auth != null;
+      allow write: if false;
+
+      match /{sub=**} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
+
     // ── Live tournament stats ────────────────────────────────
     //  Written only by the Cloud Function, which uses the Admin
     //  SDK and bypasses these rules entirely. Clients read only.
