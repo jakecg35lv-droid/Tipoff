@@ -72,6 +72,24 @@ service cloud.firestore {
       }
     }
 
+    // ── Content reports ──────────────────────────────────────
+    //  Section 9 of the Terms says we act on reports we receive. That
+    //  needs a durable record, and the record must be write-only:
+    //  a client that could read this collection could enumerate who
+    //  reported whom, and a client that could delete from it could
+    //  erase the evidence of its own abuse.
+    //
+    //  create only. No read, no update, no delete, for anyone.
+    //  Reviewed through the Firebase console or the Admin SDK, which
+    //  bypass these rules.
+    match /contentReports/{reportId} {
+      allow create: if request.auth != null
+                    && request.resource.data.reporterUid == request.auth.uid
+                    && request.resource.data.status == 'open'
+                    && request.resource.data.messageText.size() <= 1000;
+      allow read, update, delete: if false;
+    }
+
     // ── Live tournament stats ────────────────────────────────
     //  Written only by the Cloud Function, which uses the Admin
     //  SDK and bypasses these rules entirely. Clients read only.

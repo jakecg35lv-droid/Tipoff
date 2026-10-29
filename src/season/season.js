@@ -1889,7 +1889,7 @@
       html += '<div class="tut-tourn-list">' +
         '<button class="tut-tourn-card' + (s.format === 'conference' ? ' tut-tourn-card--active' : '') + '" data-act="setfmt" data-v="conference">' +
           '<div class="ttc-name">Conference Play <span class="ss-rec">Recommended</span></div>' +
-          '<div class="ttc-meta">' + fmtDate(c.start) + ' – Mar 14 · ' + c.regWeeks + ' weeks + 2 playoff weeks · ends Selection Sunday</div></button>' +
+          '<div class="ttc-meta">' + fmtDate(c.start) + ' – Mar 14 · ' + c.regWeeks + ' weeks + 2 playoff weeks · ends before the national bracket</div></button>' +
         '<button class="tut-tourn-card' + (s.format === 'season' ? ' tut-tourn-card--active' : '') + '" data-act="setfmt" data-v="season">' +
           '<div class="ttc-name">Full Season</div>' +
           '<div class="ttc-meta">Starts ' + fmtDate(f.start) + ' (opening week) · you pick the length · no playoffs</div></button>' +
@@ -3257,16 +3257,92 @@
     if (s < 86400) return Math.floor(s / 3600) + 'h';
     var d = new Date(ts); return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + d.getDate();
   }
+  // ── Chat moderation ───────────────────────────────────────
+  //  Unlike tournament chat, THIS chat travels: chatPost writes into
+  //  state, and pushState syncs state to every device in the league.
+  //  So this is the one place in the app where a person can actually
+  //  publish something to other people, and the only place where the
+  //  Terms' promise of a report path has real work to do.
+  //
+  //  Hiding is per-device by design. One manager must not be able to
+  //  delete another manager's words out of everyone else's history;
+  //  removing content for the whole league is ours to do, from the
+  //  report queue, not a button anybody gets.
+  var HIDE_KEY = 'tipoff-season-hidden-chat';
+  function hiddenChat() {
+    try { return JSON.parse(localStorage.getItem(HIDE_KEY) || '[]'); } catch (e) { return []; }
+  }
+  function hideChat(id) {
+    var ids = hiddenChat();
+    if (ids.indexOf(id) === -1) ids.push(id);
+    try { localStorage.setItem(HIDE_KEY, JSON.stringify(ids)); } catch (e) { }
+  }
+  function deleteOwnChat(id) {
+    var c = chatList(), u = userTeam();
+    var m = c.msgs.filter(function (x) { return x && String(x.id) === String(id); })[0];
+    if (!m) return;
+    if (!u || m.teamId !== u.id) { notify('You can only delete your own messages.', 'error'); return; }
+    //  A real delete: it leaves this device AND the shared document,
+    //  because save() pushes the state the message used to be in.
+    c.msgs = c.msgs.filter(function (x) { return x && String(x.id) !== String(id); });
+    save(); render();
+    notify('Message deleted for everyone.', 'success');
+  }
+  function reportChat(id) {
+    var c = chatList();
+    var m = c.msgs.filter(function (x) { return x && String(x.id) === String(id); })[0];
+    if (!m) return;
+    if (!window.confirm('Report this message for review?\n\nIt will be hidden for you right away and sent to us to look at.')) return;
+
+    hideChat(String(id));
+    render();
+
+    var db = syncDb(), uid = myUid();
+    var t = team(m.teamId);
+    if (!db || !uid) {
+      notify('Hidden for you. To report it, email privacy@tipofffantasy.com.', 'info');
+      return;
+    }
+    db.collection('contentReports').add({
+      kind: 'seasonChat',
+      leagueCode: (state.league && state.league.code) || null,
+      messageId: String(id),
+      messageText: String(m.text || '').slice(0, 1000),
+      authorName: String((t && t.name) || 'Manager').slice(0, 80),
+      authorUid: (t && t.uid) || null,
+      messageAt: m.ts || null,
+      reporterUid: uid,
+      reportedAt: Date.now(),
+      status: 'open'
+    }).then(function () {
+      notify('Reported. Thanks, we will take a look.', 'success');
+    }).catch(function (e) {
+      console.warn('[Moderation] season report write failed:', e && e.code, e && e.message);
+      notify('Hidden for you, but the report did not send. Email privacy@tipofffantasy.com.', 'error');
+    });
+  }
+
   function chatRows(msgs) {
-    var u = userTeam().id, prev = null;
-    return msgs.map(function (m) {
+    var u = userTeam(), uid = u ? u.id : null, prev = null;
+    var hid = hiddenChat();
+    return msgs.filter(function (m) {
+      return m && (m.sys || hid.indexOf(String(m.id)) === -1);
+    }).map(function (m) {
       if (m.sys) { prev = null; return '<div class="ch-sys"><span>' + esc(m.text) + '</span></div>'; }
-      var t = team(m.teamId), mine = m.teamId === u, cont = prev && prev.teamId === m.teamId && m.ts - prev.ts < 300000;
+      var t = team(m.teamId), mine = m.teamId === uid, cont = prev && prev.teamId === m.teamId && m.ts - prev.ts < 300000;
       prev = m;
+      //  System lines get no control: they are ours, not a person's.
+      var act = mine
+        ? '<button type="button" class="ch-act" data-act="chatdel" data-id="' + esc(String(m.id)) + '" aria-label="Delete your message">Delete</button>'
+        : '<button type="button" class="ch-act" data-act="chatreport" data-id="' + esc(String(m.id)) + '" aria-label="Report this message">Report</button>';
       return '<div class="ch-msg' + (mine ? ' me' : '') + (cont ? ' cont' : '') + '">' +
         (mine || cont ? '' : '<span class="ch-av">' + avatarHTML(t ? t.name : '?', 30) + '</span>') +
         '<div class="ch-body">' + (cont ? '' : '<div class="ch-meta"><b>' + esc(mine ? 'You' : t ? t.name : 'Manager') + '</b><span>' + timeAgo(m.ts) + '</span></div>') +
-        '<div class="ch-bubble">' + esc(m.text) + '</div></div></div>';
+        //  On the bubble row, not the meta row: consecutive messages
+        //  from one person hide the meta row, and those are exactly
+        //  the messages a pile-on consists of.
+        '<div class="ch-bubble-row"><div class="ch-bubble">' + esc(m.text) + '</div>' + act + '</div>' +
+        '</div></div>';
     }).join('');
   }
   function viewChat() {
@@ -3296,7 +3372,11 @@
     { t: 'Your starters play', b: 'Every week you start 5 players: 2 guards, 2 forwards and a utility spot anyone can fill. Each plays 1 to 3 games that week.',
       demo: '<div class="ex-slots">' + ['G', 'G', 'F', 'F', 'U'].map(function (k, i) { return '<span class="ex-slot" style="--d:' + (i * 80) + 'ms"><i>' + k + '</i></span>'; }).join('') + '</div>' +
         '<div class="ex-week">' + ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(function (d, i) { return '<span class="' + ([0, 3, 5].indexOf(i) >= 0 ? 'g' : '') + '">' + d + '</span>'; }).join('') + '</div>' },
-    { t: 'Lock it or pass', b: 'After each game you see his fantasy score. Lock it to keep that score for the week, or pass and bet his next game is better.',
+    //  "bet his next game is better" was casual phrasing, but this is a
+    //  fantasy sports app: the words bet/wager/odds in our own onboarding
+    //  are exactly what a regulator or a plaintiff quotes back at us.
+    //  "Gamble on" is out for the same reason. Say what it actually is.
+    { t: 'Lock it or pass', b: 'After each game you see his fantasy score. Lock it to keep that score for the week, or pass and hold out for a better game.',
       demo: '<div class="ex-game"><span class="ex-day">Mon</span><b>18.4</b><span class="ex-btns"><em class="lock">Lock</em><em>Pass</em></span></div>' +
         '<div class="ex-game dim"><span class="ex-day">Thu</span><b>?</b><span class="ex-btns"><em class="ghost">next game</em></span></div>' },
     { t: 'Locked is final', b: 'A locked score can’t change. If you never lock, his last game counts, and a game he sits out scores 0. Most total points wins the week.',
@@ -3589,6 +3669,10 @@
         ui.pcard = null; break;
       case 'pcgo': ui.pcard = null; ui.page = el.getAttribute('data-page'); break;
       case 'chatsend': e.preventDefault(); if (!sendChat()) return; break;
+      //  Both re-render themselves, so they return rather than fall
+      //  through to the shared save-and-render tail below.
+      case 'chatdel': e.preventDefault(); deleteOwnChat(el.getAttribute('data-id')); return;
+      case 'chatreport': e.preventDefault(); reportChat(el.getAttribute('data-id')); return;
       case 'exstep': ui.explain = +el.getAttribute('data-v'); break;
       case 'exdone': ui.explain = null; markExplainerSeen(); break;
       case 'exshow': ui.explain = 0; break;

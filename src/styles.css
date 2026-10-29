@@ -1327,7 +1327,7 @@ select:focus {
   background: var(--border-2);
 }
 
-/* ── MARCH MADNESS BRACKET INTRO OVERLAY ───────────────── */
+/* ── TOURNAMENT BRACKET INTRO OVERLAY ──────────────────── */
 #mmIntro {
   position: fixed;
   inset: 0;
@@ -8931,7 +8931,7 @@ select:focus {
   }
 }
 
-/* Final Four tab: gold accent to stand out */
+/* Semifinals tab: gold accent to stand out */
 .bracket-tab-ff {
   color: var(--gold) !important;
 }
@@ -12295,3 +12295,37 @@ select:focus {
 .splash-back-arrow:active { transform: scale(.94); }
 .splash-back-arrow:focus-visible { outline: 2px solid var(--orange, #f26b21); outline-offset: 2px; }
 #splashScreen { position: relative; }
+
+/* ── Chat moderation controls ────────────────────────────────
+   Delete (own) and Report (others). Quiet until hover/focus so the
+   chat does not look like a complaint form, but always in the DOM
+   and always reachable by keyboard and screen reader. */
+.chat-act {
+  margin-left: 8px;
+  padding: 4px 8px;
+  min-height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim, #8399b1);
+  font: 600 11px 'Inter', system-ui, sans-serif;
+  letter-spacing: .02em;
+  cursor: pointer;
+  opacity: .55;
+  transition: opacity .15s, color .15s, background-color .15s;
+}
+.chat-msg:hover .chat-act,
+.chat-act:focus-visible { opacity: 1; }
+.chat-act:hover { color: #ff8a7a; background: rgba(255, 138, 122, .12); }
+.chat-act:focus-visible { outline: 2px solid #ff8a45; outline-offset: 1px; }
+
+/* Touch has no hover, so never hide the control on a phone, and give
+   it a real target instead of an 11px word. */
+@media (hover: none) {
+  .chat-act {
+    opacity: 1;
+    min-height: 32px;
+    padding: 6px 10px;
+    background: rgba(173, 192, 212, .1);
+  }
+}

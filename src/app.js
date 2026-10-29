@@ -1050,6 +1050,15 @@ function handleSignup() {
             ageBracket: age < 18 ? 'minor' : 'adult',
             isMinor: age < 18,
             ageVerifiedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            //  The Terms are an agreement, and an agreement you cannot
+            //  evidence is not much of one. Ticking a checkbox left no
+            //  record at all: no version, no timestamp, nothing to show
+            //  that this account ever saw the arbitration clause or the
+            //  class-action waiver it is supposedly bound by. Record
+            //  WHICH version was accepted, so amending the Terms later
+            //  does not retroactively rewrite what anyone agreed to.
+            tosVersion: TOS_VERSION,
+            tosAcceptedAt: firebase.firestore.FieldValue.serverTimestamp(),
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           })
           : Promise.resolve();
@@ -1124,6 +1133,11 @@ const POOL_VERSION = '2026-09-21-espn';
 //
 //  Cloning on every pool build means each league starts from pristine
 //  file data and live stats only ever touch the pool in play.
+//  Bump this whenever the Terms of Service text in index.html changes
+//  in substance. It is stored on the user record at signup so there is
+//  a record of which version each account actually agreed to.
+const TOS_VERSION = '2026-10-29';
+
 function clonePlayer(p) {
   return Object.assign({}, p, {
     stats: Object.assign({}, p.stats),
@@ -2750,6 +2764,82 @@ function saveChatMessages(msgs) {
   if (!state.leagueId) return;
   localStorage.setItem('mmfantasy-chat-' + state.leagueId, JSON.stringify(msgs));
 }
+// ── Chat moderation ───────────────────────────────────────
+//  Section 9 of the Terms promises a Report control and the right to
+//  delete your own messages. A term we cannot perform is worse than no
+//  term at all, so these are the mechanism behind that promise.
+//
+//  Chat is currently device-local, so there is no third party to harm
+//  yet. These controls exist so that the day chat does sync, the
+//  reporting path, the audit trail and the hide behaviour already
+//  exist rather than being bolted on after the first complaint.
+function getHiddenChatIds() {
+  try { return JSON.parse(localStorage.getItem('mmfantasy-chat-hidden-' + (state.leagueId || '')) || '[]'); }
+  catch (e) { return []; }
+}
+function hideChatId(id) {
+  const ids = getHiddenChatIds();
+  if (ids.indexOf(id) === -1) ids.push(id);
+  try { localStorage.setItem('mmfantasy-chat-hidden-' + (state.leagueId || ''), JSON.stringify(ids)); } catch (e) { }
+}
+
+function deleteChatMessage(id) {
+  const msgs = getChatMessages();
+  const session = getSession();
+  const me = session ? session.name : '';
+  const msg = msgs.filter(m => m && m.id === id)[0];
+  if (!msg) return;
+  //  Your own messages only. A commissioner removing someone else's
+  //  message is a moderation power, not a delete, and it needs the
+  //  report trail below rather than a silent erase.
+  if (msg.sender !== me) { toast('You can only delete your own messages.', 'error'); return; }
+  saveChatMessages(msgs.filter(m => m && m.id !== id));
+  renderChat();
+  try { renderRpChat(); } catch (e) { }
+  updateChatBadge();
+  toast('Message deleted.', 'success');
+}
+
+function reportChatMessage(id) {
+  const msgs = getChatMessages();
+  const msg = msgs.filter(m => m && m.id === id)[0];
+  if (!msg) return;
+  const session = getSession();
+  if (!confirm('Report this message for review?\n\nIt will be hidden for you right away and sent to us to look at.')) return;
+
+  // Hide it for the reporter immediately, whatever the write does.
+  hideChatId(id);
+  renderChat();
+  try { renderRpChat(); } catch (e) { }
+
+  //  Write-only collection: clients can file a report and can never
+  //  read, edit or delete one. Without a durable record "we will act
+  //  on reports we receive" is not a claim we could ever evidence.
+  const reporterUid = (window._fbUser && window._fbUser.uid) || (session && session.uid) || null;
+  if (window._db && reporterUid) {
+    window._db.collection('contentReports').add({
+      kind: 'chat',
+      leagueCode: state.leagueCode || null,
+      messageId: id,
+      messageText: String(msg.text || '').slice(0, 1000),
+      authorName: String(msg.sender || '').slice(0, 80),
+      messageAt: msg.timestamp || null,
+      reporterUid: reporterUid,
+      reportedAt: Date.now(),
+      status: 'open'
+    }).then(function () {
+      toast('Reported. Thanks, we will take a look.', 'success');
+    }).catch(function (e) {
+      console.warn('[Moderation] report write failed:', e && e.code, e && e.message);
+      //  Do not pretend it was filed. Give them the mailbox the Terms
+      //  name, so a real complaint still has somewhere to go.
+      toast('Hidden for you, but the report did not send. Email privacy@tipofffantasy.com.', 'error');
+    });
+  } else {
+    toast('Hidden for you. To report it, email privacy@tipofffantasy.com.', 'info');
+  }
+}
+
 function getChatReadTime() {
   return parseInt(localStorage.getItem('mmfantasy-chat-read-' + (state.leagueId || '')) || '0');
 }
@@ -2770,9 +2860,10 @@ function updateChatBadge() {
 function renderChat() {
   const container = document.getElementById('chatMessages');
   if (!container) return;
-  const messages = getChatMessages();
   const session = getSession();
   const me = session ? session.name : '';
+  const hidden = getHiddenChatIds();
+  const messages = getChatMessages().filter(m => m && hidden.indexOf(m.id) === -1);
 
   if (!messages.length) {
     container.innerHTML = '<div class="chat-empty">No messages yet. Say something to the league.</div>';
@@ -2784,15 +2875,33 @@ function renderChat() {
     const d = new Date(msg.timestamp);
     const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const date = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    //  Your own message gets Delete; everyone else's gets Report.
+    //  44px targets, because these are the controls someone reaches
+    //  for on a phone when they are already upset.
+    const act = isMe
+      ? '<button type="button" class="chat-act" data-chat-del="' + esc(msg.id) + '" aria-label="Delete your message">Delete</button>'
+      : '<button type="button" class="chat-act" data-chat-report="' + esc(msg.id) + '" aria-label="Report this message">Report</button>';
     return '<div class="chat-msg ' + (isMe ? 'chat-msg-mine' : 'chat-msg-theirs') + '">' +
       (!isMe ? '<div class="chat-sender">' + esc(msg.sender) + '</div>' : '') +
       '<div class="chat-bubble ' + (isMe ? 'mine' : 'theirs') + '">' + esc(msg.text) + '</div>' +
-      '<div class="chat-time">' + date + ' · ' + time + '</div>' +
+      '<div class="chat-time">' + date + ' · ' + time + ' ' + act + '</div>' +
       '</div>';
   }).join('');
 
   // Always scroll to latest
   container.scrollTop = container.scrollHeight;
+
+  //  Delegated once per container, not per message, so re-rendering
+  //  the list cannot stack duplicate listeners.
+  if (!container._modWired) {
+    container._modWired = true;
+    container.addEventListener('click', function (e) {
+      const del = e.target.closest && e.target.closest('[data-chat-del]');
+      if (del) { e.preventDefault(); deleteChatMessage(del.getAttribute('data-chat-del')); return; }
+      const rep = e.target.closest && e.target.closest('[data-chat-report]');
+      if (rep) { e.preventDefault(); reportChatMessage(rep.getAttribute('data-chat-report')); }
+    });
+  }
 }
 function sendChatMessage() {
   const input = document.getElementById('chatInput');
@@ -3052,17 +3161,23 @@ const TOURNAMENTS = {
       // canSelect stays false until the field is announced on Selection
       // Sunday (Mar 2027). It was true with teams:[] — selecting it gave
       // a commissioner an empty draft board and no explanation.
-      name: 'NCAA Tournament',
+      //  "NCAA", "Sweet 16", "Elite 8", "Final Four" and "Selection
+      //  Sunday" are registered NCAA trademarks and the NCAA enforces
+      //  them hard against unaffiliated apps. Round numbers are
+      //  factual and unownable, so we describe the bracket instead of
+      //  branding it. Round-of-16 and Quarterfinals mean exactly the
+      //  same thing to a user and cost nothing to say.
+      name: 'National Tournament',
       subtitle: '64-team field · 4 regions',
       location: 'Championship: Ford Field, Detroit, MI',
       dates: 'Mar 16 – Apr 5, 2027',
       startMs: new Date('2027-03-16').getTime(),
       bracketFormat: 'ncaa64',
-      roundNames: ['Round of 64', 'Round of 32', 'Sweet 16', 'Elite 8'],
+      roundNames: ['Round of 64', 'Round of 32', 'Round of 16', 'Quarterfinals'],
       canSelect: false,
       comingSoon: true,
       highlight: true,
-      note: 'Selection Sunday: Mar 14',
+      note: 'Bracket reveal: Mar 14',
       teams: [], seededTeams: []
     },
     {
@@ -3639,7 +3754,7 @@ function updateBracketTabs() {
       '<button class="bracket-tab" data-region="South">South</button>' +
       '<button class="bracket-tab" data-region="Midwest">Midwest</button>' +
       '<button class="bracket-tab" data-region="West">West</button>' +
-      '<button class="bracket-tab bracket-tab-ff" data-region="FinalFour">Final Four</button>';
+      '<button class="bracket-tab bracket-tab-ff" data-region="FinalFour">Semifinals</button>';
     container.style.display = '';
   } else {
     // Single bracket: no region tabs needed
@@ -3961,7 +4076,7 @@ function renderBracket() {
 
 function renderRegionSimple(content, regData, bracketData, region, customRoundNames) {
   try { wireBracketOverrideClicks(); } catch (e) { }
-  const defaultRoundNames = ['Round of 64', 'Round of 32', 'Sweet 16', 'Elite 8'];
+  const defaultRoundNames = ['Round of 64', 'Round of 32', 'Round of 16', 'Quarterfinals'];
   const roundNames = customRoundNames || defaultRoundNames;
   const numRounds = roundNames.length;
   const roundWinners = bracketData.regions[region] || Array(numRounds).fill(null).map(() => []);
@@ -4681,7 +4796,10 @@ function renderRpStandings() {
 function renderRpChat() {
   const el = document.getElementById('rpChatMessages');
   if (!el) return;
-  const msgs = getChatMessages();
+  //  The side panel must respect the same hidden list, or a message
+  //  someone reported goes on showing up three feet to the right.
+  const rpHidden = getHiddenChatIds();
+  const msgs = getChatMessages().filter(m => m && rpHidden.indexOf(m.id) === -1);
   if (!msgs.length) {
     el.innerHTML = '<div class="rp-empty">No messages yet. Say something!</div>';
     return;
@@ -7454,7 +7572,7 @@ function getAliveTeamsInfo() {
       }
     }
 
-    // Round 2: Sweet 16 (2 matchups)
+    // Round 2: round of 16 (2 matchups)
     for (let i = 0; i < 2; i++) {
       const winner = rw[2] && rw[2][i];
       if (winner) {
@@ -7477,7 +7595,7 @@ function getAliveTeamsInfo() {
     }
   });
 
-  // Final Four (2 games)
+  // Semifinals (2 games)
   const ff = (bracketData || {}).finalFour || [null, null];
   // Determine which teams played each FF matchup from Elite 8 winners
   const ffMatchups = (window.MM_BRACKET_DATA || { finalFour: [] }).finalFour || [];
