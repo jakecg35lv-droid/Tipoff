@@ -124,7 +124,20 @@
       updatedBy: myUid() || 'anon'
     };
     ref.set(payload, { merge: true })
-      .catch(function (e) { console.warn('[Season] push failed:', e && e.message); });
+      .catch(function (e) {
+        var code = (e && e.code) || '';
+        console.warn('[Season] push failed:', code, e && e.message);
+        //  This was silent, which is how a league can look created on
+        //  screen while never reaching the database — and then nobody
+        //  can join it, with no clue why. Say so once, loudly.
+        if (code === 'permission-denied' && !SYNC.warnedDenied) {
+          SYNC.warnedDenied = true;
+          try {
+            notify('This league is not being saved to the server. ' +
+                   'Nobody else can join it yet.', 'error');
+          } catch (_) { }
+        }
+      });
   }
 
   // Writes are debounced: a draft pick touches state several times
@@ -3589,6 +3602,7 @@
         //  invite link uses is reused here.
         notify('Looking up ' + jc + '…', 'info');
         lookupSeasonLeague(jc).then(function (info) {
+          if (info && info.error) { notify(joinErrorText(info.error), 'error'); return; }
           if (!info) { notify('No league found with that code.', 'error'); return; }
           showSeasonJoin(info, jc);
         }).catch(function () { notify('Could not reach the league database.', 'error'); });
@@ -3825,9 +3839,25 @@
         _doc: d
       };
     }).catch(function (e) {
-      console.warn('[Season] lookup failed:', e && e.message);
-      return null;
+      //  A denied read and a missing league both used to return null,
+      //  so a rules problem showed the user "No league found with that
+      //  code" — which sent them hunting for a typo in a code that was
+      //  perfectly correct. Surface the difference.
+      var code = (e && e.code) || '';
+      console.warn('[Season] lookup failed:', code, e && e.message);
+      if (code === 'permission-denied') {
+        return { error: 'permission-denied' };
+      }
+      return { error: (e && e.message) || 'lookup failed' };
     });
+  }
+
+  function joinErrorText(code) {
+    if (code === 'permission-denied') {
+      return 'The league database is not accepting requests. ' +
+             'Firestore rules may not be deployed yet.';
+    }
+    return 'Could not look up that league. ' + (code || '');
   }
 
   // ── Join: claim a seat in a league that already exists ──
@@ -3934,6 +3964,13 @@
     if (!/^[A-Z0-9]{6}$/.test(code)) return; // let the tournament flow show its own error
     e.preventDefault(); e.stopImmediatePropagation();
     lookupSeasonLeague(code).then(function (info) {
+      if (info && info.error) {
+        //  A lookup that failed is not the same as a tournament code.
+        //  Falling through to the tournament flow here would tell the
+        //  user the code was wrong when the database simply refused us.
+        notify(joinErrorText(info.error), 'error');
+        return;
+      }
       if (info) {
         var jm = document.getElementById('joinModal'); if (jm) jm.style.display = 'none';
         showSeasonJoin(info, code);
@@ -3948,7 +3985,10 @@
       if (!/^[A-Z0-9]{6}$/.test(code)) return;
       params.delete('sjoin');
       history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash);
-      lookupSeasonLeague(code).then(function (info) { showSeasonJoin(info, code); });
+      lookupSeasonLeague(code).then(function (info) {
+        if (info && info.error) { notify(joinErrorText(info.error), 'error'); return; }
+        showSeasonJoin(info, code);
+      });
     } catch (e) { /* ignore */ }
   }
 
