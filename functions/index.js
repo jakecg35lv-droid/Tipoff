@@ -98,15 +98,66 @@ const SYNC_WINDOWS = [
   { name: 'NCAA Tournament',                           start: '2027-03-16', end: '2027-04-07' },
 ];
 
+/* ══════════════════════════════════════════════════════════
+   REGULAR SEASON (conference play)
+   The tournament sync above only cares about the handful of schools
+   in an active tournament, for a handful of days a year. Season mode
+   needs the opposite: 79 schools, every day from the opener to the
+   end of conference play.
+
+   It writes ONE shared record rather than per-league copies —
+   seasonStats/{season}/players/{espnId} — because a player's box
+   score is the same fact in every league that drafted him. Clients
+   map it into their own week structure.
+══════════════════════════════════════════════════════════ */
+const SEASON_ID = '2026-27';
+const SEASON_WINDOW = { start: '2026-11-02', end: '2027-03-15' };
+
+// The 79 schools in data/conference-players.js (ACC, Big East, Big Ten,
+// Big 12, SEC). Regenerate alongside the pool:
+//   node tools/build-conference-pool.mjs --conf=majors
+const SEASON_SCHOOLS = new Set([
+  "Alabama", "Arizona", "Arizona State", "Arkansas", "Auburn", "BYU",
+  "Baylor", "Boston College", "Butler", "California", "Cincinnati",
+  "Clemson", "Colorado", "Creighton", "DePaul", "Duke", "Florida",
+  "Florida State", "Georgetown", "Georgia", "Georgia Tech", "Houston",
+  "Illinois", "Indiana", "Iowa", "Iowa State", "Kansas", "Kansas State",
+  "Kentucky", "LSU", "Louisville", "Marquette", "Maryland", "Miami",
+  "Michigan", "Michigan State", "Minnesota", "Mississippi State",
+  "Missouri", "NC State", "Nebraska", "North Carolina", "Northwestern",
+  "Notre Dame", "Ohio State", "Oklahoma", "Oklahoma State", "Ole Miss",
+  "Oregon", "Penn State", "Pittsburgh", "Providence", "Purdue", "Rutgers",
+  "SMU", "Seton Hall", "South Carolina", "St. John's", "Stanford",
+  "Syracuse", "TCU", "Tennessee", "Texas", "Texas A&M", "Texas Tech",
+  "UCF", "UCLA", "UConn", "USC", "Utah", "Vanderbilt", "Villanova",
+  "Virginia", "Virginia Tech", "Wake Forest", "Washington",
+  "West Virginia", "Wisconsin", "Xavier"
+//  Keys MUST be built with normName, the same function the scoreboard
+//  side uses. An earlier version stripped spaces entirely, so
+//  normName('Wake Forest') produced 'wake forest' while the set held
+//  'wakeforest' — every multi-word school silently failed to match,
+//  which is most of the 79.
+].map(normName));
+
+function withinSeasonWindow(todayISO) {
+  return todayISO >= SEASON_WINDOW.start && todayISO <= SEASON_WINDOW.end;
+}
+
 // Games tip roughly noon ET and the latest finish around 1am ET.
 // Outside these hours there is nothing to poll for.
 const ACTIVE_HOUR_START = 11; // 11am ET
 const ACTIVE_HOUR_END   = 2;  // through 2:59am ET (wraps past midnight)
 
 // Ceiling per calendar month. Set deliberately below whatever the
-// plan allows so hitting it is a warning, not an outage. Raise this
-// once SportsDataIO confirms the real limit.
-const MAX_CALLS_PER_MONTH = 800;
+// plan allows so hitting it is a warning, not an outage.
+//
+// Raised from 800 when season mode landed. 800 was sized for the paid
+// SportsDataIO plan; the season sync polls 79 schools every 10 minutes
+// and would spend that in an afternoon — and because the budget is
+// SHARED, exhausting it would also have stopped tournament polling
+// during Maui. ESPN is free and unauthenticated, so this is now a
+// runaway guard rather than a billing limit.
+const MAX_CALLS_PER_MONTH = 60000;
 
 // Breaker: after this many consecutive failures, stop calling.
 const BREAKER_THRESHOLD  = 5;
@@ -615,6 +666,14 @@ exports.espnProbe = onRequest(
 // ═══════════════════════════════════════════════════════════════
 
 // "2026-11-23" -> "20261123" for the scoreboard endpoint
+//  '20261102' -> '2026-11-02'. The scoreboard is queried by ET date,
+//  so every event it returns belongs to that ET day. Slicing ev.date
+//  instead would use UTC and file a 10pm ET game under the next day.
+function isoFromEspnDate(yyyymmdd) {
+  const v = String(yyyymmdd || '');
+  return v.length === 8 ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6, 8)}` : v;
+}
+
 function espnDateParam(d) {
   const { y, m, d: day } = etParts(d);
   return `${y}${String(m).padStart(2, '0')}${String(day).padStart(2, '0')}`;
@@ -1596,3 +1655,235 @@ function groupByTournament(players) {
     return acc;
   }, {});
 }
+
+/* ══════════════════════════════════════════════════════════
+   SEASON SYNC — real box scores for conference play
+   Mirrors runSyncESPN, with three differences:
+     • it matches against SEASON_SCHOOLS (79) rather than whichever
+       teams a league picked for a tournament
+     • it writes ONE shared record per player, not per tournament,
+       because a box score is the same fact in every league
+     • it runs across the whole regular season, not a few days
+
+   Storage, under seasonStats/{SEASON_ID}:
+     games/{eventId}    date, teams, scores, status
+     players/{espnId}   games: { [eventId]: {pts,reb,ast,stl,blk,min,date} }
+
+   Finished games are keyed by event id so re-running can never
+   double-count. An in-progress game is overwritten in `live` on each
+   poll, so a stat ESPN revises downward revises here too.
+══════════════════════════════════════════════════════════ */
+async function runSeasonSyncESPN(opts) {
+  const options = opts || {};
+  const report = {
+    ok: true, season: SEASON_ID, dryRun: !!options.dryRun,
+    date: null, gamesOnDate: 0, relevantGames: 0,
+    finalGames: 0, liveGames: 0,
+    gamesWritten: 0, playersWritten: 0, apiCalls: 0,
+  };
+
+  const now = new Date();
+  const health = await readHealth();
+  const client = makeApiClient(health, now);
+
+  if (health.breakerUntil > Date.now()) {
+    report.ok = false; report.reason = 'circuit breaker open';
+    return report;
+  }
+
+  try {
+    const dateStr = options.dateOverride || espnDateParam(now);
+    report.date = dateStr;
+
+    const sbRes = await client.apiFetch(`${ESPN}/scoreboard?dates=${dateStr}&limit=400`, 'season-scoreboard');
+    if (!sbRes.ok) throw new Error(`scoreboard HTTP ${sbRes.status}`);
+    const sb = await sbRes.json();
+    const events = sb.events || [];
+    report.gamesOnDate = events.length;
+
+    const gameBatch = db.batch();
+    const playerBatch = db.batch();
+    const seasonRef = db.collection('seasonStats').doc(SEASON_ID);
+
+    //  One Firestore read replaces dozens of ESPN summary calls: any
+    //  game already recorded as completed on this date is finished
+    //  business and is skipped below.
+    const alreadyFinal = new Set();
+    try {
+      const prior = await seasonRef.collection('games')
+        .where('date', '==', isoFromEspnDate(dateStr))
+        .where('completed', '==', true)
+        .get();
+      prior.forEach(d => alreadyFinal.add(d.id));
+      report.skippedFinal = alreadyFinal.size;
+    } catch (e) {
+      console.warn('[Tipoff season] prior-final lookup failed:', e.message);
+    }
+
+    for (const ev of events) {
+      const comp = (ev.competitions || [])[0];
+      if (!comp) continue;
+
+      const competitors = (comp.competitors || []).map(c => ({
+        school: ((c.team || {}).location) || '',
+        abbr: ((c.team || {}).abbreviation) || '',
+        homeAway: c.homeAway,
+        score: toInt(c.score),
+        winner: c.winner === true,
+      }));
+
+      // Only games involving a school whose players are draftable.
+      const touches = competitors.some(c => SEASON_SCHOOLS.has(normName(c.school)));
+      if (!touches) continue;
+      report.relevantGames++;
+
+      const st = (comp.status || {});
+      const stType = st.type || {};
+      const gameState = stType.state || 'pre';
+      const completed = stType.completed === true;
+      if (completed) report.finalGames++;
+      else if (gameState === 'in') report.liveGames++;
+
+      const home = competitors.find(c => c.homeAway === 'home') || competitors[0] || {};
+      const away = competitors.find(c => c.homeAway === 'away') || competitors[1] || {};
+
+      if (!options.dryRun) {
+        gameBatch.set(seasonRef.collection('games').doc(String(ev.id)), {
+          eventId: String(ev.id),
+          date: isoFromEspnDate(dateStr),   // ET day, matches the query above
+          startsAt: ev.date || null,
+          shortName: ev.shortName || ev.name || '',
+          state: gameState,
+          completed: completed,
+          statusDetail: stType.shortDetail || stType.detail || '',
+          home: { school: home.school, abbr: home.abbr, score: home.score },
+          away: { school: away.school, abbr: away.abbr, score: away.score },
+          winnerSchool: completed ? ((competitors.find(c => c.winner) || {}).school || null) : null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        report.gamesWritten++;
+      }
+
+      // Box score. Skipped before tip — there is nothing to read yet,
+      // and skipped for games already stored as final, because a
+      // finished box score does not change. Without this the sync
+      // re-fetches every completed game on every poll, 96 times a day.
+      if (gameState === 'pre') continue;
+      if (completed && alreadyFinal.has(String(ev.id))) continue;
+
+      let summary;
+      try {
+        const sumRes = await client.apiFetch(`${ESPN}/summary?event=${ev.id}`, 'season-summary');
+        if (!sumRes.ok) continue;
+        summary = await sumRes.json();
+      } catch (e) { continue; }
+
+      const teamBlocks = ((summary.boxscore || {}).players) || [];
+      for (const tb of teamBlocks) {
+        const school = ((tb.team || {}).location) || '';
+        if (!SEASON_SCHOOLS.has(normName(school))) continue;   // opponent outside the pool
+
+        const block = (tb.statistics || [])[0] || {};
+        const keyIndex = {};
+        (block.keys || []).forEach((k, i) => { keyIndex[k] = i; });
+
+        for (const row of (block.athletes || [])) {
+          const ath = row.athlete || {};
+          if (!ath.id) continue;
+          if (row.didNotPlay) continue;
+
+          const s = statsFromRow(row, keyIndex);
+          if (!s.min && !s.pts && !s.reb && !s.ast) continue;   // never checked in
+
+          const ref = seasonRef.collection('players').doc(String(ath.id));
+          const line = {
+            pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, min: s.min,
+            date: isoFromEspnDate(dateStr), gameId: String(ev.id),
+          };
+
+          if (!options.dryRun) {
+            if (completed) {
+              playerBatch.set(ref, {
+                espnId: String(ath.id),
+                name: ath.displayName || ath.fullName || '',
+                school: school,
+                games: { [String(ev.id)]: line },
+                live: admin.firestore.FieldValue.delete(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              }, { merge: true });
+            } else {
+              playerBatch.set(ref, {
+                espnId: String(ath.id),
+                name: ath.displayName || ath.fullName || '',
+                school: school,
+                live: line,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              }, { merge: true });
+            }
+            report.playersWritten++;
+          }
+        }
+      }
+    }
+
+    if (!options.dryRun) {
+      await gameBatch.commit();
+      await playerBatch.commit();
+    }
+  } catch (e) {
+    report.ok = false;
+    report.reason = e.message;
+    console.error('[Tipoff season]', e);
+  }
+
+  //  Same bookkeeping the tournament sync uses: call counts, the
+  //  monthly budget and the failure breaker are shared, so season
+  //  polling cannot quietly blow through the ceiling on its own.
+  try { await commitHealth(health, client.state, now); } catch (e) {}
+  report.apiCalls = client.state.calls;
+  report.callsThisMonth = health.calls;
+  return report;
+}
+
+exports.syncSeasonStats = onSchedule(
+  {
+    schedule: 'every 10 minutes',
+    timeZone: 'America/New_York',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+  },
+  async () => {
+    const now = new Date();
+    const today = etISODate(now);
+
+    if (!withinSeasonWindow(today)) {
+      console.log(`[Tipoff season] ${today} is outside the regular season. No API calls.`);
+      return;
+    }
+    if (!withinActiveHours(now)) {
+      console.log(`[Tipoff season] outside active hours (${etParts(now).h}:00 ET). No API calls.`);
+      return;
+    }
+
+    const report = await runSeasonSyncESPN({});
+    console.log('[Tipoff season]', JSON.stringify(report));
+  }
+);
+
+// On-demand, for testing a specific date before the season opens:
+//   /seasonSyncNow?date=20261102       (dry run by default)
+//   /seasonSyncNow?date=20261102&write=1
+exports.seasonSyncNow = onRequest(
+  { timeoutSeconds: 300, memory: '512MiB' },
+  async (req, res) => {
+    try {
+      const report = await runSeasonSyncESPN({
+        dateOverride: req.query.date || undefined,
+        dryRun: req.query.write !== '1',
+      });
+      res.status(200).json(report);
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+);
