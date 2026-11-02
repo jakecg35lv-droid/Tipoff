@@ -1293,7 +1293,12 @@ button.ss-lab-chip[aria-expanded="true"] { box-shadow: 0 0 0 2px rgba(246, 197, 
     background: rgba(16, 23, 38, .78); border: 1px solid rgba(255,255,255,.14);
     -webkit-backdrop-filter: blur(22px) saturate(160%); backdrop-filter: blur(22px) saturate(160%);
     box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 14px 34px rgba(0,0,0,.45); }
-  #seasonApp .main-content { padding-bottom: 92px; }
+  /*  The tab bar floats at bottom: max(10px, safe-area-inset-bottom)
+      and is ~64px tall. A flat 92px of padding is enough on a phone
+      with no home indicator and about 30px short on one that has
+      one, which is why the last row of cards sat under the nav.
+      Add the inset so the clearance is correct on both. */
+  #seasonApp .main-content { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
   #seasonApp .nav-sheet { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 74px); }
 }
 .ss-tab { border: 0; background: transparent; color: var(--text-2); font: inherit; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px;

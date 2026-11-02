@@ -1133,6 +1133,7 @@ const POOL_VERSION = '2026-09-21-espn';
 //
 //  Cloning on every pool build means each league starts from pristine
 //  file data and live stats only ever touch the pool in play.
+
 //  Bump this whenever the Terms of Service text in index.html changes
 //  in substance. It is stored on the user record at signup so there is
 //  a record of which version each account actually agreed to.
@@ -1148,7 +1149,18 @@ function clonePlayer(p) {
 function poolForCurrentTournament() {
   const t = state && state.selectedTournament;
   const base = t ? playersForTournament(t) : (window.MM_PLAYERS || []);
-  return base.map(clonePlayer);
+  const pool = base.map(clonePlayer);
+
+  //  Belt and braces on the invented seeds. The generator no longer
+  //  writes them, but a data/players.js built before that change still
+  //  carries 1..8 per school, and the draft board prints whatever it
+  //  is handed. Strip the number here, where we know whether the
+  //  event actually seeds, so the app is right regardless of how old
+  //  the data file is. Events that DO seed keep their seeds.
+  if (t && t.seeded === false) {
+    pool.forEach(p => { p.seed = null; });
+  }
+  return pool;
 }
 
 function rehydratePlayerPool(savedVersion) {
@@ -2058,7 +2070,7 @@ function renderDraftGrid() {
         ' aria-label="' + (qPos ? 'Remove from queue' : 'Add to queue') + '" title="' +
         (qPos ? 'Remove from queue' : 'Add to queue') + '">&#9733;</button>') +
       '</div>' +
-      '<span class="pool-seed-cell"><span class="seed-badge' + seedCls + '">' + p.seed + '</span></span>' +
+      '<span class="pool-seed-cell">' + (p.seed ? '<span class="seed-badge' + seedCls + '">' + p.seed + '</span>' : '') + '</span>' +
       '<span class="pool-stat">' + p.stats.points + '</span>' +
       '<span class="pool-stat">' + p.stats.rebounds + '</span>' +
       '<span class="pool-stat">' + p.stats.assists + '</span>' +
@@ -2149,7 +2161,8 @@ function openDraftConfirm(playerId) {
   const statsEl = document.getElementById('confirmStats');
   if (logoEl) logoEl.innerHTML = getSchoolLogoHTML(p.college, 52);
   if (nameEl) nameEl.textContent = p.name;
-  if (detailEl) detailEl.textContent = p.position + ' · ' + p.college + ' · Seed ' + p.seed + ' ' + p.region;
+  if (detailEl) detailEl.textContent = p.position + ' · ' + p.college +
+      (p.seed ? ' · Seed ' + p.seed : '') + ' · ' + p.region;
   if (statsEl) {
     const fpts = calcFPTS(p);
     statsEl.innerHTML = [
@@ -2504,7 +2517,7 @@ function renderPlayerPool() {
       '<span class="pool-rank">' + (i + 1) + '</span>' +
       '<div class="pool-player-cell">' + getSchoolLogoHTML(p.college, 26) +
       '<div class="pool-player-info"><div class="pool-player-name">' + esc(p.name) + '</div><div class="pool-player-college">' + esc(p.college) + '</div></div></div>' +
-      '<span class="pool-seed-cell"><span class="seed-badge' + seedCls + '">' + p.seed + '</span></span>' +
+      '<span class="pool-seed-cell">' + (p.seed ? '<span class="seed-badge' + seedCls + '">' + p.seed + '</span>' : '') + '</span>' +
       '<span class="pool-stat">' + p.stats.points + '</span>' +
       '<span class="pool-stat">' + p.stats.rebounds + '</span>' +
       '<span class="pool-stat">' + p.stats.assists + '</span>' +
@@ -2542,7 +2555,7 @@ function showPlayerDetail(playerId, rowEl) {
   if (logoEl) logoEl.innerHTML = getSchoolLogoHTML(p.college, 60);
   if (nameEl) nameEl.textContent = p.name;
   if (posEl) posEl.innerHTML = '<span class="pos-badge">' + p.position + '</span>';
-  if (seedEl) seedEl.innerHTML = '<span class="seed-badge">Seed ' + p.seed + '</span>';
+  if (seedEl) seedEl.innerHTML = p.seed ? '<span class="seed-badge">Seed ' + p.seed + '</span>' : '';
   if (regEl) regEl.innerHTML = '<span class="region-badge">' + p.region + '</span>';
   if (colEl) colEl.textContent = p.college;
   if (statsEl) {
@@ -3059,16 +3072,25 @@ const TOURNAMENTS = {
       // Without it, teams that also appear in the NCAA field (e.g. Clemson)
       // would pull BOTH roster entries into the pool - the same player twice.
       playerRegion: 'Maui',
+      //  The Maui Invitational does NOT seed its field. It publishes a
+      //  bracket. The seeds that used to be here were 1-8 in exact
+      //  alphabetical order, which is the signature of a list that was
+      //  invented rather than looked up, and they produced four
+      //  first-round games that do not exist.
+      seeded: false,
       teams: ['Arizona', 'BYU', 'Clemson', 'Colorado State', 'Ole Miss', 'Providence', 'VCU', 'Washington'],
-      seededTeams: [
-        { seed: 1, name: 'Arizona' },
-        { seed: 2, name: 'BYU' },
-        { seed: 3, name: 'Clemson' },
-        { seed: 4, name: 'Colorado State' },
-        { seed: 5, name: 'Ole Miss' },
-        { seed: 6, name: 'Providence' },
-        { seed: 7, name: 'VCU' },
-        { seed: 8, name: 'Washington' }
+      seededTeams: [],
+      //  Official bracket, released 29 Jul 2026. Order matters: games
+      //  0 and 1 are one half of the draw, 2 and 3 the other, so the
+      //  semifinal pairings come out right. VCU's own release confirms
+      //  the halves: they play the Arizona/Colorado State winner in the
+      //  semi, and meet someone from {Ole Miss, Clemson, Washington,
+      //  BYU} on the final day.
+      matchups: [
+        ['VCU', 'Providence'],
+        ['Arizona', 'Colorado State'],
+        ['Clemson', 'Ole Miss'],
+        ['BYU', 'Washington']
       ]
     },
     {
@@ -3082,30 +3104,58 @@ const TOURNAMENTS = {
       roundNames: ['Quarterfinals', 'Semifinals', 'Championship'],
       canSelect: true,
       playerRegion: 'Atlantis',
+      //  Battle 4 Atlantis is not seeded either: it splits the field
+      //  into two groups of four. The old seeds produced four games
+      //  that do not exist AND mixed the two groups together, so the
+      //  bracket halves were wrong on top of the pairings.
+      seeded: false,
       teams: ['Penn State', 'Marquette', 'Memphis', 'Mississippi State', 'Texas A&M', 'Virginia', 'Wake Forest', 'Xavier'],
-      seededTeams: [
-        { seed: 1, name: 'Marquette' },
-        { seed: 2, name: 'Penn State' },
-        { seed: 3, name: 'Texas A&M' },
-        { seed: 4, name: 'Memphis' },
-        { seed: 5, name: 'Mississippi State' },
-        { seed: 6, name: 'Virginia' },
-        { seed: 7, name: 'Wake Forest' },
-        { seed: 8, name: 'Xavier' }
+      seededTeams: [],
+      //  Official bracket, released 31 Aug 2026.
+      //  Group 1: Marquette, Texas A&M, Virginia, Xavier
+      //  Group 2: Memphis, Mississippi State, Penn State, Wake Forest
+      //  Games 0-1 are Group 1, games 2-3 are Group 2, so the group
+      //  winners only meet in the final.
+      matchups: [
+        ['Virginia', 'Marquette'],
+        ['Xavier', 'Texas A&M'],
+        ['Wake Forest', 'Mississippi State'],
+        ['Memphis', 'Penn State']
       ]
     },
     {
       id: 'etsc-2026',
-      name: 'ESPN Thanksgiving Showcase',
-      subtitle: 'ESPN Wide World of Sports',
-      location: 'Kissimmee, FL',
+      //  DISABLED, and not because of a data typo. Three things were
+      //  wrong and the third one is structural:
+      //
+      //   1. The name. There is no "ESPN Thanksgiving Showcase" — the
+      //      event is the ESPN Events Invitational.
+      //   2. The field. Our Adventure Group had 4 of its 6 teams;
+      //      St. Bonaventure and Yale were missing entirely.
+      //   3. The format. It is NOT a bracket. The Adventure Group is
+      //      group play: all six teams play three games across Nov
+      //      23-25 and nobody is eliminated.
+      //
+      //  (3) is why this cannot just be re-seeded. This app scores a
+      //  roster until the player's team is knocked out — and in group
+      //  play nothing ever is. Every drafted player would play exactly
+      //  three games regardless of results, so the bracket, the
+      //  elimination logic and the projection engine would all be
+      //  describing a tournament that is not happening.
+      //
+      //  Shipping it selectable meant letting someone run a real draft
+      //  on a format we cannot score. Off until group play is built.
+      name: 'ESPN Events Invitational',
+      subtitle: 'Adventure Group · group play, not a bracket',
+      location: 'State Farm Field House, Kissimmee, FL',
       dates: 'Nov 23–25, 2026',
       startMs: new Date('2026-11-23').getTime(),
-      bracketFormat: 'single8',
-      roundNames: ['Quarterfinals', 'Semifinals', 'Championship'],
-      canSelect: true,
+      bracketFormat: 'group6',
+      roundNames: [],
+      canSelect: false,
+      comingSoon: true,
       playerRegion: 'Showcase',
-      teams: ['Akron', 'Wright State', 'App State', 'Belmont'],
+      teams: ['Akron', 'App State', 'Belmont', 'St. Bonaventure', 'Wright State', 'Yale'],
       seededTeams: []
     },
     {
@@ -3238,6 +3288,49 @@ function generateBracketData(tournament) {
   const n = sorted.length;
   const numRounds = (tournament.roundNames || []).length;
 
+  // ── Published pairings beat derived ones ─────────────────
+  //  Most early-season events do not seed: they announce a bracket.
+  //  Deriving 1v8/4v5/2v7/3v6 from a seed list is only correct when
+  //  the seeds are real. When they are not, this function will
+  //  confidently generate four games that were never scheduled —
+  //  which is exactly what it had been doing for Maui and Atlantis.
+  //  An explicit `matchups` array is the published truth, so it wins.
+  //
+  //  Order is significant: entries 0 and 1 form one half of the draw
+  //  and 2 and 3 the other, matching the 1v8 / 4v5 / 2v7 / 3v6 layout
+  //  below, so the renderer's adjacent-pair semifinals stay correct.
+  if (Array.isArray(tournament.matchups) && tournament.matchups.length) {
+    const byName = {};
+    (tournament.seededTeams || []).forEach(t => { byName[t.name] = t.seed; });
+    const unknown = [];
+    const built = tournament.matchups.map(pair => {
+      (pair || []).forEach(nm => {
+        if ((tournament.teams || []).indexOf(nm) === -1) unknown.push(nm);
+      });
+      return {
+        //  seed stays undefined for an unseeded event, so the bracket
+        //  renders a team name with no invented number beside it.
+        top: { name: pair[0], seed: tournament.seeded ? byName[pair[0]] : undefined },
+        bot: { name: pair[1], seed: tournament.seeded ? byName[pair[1]] : undefined }
+      };
+    });
+    //  A name typed into `matchups` that is not in `teams` means the
+    //  bracket and the player pool disagree, and the team would show
+    //  in the bracket with nobody draftable. Shout rather than ship it.
+    if (unknown.length) {
+      console.error('[Bracket] ' + tournament.name + ': matchup teams missing from the team list: ' + unknown.join(', '));
+    }
+    window.MM_BRACKET_DATA = {
+      format: tournament.bracketFormat,
+      numRounds: numRounds,
+      roundNames: tournament.roundNames || [],
+      regions: [{ name: tournament.name, matchups: built }],
+      finalFour: null,
+      championship: null
+    };
+    return;
+  }
+
   let matchups = [];
   if (n === 8) {
     // Standard 8-seed bracket: 1v8, 4v5, 2v7, 3v6
@@ -3259,6 +3352,16 @@ function generateBracketData(tournament) {
       { top: sorted[6], bot: sorted[9] },
       { top: sorted[1], bot: sorted[14] }
     ];
+  }
+
+  //  An unrecognised field size fell through both branches and left
+  //  matchups empty, and an empty bracket renders as a blank panel
+  //  rather than an error — which is how a 4-team event sat in a
+  //  single8 slot without anyone noticing. Say so.
+  if (!matchups.length && (tournament.teams || []).length) {
+    console.error('[Bracket] ' + tournament.name + ': ' + (tournament.teams || []).length +
+      ' teams and ' + n + ' seeds produced no matchups. Needs an explicit `matchups` array ' +
+      'or a bracket format that fits the field.');
   }
 
   window.MM_BRACKET_DATA = {

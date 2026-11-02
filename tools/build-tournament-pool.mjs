@@ -41,25 +41,46 @@ const ENDPOINT = 'https://us-central1-mmapp-6b7ab.cloudfunctions.net/espnRosters
    out of app.js so a field change is one obvious edit. These must
    match TOURNAMENTS[].seededTeams in src/app.js — the checker at the
    bottom warns if they have drifted apart.                        */
+//  The second number used to be a "seed". It was not one.
+//
+//  Neither the Maui Invitational nor Battle 4 Atlantis seeds its
+//  field — they publish a bracket and two groups respectively. The old
+//  numbers were 1..8 assigned in list order, which for Maui happened
+//  to be exact alphabetical order, and they were rendered to users as
+//  "Seed 7 Maui" on every single player card. An invented fact,
+//  displayed with the same confidence as a real one.
+//
+//  So seeds are now null for unseeded events, and the app hides the
+//  badge when the seed is null rather than printing a number nobody
+//  published. Put a real number here ONLY for an event that genuinely
+//  seeds, and keep the team list matching TOURNAMENTS[].teams in
+//  src/app.js — the bracket pairings live there, not here.
 const FIELDS = [
   {
     region: 'Maui',
+    seeded: false,
     teams: [
-      ['Arizona', 1], ['BYU', 2], ['Clemson', 3], ['Colorado State', 4],
-      ['Ole Miss', 5], ['Providence', 6], ['VCU', 7], ['Washington', 8],
+      ['Arizona', null], ['BYU', null], ['Clemson', null], ['Colorado State', null],
+      ['Ole Miss', null], ['Providence', null], ['VCU', null], ['Washington', null],
     ],
   },
   {
     region: 'Atlantis',
+    seeded: false,
     teams: [
-      ['Marquette', 1], ['Penn State', 2], ['Texas A&M', 3], ['Memphis', 4],
-      ['Mississippi State', 5], ['Virginia', 6], ['Wake Forest', 7], ['Xavier', 8],
+      ['Marquette', null], ['Penn State', null], ['Texas A&M', null], ['Memphis', null],
+      ['Mississippi State', null], ['Virginia', null], ['Wake Forest', null], ['Xavier', null],
     ],
   },
   {
+    //  ESPN Events Invitational, Adventure Group. Six teams, group
+    //  play, nobody eliminated. The event is disabled in the app
+    //  until group play exists; the pool is built so it is ready.
     region: 'Showcase',
+    seeded: false,
     teams: [
-      ['Akron', 1], ['Wright State', 2], ['App State', 3], ['Belmont', 4],
+      ['Akron', null], ['App State', null], ['Belmont', null],
+      ['St. Bonaventure', null], ['Wright State', null], ['Yale', null],
     ],
   },
 ];
