@@ -4631,35 +4631,66 @@
     if (!ref) return Promise.reject(new Error('Not connected.'));
     if (!uid) return Promise.reject(new Error('Sign in first.'));
 
-    return ref.get().then(function (doc) {
-      if (!doc.exists) throw new Error('No league with that code.');
-      var d = doc.data() || {};
-      var st = decodeState(d.state);
-      if (!st || !st.teams) throw new Error('That league is not ready yet.');
+    //  ── Claiming a seat must be atomic ───────────────────────
+    //  This was read → pick the first open seat → write. Send the code
+    //  to a group chat and three people tap Join inside the same
+    //  second: all three read the same document, all three pick the
+    //  SAME open seat, and the last write wins. merge:true does not
+    //  save you — it deep-merges maps but replaces arrays wholesale,
+    //  and `teams` is an array, so the final writer's copy erases the
+    //  other two claims outright. They are told nothing; they simply
+    //  are not in the league any more.
+    //
+    //  A transaction re-runs on conflict, so each joiner re-reads the
+    //  seat list the previous one actually committed and takes the
+    //  next genuinely free seat.
+    var db = syncDb();
+    var claimed = null;
 
-      var mine = st.teams.filter(function (t) { return t && t.uid === uid; })[0];
-      if (!mine) {
-        var seat = st.teams.filter(function (t) { return t && !t.uid; })[0];
-        if (!seat) throw new Error('That league is full.');
-        seat.uid = uid;
-        seat.name = sessionName();
-        seat.bot = false;
-      }
+    return db.runTransaction(function (tx) {
+      return tx.get(ref).then(function (doc) {
+        if (!doc.exists) throw new Error('No league with that code.');
+        var d = doc.data() || {};
+        var st = decodeState(d.state);
+        if (!st || !st.teams) throw new Error('That league is not ready yet.');
 
-      SYNC.rev = (typeof d.rev === 'number' ? d.rev : 0) + 1;
-      return ref.set({ rev: SYNC.rev, state: encodeState(st), updatedAt: Date.now(), updatedBy: uid }, { merge: true })
-        .then(function () {
-          SYNC.applying = true;
-          try {
-            state = st;
-            state.games = state.games || {};
-            markMine();
-            try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
-          } finally { SYNC.applying = false; }
-          subscribeSeason(code);
-          rememberSeasonLeague(code, (st.league && st.league.name) || 'Season League');
-          return state;
-        });
+        //  Rejoining with the same account finds the seat it already
+        //  holds rather than taking a second one, so a repeat join is
+        //  harmless — which matters, because telling someone to "try
+        //  again" must never cost the league a seat.
+        var mine = st.teams.filter(function (t) { return t && t.uid === uid; })[0];
+        if (!mine) {
+          var seat = st.teams.filter(function (t) { return t && !t.uid; })[0];
+          if (!seat) throw new Error('That league is full.');
+          seat.uid = uid;
+          seat.name = sessionName();
+          seat.bot = false;
+        }
+
+        var nextRev = (typeof d.rev === 'number' ? d.rev : 0) + 1;
+        tx.set(ref, {
+          rev: nextRev,
+          state: encodeState(st),
+          updatedAt: Date.now(),
+          updatedBy: uid
+        }, { merge: true });
+
+        //  Held until the transaction commits. If it retries, these are
+        //  simply overwritten by the next attempt's values.
+        claimed = { st: st, rev: nextRev };
+      });
+    }).then(function () {
+      SYNC.rev = claimed.rev;
+      SYNC.applying = true;
+      try {
+        state = claimed.st;
+        state.games = state.games || {};
+        markMine();
+        try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
+      } finally { SYNC.applying = false; }
+      subscribeSeason(code);
+      rememberSeasonLeague(code, (state.league && state.league.name) || 'Season League');
+      return state;
     });
   }
   function showSeasonJoin(info, code) {
@@ -4712,8 +4743,45 @@
         return;
       }
 
+      if (act === 'open') {
+        //  "Open League" used to call open() directly, and open() reads
+        //  localStorage and nothing else — there is no path anywhere in
+        //  this module that downloads a league from the server.
+        //
+        //  So a genuine member whose device has no local copy (new
+        //  phone, cleared data, a laptop he has never opened it on) was
+        //  told "You're already in this league", handed a button, and
+        //  dropped into the setup wizard. Locked out of his own league
+        //  with the app insisting he was in it.
+        //
+        //  joinSeasonLeague is idempotent — an account that already
+        //  holds a seat keeps that seat and takes no new one — and
+        //  pulling the state down is exactly what it does. So for a
+        //  member with nothing local, route through it.
+        var local = load();
+        var haveIt = !!(local && local.league && local.league.code === code);
+        if (haveIt) { bd.remove(); open(); return; }
+
+        if (b) { b.disabled = true; b.textContent = 'Opening…'; }
+        joinSeasonLeague(code).then(function () {
+          bd.remove();
+          open();
+        }).catch(function (err) {
+          if (b) { b.disabled = false; b.textContent = 'Open League'; }
+          var msg = bd.querySelector('.sj-error');
+          if (!msg) {
+            msg = document.createElement('p');
+            msg.className = 'sj-error';
+            msg.style.cssText = 'color:#f05252;font-size:13px;margin:10px 0 0;';
+            var card = bd.querySelector('.sj-card');
+            if (card) card.appendChild(msg);
+          }
+          msg.textContent = (err && err.message) || 'Could not open the league. Try again.';
+        });
+        return;
+      }
+
       bd.remove();
-      if (act === 'open') open();
     });
   }
   function interceptJoin(e) {
