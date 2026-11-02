@@ -303,9 +303,55 @@ function getSession() {
 function setSession(name, email, uid) {
   try { localStorage.setItem('mmfantasy-session', JSON.stringify({ name, email, uid: uid || null })); } catch (e) { }
 }
+//  Key families that belong to a signed-in person rather than to the
+//  device. Everything here must go when the account changes.
+//  'mm_theme', 'tipoff-season-theme' and 'mmfantasy-notif*' are
+//  deliberately NOT here: they are device preferences, and wiping a
+//  friend's dark-mode setting is not a privacy fix.
+const USER_SCOPED_PREFIXES = [
+  'mmfantasy-state',
+  'mmfantasy-leagues',
+  'mmfantasy-league-',
+  'mmfantasy-code-',
+  'mmfantasy-bracket-',
+  'mmfantasy-chat-',
+  'mmfantasy-chat-read-',
+  'mmfantasy-chat-hidden-',
+  'mmfantasy-avatar-',
+  'mmfantasy-accent',
+  'tipoff-season-v1'       // covers the ':<uid>' scoped buckets too
+];
+
+function clearUserScopedStorage() {
+  let keys = [];
+  try { for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); }
+  catch (e) { return; }
+  keys.forEach(k => {
+    if (!k) return;
+    if (USER_SCOPED_PREFIXES.some(p => k === p || k.indexOf(p) === 0)) {
+      try { localStorage.removeItem(k); } catch (e) { /* ignore */ }
+    }
+  });
+}
+
 function clearSession() {
+  //  This removed exactly two keys, which left the previous account's
+  //  My Leagues list, cached league blobs, brackets, chats, avatar and
+  //  — worst of all — their entire season league sitting on the device
+  //  for the next person who signed in.
+  //
+  //  Record the uid we are leaving BEFORE deleting the session. Both
+  //  "has the user changed?" checks compared against getSession(),
+  //  which this function had just deleted, so on the ordinary
+  //  sign-out then sign-in path they saw no previous user and skipped
+  //  the cleanup entirely. A separate breadcrumb survives that.
+  try {
+    const s = getSession();
+    if (s && s.uid) localStorage.setItem('mmfantasy-last-uid', s.uid);
+  } catch (e) { /* ignore */ }
+
   localStorage.removeItem('mmfantasy-session');
-  localStorage.removeItem('mmfantasy-state');
+  clearUserScopedStorage();
 }
 
 // ── FIREBASE HELPERS ──────────────────────────────────────
@@ -962,13 +1008,18 @@ function handleLogin() {
       .then(name => {
         const prevSess = getSession();
         const uid = window._fbUser ? window._fbUser.uid : null;
-        if (prevSess && prevSess.uid && prevSess.uid !== uid) {
-          localStorage.removeItem('mmfantasy-state');
-          localStorage.removeItem('mmfantasy-leagues');
+        //  Fall back to the breadcrumb clearSession() leaves, so this
+        //  still detects a change of account after a sign-out.
+        let prevUid = (prevSess && prevSess.uid) || null;
+        if (!prevUid) { try { prevUid = localStorage.getItem('mmfantasy-last-uid'); } catch (e) { } }
+        if (prevUid && prevUid !== uid) {
+          clearUserScopedStorage();
           state = freshState();
           state.players = poolForCurrentTournament();
         }
+        try { localStorage.setItem('mmfantasy-last-uid', uid || ''); } catch (e) { }
         setSession(name, email, uid);
+        try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(uid); } catch (e) { }
         btn.textContent = 'Sign In'; btn.disabled = false;
         _afterLoginNav();
       })
@@ -1281,11 +1332,46 @@ function renderSavedLeagues() {
   } catch (e) { container.innerHTML = '<p class="no-leagues">Could not load leagues.</p>'; }
 }
 
+//  League codes get read aloud down a phone and typed by somebody
+//  else, so the alphabet drops every character people confuse:
+//  I/1/L and O/0. The season module has always done this; the
+//  tournament side used Math.random().toString(36), whose alphabet
+//  contains ALL of them — so a perfectly correct code could be
+//  retyped wrong and come back "no league found", which is already
+//  the most common thing that goes wrong here.
+//
+//  That expression had a second flaw: it is not guaranteed to return
+//  6 characters. Math.random() === 0.5 yields "I", and 0 yields "".
+//  It never happened in 2,000,000 trial draws, so this was not the
+//  bug anyone was hitting — but a league code of "" is unjoinable
+//  forever, and the fix costs nothing.
+const LEAGUE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function makeLeagueCode() {
+  const c = LEAGUE_CODE_ALPHABET;
+  let o = '';
+  const cr = (typeof crypto !== 'undefined' && crypto.getRandomValues) ? crypto : null;
+  if (cr) {
+    // Reject the ragged tail so the modulo stays uniform.
+    const limit = 256 - (256 % c.length);
+    const buf = new Uint8Array(12);
+    while (o.length < 6) {
+      cr.getRandomValues(buf);
+      for (let k = 0; k < buf.length && o.length < 6; k++) {
+        if (buf[k] < limit) o += c.charAt(buf[k] % c.length);
+      }
+    }
+    return o;
+  }
+  for (let i = 0; i < 6; i++) o += c.charAt(Math.floor(Math.random() * c.length));
+  return o;
+}
+
 function createLeague() {
   state = freshState();
   state.players = poolForCurrentTournament();
   state.leagueId = 'league_' + Date.now();
-  state.leagueCode = Math.random().toString(36).toUpperCase().slice(2, 8);
+  state.leagueCode = makeLeagueCode();
   const session = getSession();
   state.commissioner = session ? session.name : 'Commissioner';
   state.commissionerEmail = session ? session.email : '';
@@ -6089,6 +6175,7 @@ document.addEventListener('DOMContentLoaded', () => {
       window._auth.signOut().catch(e => console.warn('[Auth] signOut error:', e));
     }
     clearSession();
+    try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(null); } catch (e) { }
     state = freshState();
     state.players = poolForCurrentTournament();
     showLanding();
@@ -6538,22 +6625,30 @@ document.addEventListener('DOMContentLoaded', () => {
       window._fbUser = user;
       if (user) {
         const sess = getSession();
-        const differentUser = sess && sess.uid && sess.uid !== user.uid;
+        //  Same breadcrumb fallback as the sign-in path: after a
+        //  sign-out there is no session to compare against, so
+        //  without this a returning different account inherits the
+        //  previous one's leagues, brackets, chats and season league.
+        let prevUid = (sess && sess.uid) || null;
+        if (!prevUid) { try { prevUid = localStorage.getItem('mmfantasy-last-uid') || null; } catch (e) { } }
+        const differentUser = !!(prevUid && prevUid !== user.uid);
         if (differentUser) {
           // A different user logged in on this device — wipe the previous user's local data
-          localStorage.removeItem('mmfantasy-state');
-          localStorage.removeItem('mmfantasy-leagues');
+          clearUserScopedStorage();
           state = freshState();
           state.players = poolForCurrentTournament();
         }
+        try { localStorage.setItem('mmfantasy-last-uid', user.uid); } catch (e) { }
         if (!sess || differentUser) {
           const name = (user.displayName) || user.email.split('@')[0];
           setSession(name, user.email, user.uid);
         }
+        try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(user.uid); } catch (e) { }
         if (!differentUser && loadState() && state.leagueId) { _subscribeLeague(state.leagueCode); enterLeague(); }
         else { showSplash(true); }
       } else {
         // Firebase says no user — check localStorage session (offline/testing fallback)
+        try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(null); } catch (e) { }
         const session = getSession();
         if (session) {
           if (loadState() && state.leagueId) { enterLeague(); }

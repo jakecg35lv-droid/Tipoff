@@ -30,7 +30,63 @@
 (function (window, document) {
   'use strict';
 
-  var STORE_KEY = 'tipoff-season-v1';
+  // ── Storage is scoped to the signed-in account ────────────
+  //  This used to be one flat key shared by everyone who ever used
+  //  the device, and the consequences were not subtle:
+  //
+  //    1. Sign out, let a friend sign in on your phone, and the app
+  //       opened straight into YOUR season league.
+  //    2. open() then called subscribeSeason() with your league code,
+  //       so their device joined your league's live document.
+  //    3. markMine() found no seat matching their uid, so userTeam()
+  //       fell back to seat 0 — YOUR team. They would have drafted,
+  //       set lineups and made trades as you.
+  //    4. save() pushed all of it back to the shared document.
+  //
+  //  Scoping the key by uid makes every account its own bucket, so
+  //  none of that chain can start. 'anon' holds signed-out play.
+  var STORE_KEY_BASE = 'tipoff-season-v1';
+  var LEGACY_STORE_KEY = 'tipoff-season-v1';
+
+  function storeKey(uid) {
+    var u = uid === undefined ? myUid() : uid;
+    return STORE_KEY_BASE + ':' + (u || 'anon');
+  }
+
+  //  Whoever is signed in when the legacy blob is first seen inherits
+  //  it ONLY if they are actually in that league. Anyone else leaves
+  //  it untouched, so the rightful owner still gets it when they next
+  //  sign in on this device.
+  function migrateLegacyStore() {
+    var raw;
+    try { raw = localStorage.getItem(LEGACY_STORE_KEY); } catch (e) { return; }
+    if (!raw) return;
+    var blob;
+    try { blob = JSON.parse(raw); } catch (e) {
+      try { localStorage.removeItem(LEGACY_STORE_KEY); } catch (_) { }
+      return;
+    }
+    var uid = myUid();
+    var teams = (blob && blob.teams) || [];
+    var claimed = teams.some(function (t) { return t && t.uid; });
+    var mine = uid
+      ? teams.some(function (t) { return t && t.uid === uid; })
+      //  Signed out, only take a league that belongs to nobody. An
+      //  earlier version of this migrated ANY legacy blob into the
+      //  'anon' bucket when no user was resolved — which, on a cold
+      //  start where auth had not landed yet, would quietly move a
+      //  signed-in user's league somewhere they would never see it
+      //  again. Auth arriving later re-runs this, so waiting costs
+      //  nothing and guessing costs the league.
+      : !claimed;
+    if (!mine) return;                       // not ours; leave it for its owner
+    try {
+      if (!localStorage.getItem(storeKey(uid))) {
+        localStorage.setItem(storeKey(uid), raw);
+      }
+      localStorage.removeItem(LEGACY_STORE_KEY);
+    } catch (e) { /* quota */ }
+  }
   var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   var DAYS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   var SLOTS = ['G', 'G', 'F', 'F', 'UTIL'];
@@ -165,7 +221,7 @@
         state = d.state;
         state.games = games;
         markMine();
-        try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { }
+        try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
         if (typeof render === 'function') { try { render(); } catch (e) { } }
       } finally {
         SYNC.applying = false;
@@ -229,11 +285,12 @@
   }
 
   function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* quota or private mode */ }
+    try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { /* quota or private mode */ }
     schedulePush();
   }
   function load() {
-    try { var raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+    migrateLegacyStore();
+    try { var raw = localStorage.getItem(storeKey()); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
   }
   function sessionName() {
     try { var s = JSON.parse(localStorage.getItem('mmfantasy-session') || 'null'); return (s && s.name) || 'You'; } catch (e) { return 'You'; }
@@ -347,10 +404,53 @@
     return out;
   }
   function P(id) { allPlayers(); return BY_ID[id]; }
+  //  Alphabet already drops I, O, 0 and 1. Keep it that way: these
+  //  codes get read aloud and typed by somebody else, and the whole
+  //  failure mode is "no league found" for a code that was correct.
   function code6() {
     var c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', o = '';
+    //  crypto.getRandomValues where available. Math.random is not a
+    //  uniform source for this and is trivially predictable, which
+    //  matters because the code IS the access control on the league.
+    var cr = (typeof crypto !== 'undefined' && crypto.getRandomValues) ? crypto : null;
+    if (cr) {
+      //  Reject values in the ragged tail so the modulo stays uniform.
+      var limit = 256 - (256 % c.length);
+      var buf = new Uint8Array(12);
+      while (o.length < 6) {
+        cr.getRandomValues(buf);
+        for (var k = 0; k < buf.length && o.length < 6; k++) {
+          if (buf[k] < limit) o += c.charAt(buf[k] % c.length);
+        }
+      }
+      return o;
+    }
     for (var i = 0; i < 6; i++) o += c.charAt(Math.floor(Math.random() * c.length));
     return o;
+  }
+
+  //  Nothing checked whether a code was already taken. seasonDoc().set
+  //  uses merge:true, so a collision would not error — it would MERGE
+  //  two unrelated leagues into one document, and both sets of
+  //  managers would find a league that was half somebody else's.
+  //  Odds are small; the consequence is unrecoverable, and the check
+  //  is one read.
+  function freshCode(tries) {
+    var db = syncDb();
+    var code = code6();
+    if (!db) return Promise.resolve(code);
+    var left = (typeof tries === 'number' ? tries : 5);
+    function attempt(c, n) {
+      return db.collection('seasonLeagues').doc(c).get()
+        .then(function (doc) {
+          if (!doc.exists) return c;
+          if (n <= 0) return c;                 // give up rather than hang
+          console.warn('[Season] code collision on ' + c + ', retrying');
+          return attempt(code6(), n - 1);
+        })
+        .catch(function () { return c; });     // offline: proceed, push will report
+    }
+    return attempt(code, left);
   }
   function snake(round1, rounds) {
     var picks = [];
@@ -459,6 +559,23 @@
       try { notify('Sign in to share this league. While signed out it stays on this device.', 'error'); } catch (_) { }
       return Promise.resolve(false);
     }
+    //  Claim a code nobody else holds BEFORE the first write. This runs
+    //  within a few hundred ms of creation, long before the creator has
+    //  read the code out to anyone, so swapping it here is invisible.
+    //  Without it, merge:true would fold this league into the existing
+    //  one and both sets of managers would be in a hybrid league.
+    return freshCode().then(function (code) {
+      if (code !== state.league.code) {
+        unsubscribeSeason();
+        state.league.code = code;
+        try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
+        subscribeSeason(code);
+      }
+      return writeLeagueDoc(seasonDoc(state.league.code));
+    });
+  }
+
+  function writeLeagueDoc(ref) {
     return ref.set({
       rev: SYNC.rev || 1,
       state: syncPayload(),
@@ -466,6 +583,10 @@
       updatedBy: myUid()
     }, { merge: true }).then(function () {
       SYNC.rev = SYNC.rev || 1;
+      //  Only after the league is confirmed on the server. Listing a
+      //  league that failed to save would hand the user a code that
+      //  does not work.
+      rememberSeasonLeague(state.league.code, state.league.name);
       return true;
     }).catch(function (e) {
       var c = (e && e.code) || '';
@@ -3809,13 +3930,23 @@
       case 'restart':
         if (!el.classList.contains('confirm')) { el.classList.add('confirm'); el.textContent = 'Tap again'; return; }
         restartLeague(); ui.page = 'home'; ui.toastMsg = 'League restarted. The draft is back to round one.'; ui.toastType = 'success'; break;
+      //  Both of these dropped the local copy but left the Firestore
+      //  snapshot listener running and the membership recorded, so a
+      //  "left" league kept streaming in and kept showing in the
+      //  account's league list.
+      //
+      //  The shared document is deliberately NOT deleted: other
+      //  managers are in this league, and one person tapping Leave
+      //  must not destroy everyone's season. The seat stays claimed
+      //  so the same account can rejoin with the code and find its
+      //  own team rather than taking a second one.
       case 'leave':
         if (!el.classList.contains('confirm')) { el.classList.add('confirm'); el.textContent = 'Tap again'; return; }
-        state = null; try { localStorage.removeItem(STORE_KEY); } catch (er) { /* ignore */ }
+        leaveSeasonLocally();
         close(); return;
       case 'reset':
         if (!el.classList.contains('confirm')) { el.classList.add('confirm'); el.textContent = 'Tap again to delete'; return; }
-        state = null; try { localStorage.removeItem(STORE_KEY); } catch (er) { /* ignore */ }
+        leaveSeasonLocally();
         close(); return;
     }
     render();
@@ -4076,6 +4207,71 @@
     });
   }
 
+  // ── Remember the league on the account, not just the device ──
+  //  A season league lived in exactly one place: this browser's
+  //  localStorage. Not in users/{uid}, not anywhere the account could
+  //  reach. Clear your site data, get a new phone, or just open the
+  //  app in a different browser, and the league was gone — no list,
+  //  no code, no way back in, even though the league was sitting
+  //  safely in Firestore the whole time.
+  //
+  //  Tagged kind:'season' so the tournament My Leagues list can tell
+  //  the two apart; both live in the same users/{uid}.leagues array.
+  function rememberSeasonLeague(code, name) {
+    var db = syncDb(), uid = myUid();
+    if (!db || !uid || !code) return Promise.resolve();
+    var ref = db.collection('users').doc(uid);
+    return ref.get().then(function (snap) {
+      var data = (snap.exists && snap.data()) || {};
+      var list = Array.isArray(data.leagues) ? data.leagues.slice() : [];
+      var i = -1;
+      for (var k = 0; k < list.length; k++) {
+        if (list[k] && list[k].code === code) { i = k; break; }
+      }
+      var entry = {
+        code: code,
+        name: name || 'Season League',
+        kind: 'season',
+        lastOpened: Date.now()
+      };
+      if (i >= 0) list[i] = Object.assign({}, list[i], entry);
+      else list.push(Object.assign({ joinedAt: Date.now() }, entry));
+      return ref.set({ leagues: list }, { merge: true });
+    }).catch(function (e) {
+      console.warn('[Season] membership write failed:', e && e.code, e && e.message);
+    });
+  }
+
+  //  Tear down everything this device holds for the current season
+  //  league, in the right order: stop listening first, then cancel any
+  //  debounced push, THEN drop the state. Dropping state first would
+  //  let an in-flight pushState fire against a half-cleared league.
+  function leaveSeasonLocally() {
+    var code = state && state.league && state.league.code;
+    unsubscribeSeason();
+    if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
+    SYNC.warnedDenied = false;
+    state = null;
+    try { localStorage.removeItem(storeKey()); } catch (e) { /* ignore */ }
+    if (code) forgetSeasonLeague(code);
+    try { renderSplashCard(); } catch (e) { }
+  }
+
+  function forgetSeasonLeague(code) {
+    var db = syncDb(), uid = myUid();
+    if (!db || !uid || !code) return Promise.resolve();
+    var ref = db.collection('users').doc(uid);
+    return ref.get().then(function (snap) {
+      var data = (snap.exists && snap.data()) || {};
+      var list = Array.isArray(data.leagues) ? data.leagues : [];
+      return ref.set({
+        leagues: list.filter(function (l) { return l && l.code !== code; })
+      }, { merge: true });
+    }).catch(function (e) {
+      console.warn('[Season] membership remove failed:', e && e.code, e && e.message);
+    });
+  }
+
   function joinErrorText(code) {
     if (code === 'permission-denied') {
       return 'The league database is not accepting requests. ' +
@@ -4119,9 +4315,10 @@
             state = st;
             state.games = state.games || {};
             markMine();
-            try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { }
+            try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
           } finally { SYNC.applying = false; }
           subscribeSeason(code);
+          rememberSeasonLeague(code, (st.league && st.league.name) || 'Season League');
           return state;
         });
     });
@@ -4249,8 +4446,46 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireSplash);
   else wireSplash();
 
+  // ── Auth arrives after the first paint ────────────────────
+  //  Firebase resolves the user asynchronously, so the very first
+  //  load() on a cold start can run while myUid() is still null and
+  //  read the 'anon' bucket — which would show a signed-in user an
+  //  empty splash and make them think their league had vanished.
+  //  app.js calls this from onAuthStateChanged; we re-read under the
+  //  now-known uid and repaint.
+  //
+  //  It also handles the switch itself: on sign-out or a change of
+  //  account we drop the live subscription and the in-memory state,
+  //  so no listener or pending push survives into the next session.
+  var LAST_UID = null;
+  function onAuthChanged(uid) {
+    var next = uid || null;
+    if (next === LAST_UID) return;
+    LAST_UID = next;
+
+    unsubscribeSeason();
+    if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
+    SYNC.warnedDenied = false;
+    state = null;
+
+    migrateLegacyStore();
+
+    // Repaint the splash entry for whoever is signed in now.
+    try { renderSplashCard(); } catch (e) { }
+
+    // If the season app is on screen, re-open it under the new account.
+    var el = document.getElementById('seasonApp');
+    var onScreen = el && document.body.classList.contains('ss-open');
+    if (onScreen) {
+      var s = load();
+      if (s) { open(); }
+      else { try { close(); } catch (e) { } }
+    }
+  }
+
   window.TipoffSeason = {
     open: open, close: close,
+    onAuthChanged: onAuthChanged,
     // exposed for testing in the lab
     _debug: function () { return state; }
   };
