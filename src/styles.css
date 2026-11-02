@@ -14,6 +14,26 @@
 
 /* ── DESIGN TOKENS ──────────────────────────────────────── */
 :root {
+  /* ── Type ────────────────────────────────────────────────
+     Display was Bebas Neue: one weight, capitals only, no
+     lowercase and no italics. Every heading in the app therefore
+     had to build hierarchy out of size alone, which is why a modal
+     title needed 38px to read as a title.
+
+     Barlow Condensed keeps the condensed sports proportions — so
+     existing layouts still fit — but brings nine weights, real
+     lowercase and proper numerals. Headings now separate by WEIGHT
+     and tracking rather than by getting bigger.
+
+     Note the weight change that goes with it: Bebas at 400 looks
+     bold because it is a display face. Barlow at 400 is genuinely
+     light, so every swapped declaration moved to 600. */
+  --font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  /* Referenced in 7 rules and never actually loaded, so those
+     elements were falling back to Courier. Now in the font link. */
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
   /* Backgrounds — deep navy palette */
   --bg: #060f1c;
   --sidebar: #040b15;
@@ -514,7 +534,7 @@ select:focus {
 }
 
 .landing-title {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 42px;
   font-weight: 800;
   letter-spacing: 0.18em;
@@ -787,7 +807,7 @@ select:focus {
 }
 
 .tos-modal-title {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 24px;
   letter-spacing: 1px;
   color: var(--text-1);
@@ -1117,7 +1137,7 @@ select:focus {
 }
 
 .splash-title {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 34px;
   font-weight: 900;
   letter-spacing: -0.5px;
@@ -1294,7 +1314,7 @@ select:focus {
 }
 
 .slc-pct {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 26px;
   font-weight: 800;
   background: var(--grad-primary);
@@ -1417,7 +1437,7 @@ select:focus {
 }
 
 .mm-intro-title {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 46px;
   font-weight: 300;
   letter-spacing: 0.32em;
@@ -1714,7 +1734,7 @@ select:focus {
   border-radius: var(--radius-xs);
   color: var(--text);
   padding: 14px;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 4px;
@@ -1925,7 +1945,7 @@ select:focus {
 }
 
 .mcb-timer {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 28px;
   font-weight: 900;
   color: #fff;
@@ -2011,7 +2031,7 @@ select:focus {
 
 .otc-label {
   display: block;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 18px;
   font-weight: 900;
   color: var(--blue);
@@ -3180,7 +3200,7 @@ select:focus {
 }
 
 .hero-timer {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 88px;
   font-weight: 900;
   color: #fff;
@@ -3224,7 +3244,7 @@ select:focus {
 }
 
 .st-val {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 36px;
   font-weight: 900;
   color: var(--text);
@@ -3530,7 +3550,7 @@ select:focus {
 }
 
 .dpc-timer {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 40px;
   font-weight: 900;
   color: #fff;
@@ -3595,7 +3615,7 @@ select:focus {
 }
 
 .doc-pick-num {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 13px;
   font-weight: 800;
   color: var(--muted);
@@ -3719,7 +3739,7 @@ select:focus {
 }
 
 .rp-chip-num {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 14px;
   color: var(--muted);
   line-height: 1;
@@ -3875,7 +3895,7 @@ select:focus {
 }
 
 .pool-rank {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 13px;
   font-weight: 700;
   color: var(--muted);
@@ -3919,14 +3939,14 @@ select:focus {
 }
 
 .pool-stat {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-2);
 }
 
 .pool-fpts {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 15px;
   font-weight: 800;
   color: var(--text);
@@ -4115,7 +4135,7 @@ select:focus {
 }
 
 .pc-fpts {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 30px;
   font-weight: 900;
   color: var(--text);
@@ -4210,7 +4230,7 @@ select:focus {
 }
 
 .tc-fpts {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 38px;
   font-weight: 900;
   color: var(--text);
@@ -4248,7 +4268,7 @@ select:focus {
 }
 
 .tc-player-fpts {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-weight: 700;
   font-size: 13px;
   color: var(--text-2);
@@ -4330,7 +4350,7 @@ select:focus {
 
 /* data cells */
 .sr-proj {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 13px;
   font-weight: 800;
   color: var(--text-2);
@@ -4351,7 +4371,7 @@ select:focus {
 }
 
 .sr-rank {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 18px;
   font-weight: 800;
   text-align: left;
@@ -4363,7 +4383,7 @@ select:focus {
 }
 
 .sr-fpts {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 18px;
   font-weight: 800;
   color: var(--text);
@@ -4371,7 +4391,7 @@ select:focus {
 }
 
 .sr-cat {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-2);
@@ -4507,7 +4527,7 @@ select:focus {
 }
 
 .br-seed {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 12px;
   font-weight: 800;
   color: var(--muted);
@@ -4684,7 +4704,7 @@ select:focus {
   font-size: 32px;
   font-weight: 900;
   color: var(--text);
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
@@ -4892,7 +4912,7 @@ select:focus {
 }
 
 .bt-seed {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 11px;
   font-weight: 800;
   color: var(--muted);
@@ -5184,7 +5204,7 @@ select:focus {
 }
 
 .profile-stat-val {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 32px;
   font-weight: 900;
   color: var(--text);
@@ -6073,7 +6093,7 @@ select:focus {
 }
 
 .league-code-badge {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 15px;
   font-weight: 900;
   letter-spacing: 2px;
@@ -6209,7 +6229,7 @@ select:focus {
 }
 
 .pa-player {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 36px;
   font-weight: 900;
   letter-spacing: -0.5px;
@@ -6254,7 +6274,7 @@ select:focus {
 }
 
 .cs-val {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 24px;
   font-weight: 900;
   color: var(--text);
@@ -6378,7 +6398,7 @@ select:focus {
 }
 
 .pdc-stat-val {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 28px;
   font-weight: 900;
   color: var(--text);
@@ -6788,7 +6808,7 @@ select:focus {
 }
 
 .tut-code-display {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 52px;
   letter-spacing: 10px;
   color: #fff;
@@ -6964,7 +6984,7 @@ select:focus {
 .tut-code-display,
 .pa-player,
 .rp-num {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -7683,7 +7703,7 @@ select:focus {
 }
 
 .proj-projected {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 15px;
   font-weight: 900;
   color: var(--green);
@@ -7693,7 +7713,7 @@ select:focus {
 }
 
 .proj-total-label {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
@@ -8273,7 +8293,7 @@ select:focus {
 }
 
 .rp-un-timer {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 24px;
   font-weight: 900;
   color: #fff;
@@ -8326,7 +8346,7 @@ select:focus {
 }
 
 .rp-sr-score {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 17px;
   font-weight: 900;
   color: #fff;
@@ -8652,7 +8672,7 @@ select:focus {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 13px;
   font-weight: 900;
   line-height: 1;
@@ -8678,7 +8698,7 @@ select:focus {
 }
 
 .rank-num {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 17px;
   font-weight: 800;
   color: var(--muted);
@@ -8972,7 +8992,7 @@ select:focus {
 }
 
 .tc-rank-badge {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 13px;
   font-weight: 900;
   line-height: 1;
@@ -9054,7 +9074,7 @@ select:focus {
   position: absolute;
   top: 0;
   right: 0;
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 11px;
   font-weight: 900;
   line-height: 1.4;

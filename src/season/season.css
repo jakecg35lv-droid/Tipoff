@@ -245,76 +245,154 @@ body.ss-open > *:not(#seasonApp):not(script):not(#toastContainer):not(.mode-back
 }
 .mode-backdrop.in { opacity: 1; }
 .mode-card {
-  width: 100%; max-width: 580px; padding: 26px 24px 16px; border-radius: 22px;
-  background: #0b1829; box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
-  color: #e8eff8; font-family: 'Inter', system-ui, sans-serif;
+  /*  Was 580px with 26/24/16 padding — three different values, so
+      nothing lined up with anything. One 28px gutter and a 520px
+      measure: narrower reads as more deliberate, and the two option
+      cards get a squarer, more confident aspect. */
+  width: 100%; max-width: 520px; padding: 28px; border-radius: 20px;
+  background: linear-gradient(180deg, #0d1c30 0%, #0a1526 100%);
+  border: 1px solid rgba(255, 255, 255, .08);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .62), inset 0 1px 0 rgba(255, 255, 255, .06);
+  color: #e8eff8; font-family: var(--font-ui);
   transform: translateY(10px) scale(.98); transition: transform .28s cubic-bezier(.2, .7, .2, 1);
 }
 .mode-backdrop.in .mode-card { transform: none; }
-.mode-card h3 { margin: 0 0 6px; font: 400 38px/1 'Bebas Neue', sans-serif; letter-spacing: .02em; }
-.mode-card > p { margin: 0 0 20px; color: #b3c4d6; font-size: 15px; }
-.mode-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.mode-opt {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; cursor: pointer;
-  padding: 18px; border-radius: 16px; border: 1px solid rgba(173, 192, 212, .16); background: #11223a; color: inherit;
-  font-family: inherit; transition: border-color .15s, background-color .15s;
+
+/*  An eyebrow carries the context so the title does not have to be
+    38px to feel important. Hierarchy from weight and tracking, which
+    is the whole reason for moving off a single-weight display face. */
+.mode-eyebrow {
+  display: block; margin: 0 0 10px;
+  font: 700 11px/1 var(--font-ui);
+  letter-spacing: .16em; text-transform: uppercase;
+  color: #f2894a;
 }
-.mode-opt:hover { border-color: #f26b21; background: #142944; }
-.mode-opt:focus-visible { outline: 2px solid #ff8a45; outline-offset: 2px; }
-.mode-ic { width: 40px; height: 40px; color: #ff8a45; margin-bottom: 6px; }
-.mode-opt b { font: 400 26px/1 'Bebas Neue', sans-serif; letter-spacing: .02em; color: #fff; }
-.mode-opt span { font-size: 14px; color: #b3c4d6; line-height: 1.45; }
-.mode-opt i { font-style: normal; font-size: 12px; font-weight: 600; color: #8399b1; margin-top: auto; padding-top: 8px; }
-.mode-cancel { display: block; width: 100%; margin-top: 10px; padding: 12px; background: none; border: 0; cursor: pointer; color: #8399b1; font: 600 14px 'Inter', sans-serif; }
-.mode-cancel:hover { color: #e8eff8; }
+.mode-card h3 {
+  margin: 0 0 8px;
+  font: 600 32px/1.02 var(--font-display);
+  text-transform: uppercase; letter-spacing: .01em;
+  color: #fff;
+}
+.mode-card > p {
+  margin: 0 0 22px; max-width: 42ch;
+  color: #9fb3c8; font-size: 14.5px; line-height: 1.5;
+}
+
+.mode-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mode-opt {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 7px;
+  text-align: left; cursor: pointer; position: relative;
+  padding: 18px 16px 16px; border-radius: 14px;
+  border: 1px solid rgba(173, 192, 212, .14);
+  background: rgba(255, 255, 255, .035);
+  color: inherit; font-family: inherit;
+  transition: border-color .16s, background-color .16s, transform .16s;
+}
+/*  Hover used to paint the border orange, which is the same signal a
+    SELECTED card would give — and because the dialog auto-focused the
+    first option, "Tournament" looked already chosen every time the
+    modal opened. Hover now lifts and brightens; orange is reserved
+    for actual selection. */
+.mode-opt:hover {
+  border-color: rgba(173, 192, 212, .30);
+  background: rgba(255, 255, 255, .065);
+  transform: translateY(-1px);
+}
+.mode-opt:focus-visible {
+  outline: 2px solid #ff8a45; outline-offset: 2px;
+  border-color: rgba(173, 192, 212, .30);
+}
+.mode-opt:active { transform: translateY(0); }
+
+.mode-ic { width: 26px; height: 26px; color: #f2894a; margin-bottom: 4px; stroke-width: 2; }
+.mode-opt b {
+  font: 600 19px/1.08 var(--font-display);
+  text-transform: uppercase; letter-spacing: .015em; color: #fff;
+}
+.mode-opt span { font-size: 13px; color: #9fb3c8; line-height: 1.45; }
+.mode-opt i {
+  font-style: normal; margin-top: auto; padding-top: 10px;
+  font: 600 10.5px var(--font-ui); letter-spacing: .07em; text-transform: uppercase;
+  color: #6f8299;
+}
+
+.mode-cancel {
+  display: block; width: 100%; margin-top: 16px; padding: 12px; min-height: 44px;
+  background: none; border: 0; border-radius: 10px; cursor: pointer;
+  color: #7e93aa; font: 600 13.5px var(--font-ui);
+  transition: color .15s, background-color .15s;
+}
+.mode-cancel:hover { color: #e8eff8; background: rgba(255, 255, 255, .05); }
+.mode-cancel:focus-visible { outline: 2px solid #ff8a45; outline-offset: 2px; }
+
+@media (max-width: 420px) {
+  .mode-card { padding: 22px 18px; border-radius: 18px; }
+  .mode-card h3 { font-size: 27px; }
+}
 
 /* ── Join-by-code, inside the Start a league dialog ──────────
    The only entry point for someone who is in no league yet, so it
    has to be visible without scrolling and usable one-handed. */
+/*  A solid orange Join button made the SECONDARY action the loudest
+    thing on the screen — brighter than either format card, which is
+    what the modal is actually for. It is an outline button now:
+    clearly available, visually subordinate. */
 .mode-join {
-  margin-top: 18px; padding-top: 16px;
-  border-top: 1px solid rgba(173, 192, 212, .14);
+  margin-top: 20px; padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, .07);
 }
 .mode-join-label {
-  display: block; margin-bottom: 8px;
-  font-size: 13px; font-weight: 600; color: #b3c4d6;
+  display: block; margin-bottom: 9px;
+  font: 600 11px var(--font-ui);
+  letter-spacing: .13em; text-transform: uppercase;
+  color: #7e93aa;
 }
 .mode-join-row { display: flex; gap: 8px; align-items: stretch; }
 .mode-join-input {
   flex: 1 1 auto; min-width: 0;            /* or the button pushes out of the card */
-  padding: 0 14px; height: 48px;
-  border-radius: 12px;
-  border: 1px solid rgba(173, 192, 212, .2);
-  background: #0a1626; color: #e8eff8;
-  /* 16px floor: anything smaller makes iOS Safari zoom the page on focus */
-  font: 700 16px/1 'Inter', system-ui, sans-serif;
-  letter-spacing: .18em; text-transform: uppercase;
+  padding: 0 14px; height: 46px;
+  border-radius: 11px;
+  border: 1px solid rgba(173, 192, 212, .18);
+  background: rgba(0, 0, 0, .28); color: #e8eff8;
+  /* 16px floor: anything smaller makes iOS Safari zoom the page on focus.
+     Tabular figures so a typed code does not reflow as it is entered. */
+  font: 600 16px/1 var(--font-mono);
+  letter-spacing: .22em; text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  transition: border-color .15s, box-shadow .15s;
 }
-.mode-join-input::placeholder { color: #5c7390; letter-spacing: .18em; font-weight: 600; }
+.mode-join-input::placeholder { color: #4f6480; letter-spacing: .22em; }
 .mode-join-input:focus {
-  outline: none; border-color: #f26b21;
-  box-shadow: 0 0 0 3px rgba(242, 107, 33, .18);
+  outline: none; border-color: rgba(242, 137, 74, .7);
+  box-shadow: 0 0 0 3px rgba(242, 107, 33, .14);
 }
 .mode-join-btn {
-  flex: 0 0 auto; min-width: 92px; height: 48px; padding: 0 18px;
-  border: 0; border-radius: 12px; cursor: pointer;
-  background: #f26b21; color: #fff;
-  font: 700 15px 'Inter', system-ui, sans-serif;
-  transition: background-color .15s, opacity .15s;
+  flex: 0 0 auto; min-width: 86px; height: 46px; padding: 0 18px;
+  border: 1px solid rgba(242, 137, 74, .5); border-radius: 11px; cursor: pointer;
+  background: rgba(242, 107, 33, .1); color: #f2894a;
+  font: 700 13.5px var(--font-ui); letter-spacing: .02em;
+  transition: background-color .15s, border-color .15s, color .15s, opacity .15s;
 }
-.mode-join-btn:hover:not(:disabled) { background: #ff8a45; }
+.mode-join-btn:hover:not(:disabled) {
+  background: #f26b21; border-color: #f26b21; color: #fff;
+}
 .mode-join-btn:focus-visible { outline: 2px solid #ff8a45; outline-offset: 2px; }
-.mode-join-btn:disabled { opacity: .55; cursor: default; }
+.mode-join-btn:disabled { opacity: .5; cursor: default; }
 .mode-join-msg {
-  margin: 8px 0 0; min-height: 17px;
-  font-size: 13px; line-height: 1.35; color: #8399b1;
+  /*  Reserves its line so the dialog does not jump when a message
+      appears — the card used to grow by 17px mid-interaction. */
+  margin: 9px 0 0; min-height: 18px;
+  font-size: 12.5px; line-height: 1.4; color: #7e93aa;
 }
 .mode-join-msg.is-err { color: #ff8a7a; }
 
 @media (max-width: 520px) {
+  /*  Stacked, with the icon in its own column beside the text. The
+      column was 40px, sized for the old 40px icon; the icon is 26px
+      now, so it left a 14px dead gap down the left of every card. */
   .mode-opts { grid-template-columns: 1fr; }
-  .mode-opt { display: grid; grid-template-columns: 40px 1fr; column-gap: 14px; row-gap: 2px; }
-  .mode-ic { grid-row: span 3; margin: 0; }
+  .mode-opt { display: grid; grid-template-columns: 26px 1fr; column-gap: 12px; row-gap: 3px; padding: 15px 14px; }
+  .mode-ic { grid-row: span 3; margin: 0; align-self: start; }
   .mode-opt i { padding-top: 4px; }
   .mode-join-btn { min-width: 76px; padding: 0 14px; }
 }

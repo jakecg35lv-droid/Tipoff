@@ -4186,15 +4186,20 @@
     bd.className = 'mode-backdrop';
     bd.innerHTML =
       '<div class="mode-card" role="dialog" aria-modal="true" aria-labelledby="modeTitle">' +
-        '<h3 id="modeTitle">Start a league</h3>' +
-        '<p>Choose the format. Everyone who joins with your code plays the same one.</p>' +
+        '<span class="mode-eyebrow">New league</span>' +
+        '<h3 id="modeTitle">Choose your format</h3>' +
+        //  The old title said "Start a league" and the body then said
+        //  "Choose the format" — the heading named the screen, the
+        //  paragraph gave the instruction. Put the instruction in the
+        //  heading and let the eyebrow name the screen.
+        '<p>Everyone who joins with your code plays the same format.</p>' +
         '<div class="mode-opts">' +
           '<button class="mode-opt" data-mode="tournament">' +
             '<svg class="mode-ic" viewBox="0 0 48 48" aria-hidden="true"><path d="M6 10h10v8h8M6 26h10v-8M6 30h10v8h8M6 46h10v-8M24 18v20h8v-10h10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/></svg>' +
-            '<b>Tournament</b><span>One draft, then players score until their team is knocked out.</span><i>March and in-season events</i></button>' +
+            '<b>Tournament</b><span>One draft. Your players score until their team is knocked out.</span><i>In-season events</i></button>' +
           '<button class="mode-opt" data-mode="season">' +
             '<svg class="mode-ic" viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="9" width="36" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M6 18h36M15 5v8M33 5v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><rect x="13" y="25" width="6" height="6" rx="1.5" fill="currentColor"/><rect x="29" y="25" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>' +
-            '<b>Regular season</b><span>Draft 8 to 12 players and face a new opponent every week with lock-in scoring.</span><i>November through March</i></button>' +
+            '<b>Regular season</b><span>Draft a roster, then face a new opponent every week.</span><i>November to March</i></button>' +
         '</div>' +
         //  Joining had no reachable entry point for the one person who
         //  needs it: the season join box lived in season Settings, which
@@ -4202,7 +4207,7 @@
         //  Someone handed a code had nowhere to type it. One box here
         //  serves both modes, because codes are unique across them.
         '<div class="mode-join">' +
-          '<label class="mode-join-label" for="modeJoinCode">Got a code from a friend?</label>' +
+          '<label class="mode-join-label" for="modeJoinCode">Have an invite code</label>' +
           '<div class="mode-join-row">' +
             '<input type="text" id="modeJoinCode" class="mode-join-input" placeholder="ABC123" maxlength="6" ' +
               'autocapitalize="characters" autocomplete="off" spellcheck="false" inputmode="text" />' +
@@ -4287,8 +4292,12 @@
       if (!b && e.target !== bd) return;
       finish(b ? b.getAttribute('data-mode') : 'cancel');
     });
-    var first = bd.querySelector('.mode-opt');
-    if (first) first.focus();
+    //  Focusing the first option made it look pre-selected, and the
+    //  hover styling reinforced it. Focus the dialog itself instead:
+    //  keyboard users still land inside and can Tab to either card,
+    //  and nothing appears chosen before a choice is made.
+    var card = bd.querySelector('.mode-card');
+    if (card) { card.setAttribute('tabindex', '-1'); card.focus({ preventScroll: true }); }
   }
   // ── Join a season league ────────────────────────────────
   //  One code box serves both modes: codes are unique, so the season
