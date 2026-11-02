@@ -1285,6 +1285,16 @@ function rehydratePlayerPool(savedVersion) {
 function _leagueCardHTML(l) {
   const displayCode = l.leagueCode || l.leagueId || '--';
   const lookupId = l.leagueId || l.leagueCode || '--';
+  //  A card built from the account index has no manager list or draft
+  //  progress yet — claiming "0 managers · 0% drafted" would be a
+  //  statement, and a false one. Say what it is instead.
+  if (l._remoteOnly) {
+    return '<div class="saved-league-card" data-code="' + esc(l.leagueCode || '') + '">' +
+      '<div class="slc-left"><h4>' + esc(l.leagueName || 'League') + '</h4>' +
+      '<p>Code: ' + esc(l.leagueCode || '--') + '</p>' +
+      '<span class="slc-tournament slc-tournament--none">Not on this device yet</span></div>' +
+      '<div class="slc-right"><div><button class="enter-btn">Open</button></div></div></div>';
+  }
   const tournLine = l.tournamentName
     ? '<span class="slc-tournament">' + esc(l.tournamentName) + '</span>'
     : '<span class="slc-tournament slc-tournament--none">No tournament set</span>';
@@ -1423,9 +1433,44 @@ async function reconcileSavedLeagues() {
   }));
   const kept = checked.filter(Boolean);
 
-  if (kept.length !== local.length) {
-    try { localStorage.setItem('mmfantasy-leagues', JSON.stringify(kept)); } catch (e) { }
-    console.log('[Leagues] pruned ' + (local.length - kept.length) + ' league(s) deleted on another device');
+  //  ── Show leagues this ACCOUNT has that this DEVICE does not ──
+  //  Until now this function only ever pruned: it filtered the local
+  //  cache and never added anything. So a league joined on your phone
+  //  was invisible on your laptop for ever, even though the account
+  //  index named it on both. "Your Leagues" was really "leagues this
+  //  browser happens to remember".
+  //
+  //  Account entries hold only {code, name, kind}, not the manager
+  //  list or draft progress, so these render as sparse cards. That is
+  //  fine: tapping one calls _loadAndEnterLeague(code), which fetches
+  //  the full league from Firestore by code — the same path a fresh
+  //  join uses.
+  const haveLocally = {};
+  kept.forEach(l => { if (l && l.leagueCode) haveLocally[String(l.leagueCode).toUpperCase()] = true; });
+
+  account.forEach(l => {
+    if (!l || !l.code) return;
+    const code = String(l.code).toUpperCase();
+    if (haveLocally[code]) return;
+    //  Season leagues live in their own store and render as the season
+    //  card above; sending one down the tournament path would look up
+    //  leagues/{code} and find nothing.
+    if (l.kind === 'season') return;
+    kept.push({
+      leagueCode: code,
+      leagueName: l.name || 'League',
+      commissioner: '',
+      managers: [],
+      draftPct: 0,
+      lastActive: l.lastOpened || l.joinedAt || 0,
+      _remoteOnly: true
+    });
+  });
+
+  const localKept = kept.filter(l => !l._remoteOnly);
+  if (localKept.length !== local.length) {
+    try { localStorage.setItem('mmfantasy-leagues', JSON.stringify(localKept)); } catch (e) { }
+    console.log('[Leagues] pruned ' + (local.length - localKept.length) + ' league(s) deleted on another device');
   }
 
   if (!kept.length) {
