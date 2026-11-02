@@ -302,6 +302,17 @@
     </div>
     <!-- Footer actions -->
     <div class="splash-footer">
+      <!-- Which account is this? Not a cosmetic question: with two
+           accounts on one machine, "League not found" and "you're
+           already in this league" both look like app bugs until you
+           know which identity you are holding. -->
+      <div id="splashAccount" class="splash-account" hidden>
+        <span class="sa-avatar" id="splashAccountAvatar" aria-hidden="true"></span>
+        <span class="sa-text">
+          <span class="sa-label">Signed in as</span>
+          <span class="sa-email" id="splashAccountEmail"></span>
+        </span>
+      </div>
       <button id="signOutBtn" class="btn-sign-out">Sign Out</button>
     </div>
 

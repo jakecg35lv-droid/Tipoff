@@ -4759,19 +4759,32 @@
     var code = s && s.league && s.league.code;
     if (!code) return;
 
-    db.collection('users').doc(uid).get().then(function (snap) {
-      var data = (snap.exists && snap.data()) || {};
-      if (!Array.isArray(data.leagues)) return;   // nothing recorded; say nothing
-      var still = data.leagues.some(function (l) {
-        return l && String(l.code).toUpperCase() === String(code).toUpperCase();
-      });
-      if (still) return;
-      //  Gone from the account. Drop the stale local copy and repaint.
+    //  Ask the LEAGUE, not the account index.
+    //
+    //  The first version of this asked users/{uid}.leagues and deleted
+    //  anything absent from it. That index is only written after a
+    //  successful server write — so a league that failed to publish was
+    //  missing from it too, and this check cheerfully destroyed the
+    //  only copy that existed. It did exactly that to a real league.
+    //
+    //  Deletion now requires POSITIVE evidence of removal: the league
+    //  document exists AND this account holds no seat in it. A missing
+    //  document means unpublished, not deleted — keep it, and let
+    //  ensureLeagueOnServer() put it back on the server.
+    seasonDoc(code).get().then(function (doc) {
+      if (!doc.exists) {
+        console.log('[Season] ' + code + ' is not on the server yet; keeping the local copy to republish');
+        return;
+      }
+      var st = (doc.data() || {}).state || {};
+      var mine = (st.teams || []).some(function (t) { return t && t.uid === uid; });
+      if (mine) return;
+
       unsubscribeSeason();
       if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
       state = null;
       try { localStorage.removeItem(storeKey()); } catch (e) { }
-      console.log('[Season] local league ' + code + ' was removed from this account elsewhere; cleared');
+      console.log('[Season] no seat held in ' + code + ' any more; cleared local copy');
       try { renderSplashCard(); } catch (e) { }
     }).catch(function (e) {
       // Offline or denied. Keep what we have.

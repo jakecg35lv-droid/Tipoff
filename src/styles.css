@@ -1179,6 +1179,15 @@ select:focus {
 
 .splash-footer {
   opacity: 0;
+  /*  Had no layout at all, so the new account chip and the Sign Out
+      button stacked as raw blocks with no alignment between them. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 0 16px;
+  box-sizing: border-box;
 }
 
 /* ── Entrance animations - only fire once .reveal is added ── */
@@ -12363,4 +12372,65 @@ select:focus {
     padding: 6px 10px;
     background: rgba(173, 192, 212, .1);
   }
+}
+
+/* ── Splash: which account am I? ─────────────────────────────
+   Sits beside Sign Out. Deliberately quiet — it is reference
+   information, not an action — but always present, because with two
+   accounts on one device nearly every confusing symptom traces back
+   to not knowing which one is live. */
+.splash-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  min-width: 0;
+  margin-bottom: 14px;
+  padding: 8px 14px 8px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+}
+.splash-account[hidden] { display: none; }
+
+.sa-avatar {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, var(--orange, #f26b21), #c4471a);
+  color: #fff;
+  font: 700 13px/1 var(--font-ui);
+}
+
+.sa-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;            /* lets the email ellipsis instead of pushing out */
+  line-height: 1.25;
+}
+.sa-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sa-email {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 236px;
+}
+
+@media (max-width: 480px) {
+  /* Long addresses are the norm, so give the row the full width and
+     let the text truncate rather than squeezing the avatar. */
+  .splash-account { width: 100%; justify-content: flex-start; }
+  .sa-email { max-width: calc(100vw - 132px); font-size: 12.5px; }
 }

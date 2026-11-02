@@ -715,6 +715,31 @@ function showSignup() {
   document.getElementById('mainApp').style.display = 'none';
 }
 
+//  Shows which account the splash belongs to. Prefers the Firebase
+//  user's real email over the stored session, because the session is a
+//  local cache and the Firebase user is the identity the database will
+//  actually act as — and when the two disagree, that disagreement is
+//  the very thing worth seeing.
+function renderSplashAccount() {
+  const wrap = document.getElementById('splashAccount');
+  if (!wrap) return;
+  const session = getSession();
+  const email = (window._fbUser && window._fbUser.email) || (session && session.email) || '';
+  const name = (session && session.name) || (email ? email.split('@')[0] : '');
+
+  if (!email && !name) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+
+  const emailEl = document.getElementById('splashAccountEmail');
+  if (emailEl) {
+    emailEl.textContent = email || name;
+    // Full address on hover/long-press, since the middle gets truncated.
+    emailEl.title = email || name;
+  }
+  const av = document.getElementById('splashAccountAvatar');
+  if (av) av.textContent = (name || email).trim().charAt(0).toUpperCase();
+}
+
 function showSplash(fromInit) {
   document.getElementById('landingScreen').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'none';
@@ -729,6 +754,7 @@ function showSplash(fromInit) {
   splash.style.opacity = '0';
   splash.style.transition = '';
   splash.style.display = 'flex';
+  renderSplashAccount();
 
   renderSavedLeagues();
   checkInviteURL();
@@ -1377,12 +1403,25 @@ async function reconcileSavedLeagues() {
   let local = [];
   try { local = JSON.parse(localStorage.getItem('mmfantasy-leagues') || '[]'); } catch (e) { }
 
-  const kept = local.filter(l => {
-    if (!l || !l.leagueCode) return false;
-    // The league currently open stays regardless; we are in it.
-    if (state && state.leagueCode && l.leagueCode === state.leagueCode) return true;
-    return !!live[String(l.leagueCode).toUpperCase()];
-  });
+  //  Absence from the account index is NOT evidence a league is gone:
+  //  the index is only written on a successful server write, so a
+  //  league that failed to save is missing from it as well. Deleting
+  //  on that basis destroyed a real league. A league is only dropped
+  //  when its own document is confirmed absent from the server.
+  const checked = await Promise.all(local.map(async l => {
+    if (!l || !l.leagueCode) return null;
+    const code = String(l.leagueCode).toUpperCase();
+    if (state && state.leagueCode && l.leagueCode === state.leagueCode) return l;  // we're in it
+    if (live[code]) return l;                                                       // account knows it
+    if (!window._db) return l;                                                      // offline: keep
+    try {
+      const doc = await window._db.collection('leagues').doc(code).get();
+      return doc.exists ? l : null;        // absent server-side = genuinely deleted
+    } catch (e) {
+      return l;                            // read failed: keep, never prune on error
+    }
+  }));
+  const kept = checked.filter(Boolean);
 
   if (kept.length !== local.length) {
     try { localStorage.setItem('mmfantasy-leagues', JSON.stringify(kept)); } catch (e) { }
