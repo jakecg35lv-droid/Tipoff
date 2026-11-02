@@ -162,9 +162,54 @@
 
   // The blob that travels. Games are stripped; everything else is
   // already plain JSON by design.
+  // ── Firestore cannot store an array inside an array ───────
+  //  state.schedule is array(weeks) → array(matches) → [home, away].
+  //  That is three levels deep, and Firestore rejects the whole
+  //  document with "invalid-argument: Nested arrays are not
+  //  supported". Which means EVERY season league write has always
+  //  failed — create, join, every pick — and because pushState only
+  //  surfaced permission-denied, it failed in total silence. The
+  //  league looked healthy locally and did not exist on the server,
+  //  so every code handed to a friend came back "League not found".
+  //
+  //  Encode to a map keyed by week whose values are arrays of plain
+  //  objects: { "0": [{h:'t0',a:'t1'}, ...], "1": [...] }. One array
+  //  level, objects inside, which Firestore accepts.
+  function encodeSchedule(sched) {
+    if (!Array.isArray(sched)) return sched || null;
+    var out = {};
+    sched.forEach(function (week, i) {
+      out[String(i)] = (week || []).map(function (m) {
+        return { h: (m && m[0]) || null, a: (m && m[1]) || null };
+      });
+    });
+    return out;
+  }
+
+  function decodeSchedule(enc) {
+    if (Array.isArray(enc)) return enc;          // already an array (same-device state)
+    if (!enc || typeof enc !== 'object') return [];
+    //  Numeric keys sort as strings, so "10" lands before "2". Sort
+    //  numerically or week 10 becomes week 3.
+    return Object.keys(enc)
+      .sort(function (a, b) { return (+a) - (+b); })
+      .map(function (k) {
+        return (enc[k] || []).map(function (m) { return [m.h, m.a]; });
+      });
+  }
+
+  //  Applied to every state blob arriving from Firestore, wherever it
+  //  arrives: the snapshot listener, a join, and a server-presence
+  //  repair all read the same shape.
+  function decodeState(st) {
+    if (st && st.schedule) st.schedule = decodeSchedule(st.schedule);
+    return st;
+  }
+
   function syncPayload() {
     var copy = JSON.parse(JSON.stringify(state || {}));
     delete copy.games;
+    copy.schedule = encodeSchedule(copy.schedule);
     return copy;
   }
 
@@ -188,11 +233,16 @@
         //  This was silent, which is how a league can look created on
         //  screen while never reaching the database — and then nobody
         //  can join it, with no clue why. Say so once, loudly.
-        if (code === 'permission-denied' && !SYNC.warnedDenied) {
+        //  Was gated on permission-denied alone. An invalid-argument
+        //  rejection — the one that actually broke this — logged to
+        //  the console and told the user nothing. Any failure means
+        //  the league is not saving, so any failure gets said out loud.
+        if (!SYNC.warnedDenied) {
           SYNC.warnedDenied = true;
           try {
-            notify('This league is not being saved to the server. ' +
-                   'Nobody else can join it yet.', 'error');
+            notify('This league is not being saved to the server' +
+                   (code ? ' (' + code + ')' : '') +
+                   '. Nobody else can join it yet.', 'error');
           } catch (_) { }
         }
       });
@@ -220,7 +270,7 @@
       SYNC.applying = true;
       try {
         var games = (state && state.games) || {};   // keep locally cached games
-        state = d.state;
+        state = decodeState(d.state);
         state.games = games;
         markMine();
         try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
@@ -4573,7 +4623,7 @@
     return ref.get().then(function (doc) {
       if (!doc.exists) throw new Error('No league with that code.');
       var d = doc.data() || {};
-      var st = d.state;
+      var st = decodeState(d.state);
       if (!st || !st.teams) throw new Error('That league is not ready yet.');
 
       var mine = st.teams.filter(function (t) { return t && t.uid === uid; })[0];
