@@ -98,7 +98,9 @@
   ];
 
   var state = null;
-  var ui = { page: 'home', wiz: null, sheet: false, swapSlot: null, filterPos: '', filterConf: '', search: '', stamp: null, setup: null, toastMsg: '', toastType: '', sel: {}, mview: null };
+  var ui = { page: 'home', wiz: null, sheet: false, swapSlot: null, filterPos: '', filterConf: '', search: '', stamp: null, setup: null, toastMsg: '', toastType: '', sel: {}, mview: null,
+    // Player pool browser: rows shown, drafted/undrafted filter, sort.
+    poolShow: 100, poolAvail: '', poolSort: 'proj' };
   var root = null;
 
   // ── Utilities ───────────────────────────────────────────
@@ -1808,8 +1810,12 @@
   function navItems() {
     var draft = state && state.phase === 'draft';
     var items = [['home', 'Home', appIcon('home')]];
-    if (draft) items.push(['draft', 'Draft', appIcon('players')]);
-    else {
+    if (draft) {
+      items.push(['draft', 'Draft', appIcon('players')]);
+      //  Was omitted entirely in the draft phase, which is precisely
+      //  when people most want to study the pool.
+      items.push(['players', 'Players', ICON.players]);
+    } else {
       items.push(['matchup', 'Matchups', ICON.matchup]);
       items.push(['lineup', 'Lineup', ICON.lineup]);
       items.push(['players', 'Players', ICON.players]);
@@ -2656,7 +2662,127 @@
     var verb = t.type === 'waiver' ? ' claimed ' : ' added ';
     return who + verb + P(t.add).name + (t.type === 'waiver' && t.bid != null && faCfg().type === 'faab' ? ' ($' + t.bid + ')' : '') + (t.drop ? ', dropped ' + P(t.drop).name : '');
   }
+  // ── Player pool browser ───────────────────────────────────
+  //  The Players page was a waivers desk: FAAB tiles, "waivers clear
+  //  Tuesday", Add and Claim buttons. All correct DURING the season
+  //  and all meaningless before a ball has been drafted — and
+  //  navItems() hid the page entirely in the draft phase anyway, so
+  //  there was no way at all to see who is in your pool until you
+  //  were on the clock, where viewDraft() caps the list at 80.
+  //
+  //  This is the missing half: the whole pool your league's format
+  //  actually contains, browsable any time, with drafted players
+  //  shown rather than hidden so you can see where the run on guards
+  //  came from.
+  function formatLabel() {
+    var L = state.league;
+    if (L.format !== 'conference') return 'Full season pool';
+    var c = L.conferences;
+    if (!c || !c.length || c.length === 5) return 'All 5 power conferences';
+    if (c.length === 1) return c[0];
+    return c.join(', ');
+  }
+
+  function viewPool() {
+    var all = pool();
+    var taken = rosteredBy();
+    var u = userTeam();
+
+    // Conference/school/position shape of the pool, before filters.
+    var schools = {}, confs = {};
+    all.forEach(function (p) { schools[p.college] = 1; confs[p.conf] = 1; });
+    var nAvail = all.filter(function (p) { return !taken[p.id]; }).length;
+
+    var head = '<div class="page-header"><h2>Player Pool</h2>' +
+      '<span class="muted-badge">' + esc(formatLabel()) + '</span></div>';
+
+    var tiles = '<div class="home-stats-grid ss-fa-tiles">' +
+      statTile('blue', all.length, 'In Pool', Object.keys(schools).length + ' schools · ' + Object.keys(confs).length + ' conference' + (Object.keys(confs).length === 1 ? '' : 's')) +
+      statTile('green', nAvail, 'Undrafted', (all.length - nAvail) + ' already taken') +
+      statTile('gold', u ? u.roster.length : 0, 'On Your Roster', 'of ' + state.league.rosterSize + ' spots') +
+      statTile('purple', state.league.numTeams * state.league.rosterSize, 'Will Be Drafted', Math.round((state.league.numTeams * state.league.rosterSize) / all.length * 100) + '% of the pool') +
+    '</div>';
+
+    var show = ui.poolShow || 100;
+    var list = all.filter(function (p) {
+      if (ui.poolAvail === 'avail' && taken[p.id]) return false;
+      if (ui.poolAvail === 'taken' && !taken[p.id]) return false;
+      if (ui.filterPos && p.pos !== ui.filterPos) return false;
+      if (ui.filterConf && p.conf !== ui.filterConf) return false;
+      if (ui.search && (p.name + ' ' + p.college).toLowerCase().indexOf(ui.search.toLowerCase()) < 0) return false;
+      return true;
+    });
+
+    var sortKey = ui.poolSort || 'proj';
+    list.sort(function (a, b) {
+      if (sortKey === 'name') return a.name.localeCompare(b.name);
+      if (sortKey === 'school') return a.college.localeCompare(b.college) || b.proj - a.proj;
+      if (sortKey === 'pts') return (b.avg.points || 0) - (a.avg.points || 0);
+      if (sortKey === 'reb') return (b.avg.rebounds || 0) - (a.avg.rebounds || 0);
+      if (sortKey === 'ast') return (b.avg.assists || 0) - (a.avg.assists || 0);
+      return b.proj - a.proj;
+    });
+
+    var total = list.length;
+    var rows = list.slice(0, show).map(function (p, k) {
+      var owner = taken[p.id] ? team(taken[p.id]) : null;
+      var isMine = owner && u && owner.id === u.id;
+      return '<div class="pool-row ss-pool-row' + (owner ? ' is-taken' : '') + '">' +
+        '<span class="pool-rank">' + (k + 1) + '</span>' +
+        '<div class="pool-player-cell">' + logoHTML(p.college, 26) +
+          '<div class="pool-player-info" data-act="pcard" data-id="' + p.id + '">' +
+            '<div class="pool-player-name">' + esc(p.name) + injTag(p.id) + (p.fresh ? '<span class="q-chip ss-fr-chip">FR</span>' : '') + '</div>' +
+            '<div class="pool-player-college">' + esc(p.college) + (p.conf && p.conf !== 'Other' ? ' · ' + esc(p.conf) : '') + '</div>' +
+          '</div></div>' +
+        '<span class="pool-seed-cell"><span class="pos-badge">' + p.pos + '</span></span>' +
+        '<span class="pool-stat">' + f1(p.avg.points) + '</span>' +
+        '<span class="pool-stat">' + f1(p.avg.rebounds) + '</span>' +
+        '<span class="pool-stat">' + f1(p.avg.assists) + '</span>' +
+        '<span class="pool-fpts">' + f1(p.proj) + '</span>' +
+        '<span class="pool-action">' + (owner
+          ? '<span class="ss-pool-owner' + (isMine ? ' mine' : '') + '">' + esc(isMine ? 'You' : owner.name) + '</span>'
+          : '<span class="ss-pool-free">Undrafted</span>') + '</span>' +
+      '</div>';
+    }).join('') || '<div class="ss-pool-empty">No players match these filters.</div>';
+
+    var more = total > show
+      ? '<button class="g-btn ghost ss-pool-more" data-act="poolmore">Show 100 more (' + (total - show) + ' left)</button>'
+      : (total > 100 ? '<p class="ss-hint ss-pool-all">All ' + total + ' shown.</p>' : '');
+
+    var toolbar = '<div class="draft-toolbar">' +
+        '<input type="text" id="ssSearch" placeholder="Search players or schools…" class="pool-search" value="' + esc(ui.search) + '" />' +
+        '<select id="ssPoolAvail" class="pool-select">' + [['', 'Everyone'], ['avail', 'Undrafted only'], ['taken', 'Drafted only']].map(function (o) {
+          return '<option value="' + o[0] + '"' + ((ui.poolAvail || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('') + '</select>' +
+        confSelect() +
+        '<select id="ssPos" class="pool-select">' + [['', 'All Positions'], ['G', 'Guards'], ['F', 'Forwards'], ['C', 'Centers']].map(function (o) {
+          return '<option value="' + o[0] + '"' + (ui.filterPos === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('') + '</select>' +
+        '<select id="ssPoolSort" class="pool-select">' + [['proj', 'Sort: Projection'], ['pts', 'Sort: Points'], ['reb', 'Sort: Rebounds'], ['ast', 'Sort: Assists'], ['name', 'Sort: Name'], ['school', 'Sort: School']].map(function (o) {
+          return '<option value="' + o[0] + '"' + (sortKey === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('') + '</select>' +
+      '</div>';
+
+    var count = '<p class="ss-pool-count">' + total + ' of ' + all.length + ' player' + (all.length === 1 ? '' : 's') +
+      (ui.filterConf || ui.filterPos || ui.search || ui.poolAvail ? ' match your filters' : ' in this league’s pool') + '.</p>';
+
+    return head + tiles + toolbar + count +
+      '<div class="pool-table-wrap"><div class="pool-header ss-pool-row">' +
+        '<span class="ph-rank">#</span><span class="ph-player">Player</span><span class="ph-seed">Pos</span>' +
+        '<span class="ph-stat">PTS</span><span class="ph-stat">REB</span><span class="ph-stat">AST</span>' +
+        //  Its own class, not :last-of-type. That pseudo-class counts
+        //  ELEMENTS, and the last span here is .ph-action, so a
+        //  .ph-stat:last-of-type rule matches nothing at all.
+        '<span class="ph-stat ph-proj">Proj</span><span class="ph-action">Status</span></div>' + rows + '</div>' + more +
+      '<p class="ss-hint">Averages are last season (2025-26); a player with no prior line shows 0.0. Proj is fantasy points per game under this league’s scoring. Tap a name for the full card.</p>';
+  }
+
   function viewPlayers() {
+    //  Before the draft there are no free agents, no waiver run and no
+    //  FAAB to spend, so the waivers desk below would be describing a
+    //  season that has not started. Show the pool instead.
+    if (state.phase === 'draft') return viewPool();
+
     var f = faCfg(), u = userTeam(), taken = rosteredBy();
     var tab = ui.ptab || 'fa';
     var myClaims = f.claims.filter(function (c) { return c.teamId === u.id; });
@@ -2674,10 +2800,14 @@
       return '<span class="' + (m.won ? 'won' : 'lost') + '">' + (m.won ? 'Won ' : 'Lost ') + esc(P(m.add).name) + (m.bid != null && f.type === 'faab' ? ' ($' + m.bid + ')' : '') + '</span>';
     }).join('') + '<em>Last waiver run</em></div>' : '';
     var tabs = '<div class="draft-tabs-row"><div class="draft-inner-tabs">' +
-      [['fa', 'Available'], ['claims', 'Claims' + (myClaims.length ? ' (' + myClaims.length + ')' : '')], ['trades', 'Trades' + (tradeInbox() ? ' (' + tradeInbox() + ')' : '')], ['inj', 'Injuries'], ['tx', 'Transactions']].map(function (t) {
+      [['fa', 'Available'], ['pool', 'Full Pool'], ['claims', 'Claims' + (myClaims.length ? ' (' + myClaims.length + ')' : '')], ['trades', 'Trades' + (tradeInbox() ? ' (' + tradeInbox() + ')' : '')], ['inj', 'Injuries'], ['tx', 'Transactions']].map(function (t) {
         return '<button class="dit-btn' + (tab === t[0] ? ' active' : '') + '" data-act="ptab" data-v="' + t[0] + '">' + t[1] + '</button>';
       }).join('') + '</div></div>';
     var body;
+    //  "Available" is only what you can add right now. People also
+    //  want to see the whole pool mid-season — who owns whom, which
+    //  schools are picked clean — so the browser stays reachable.
+    if (tab === 'pool') return viewPool();
     if (tab === 'claims') body = viewClaims(myClaims);
     else if (tab === 'tx') body = viewTx();
     else if (tab === 'trades') body = viewTrades();
@@ -3771,7 +3901,10 @@
       case 'mview': ui.mview = +el.getAttribute('data-i'); break;
       case 'selgame': ui.sel[el.getAttribute('data-k')] = +el.getAttribute('data-g'); break;
       case 'swapto': swapInto(i, el.getAttribute('data-id')); ui.swapSlot = null; break;
-      case 'ptab': ui.ptab = el.getAttribute('data-v'); break;
+      case 'ptab': ui.ptab = el.getAttribute('data-v'); ui.poolShow = 100; break;
+      //  Incremental paging. A 1,027-row innerHTML is a visible hitch
+      //  on a phone, and nobody scrolls a thousand rows anyway.
+      case 'poolmore': ui.poolShow = (ui.poolShow || 100) + 100; break;
       case 'labtoggle': ui.lab = !ui.lab; break;
       case 'invite': ui.invite = true; ui.ivCopied = null; break;
       case 'ivclose':
@@ -3961,6 +4094,7 @@
     if (e.target.id === 'ssChatInput') { ui.chatDraft = e.target.value; return; }
     if (e.target.id === 'ssSearch') {
       ui.search = e.target.value;
+      ui.poolShow = 100;
       var pos = e.target.selectionStart;
       render();
       var el = document.getElementById('ssSearch');
@@ -3968,8 +4102,12 @@
     }
   }
   function onChange(e) {
-    if (e.target.id === 'ssPos') { ui.filterPos = e.target.value; render(); }
-    if (e.target.id === 'ssConf') { ui.filterConf = e.target.value; render(); }
+    //  Any filter change restarts paging; keeping a 500-row window
+    //  after narrowing to one conference shows a mostly empty list.
+    if (e.target.id === 'ssPos') { ui.filterPos = e.target.value; ui.poolShow = 100; render(); }
+    if (e.target.id === 'ssConf') { ui.filterConf = e.target.value; ui.poolShow = 100; render(); }
+    if (e.target.id === 'ssPoolAvail') { ui.poolAvail = e.target.value; ui.poolShow = 100; render(); }
+    if (e.target.id === 'ssPoolSort') { ui.poolSort = e.target.value; ui.poolShow = 100; render(); }
     if (e.target.id === 'ssFStatus') { ui.fstatus = e.target.value; render(); }
     if (e.target.id === 'ssTrTeam') { ui.tr = { to: e.target.value, give: ui.tr.give, get: [] }; render(); }
     if (e.target.id === 'ssFSort') { ui.fsort = e.target.value; render(); }

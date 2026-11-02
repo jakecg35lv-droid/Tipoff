@@ -1370,3 +1370,75 @@ button.ss-lab-chip[aria-expanded="true"] { box-shadow: 0 0 0 2px rgba(246, 197, 
     background: rgba(173, 192, 212, .1);
   }
 }
+
+/* ══ Player pool browser ═══════════════════════════════════
+   The shared .pool-row grid is 10 columns; this view has 8
+   (#, player, pos, PTS, REB, AST, Proj, Status), so it needs its
+   own template or every cell lands in the wrong column. */
+#seasonApp .pool-row.ss-pool-row,
+#seasonApp .pool-header.ss-pool-row {
+  grid-template-columns: 36px minmax(150px, 1fr) 52px 56px 56px 56px 66px 96px;
+  min-width: 620px;
+}
+
+/* Drafted players stay visible but recede: seeing WHO took a player
+   is the point, so hiding them would defeat the view. */
+#seasonApp .ss-pool-row.is-taken { opacity: .52; }
+#seasonApp .ss-pool-row.is-taken:hover { opacity: .78; }
+
+#seasonApp .ss-pool-owner,
+#seasonApp .ss-pool-free {
+  display: inline-block; max-width: 100%;
+  padding: 4px 9px; border-radius: 999px;
+  font: 700 11px 'Inter', system-ui, sans-serif;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#seasonApp .ss-pool-owner {
+  background: rgba(255, 255, 255, .09);
+  border: 1px solid rgba(255, 255, 255, .14);
+  color: var(--text-2, #b3c4d6);
+}
+#seasonApp .ss-pool-owner.mine {
+  background: rgba(246, 197, 78, .16);
+  border-color: rgba(246, 197, 78, .42);
+  color: var(--g-gold, #f6c54e);
+}
+#seasonApp .ss-pool-free {
+  background: rgba(46, 182, 125, .14);
+  border: 1px solid rgba(46, 182, 125, .34);
+  color: #4ecb96;
+}
+
+#seasonApp .ss-pool-count {
+  margin: 2px 0 10px;
+  font-size: 13px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+#seasonApp .ss-pool-empty {
+  padding: 28px 20px; text-align: center;
+  color: var(--muted); font-size: 14px;
+}
+#seasonApp .ss-pool-more {
+  display: block; width: 100%;
+  margin: 12px 0 0; min-height: 46px;
+}
+#seasonApp .ss-pool-all { text-align: center; margin-top: 10px; }
+
+@media (max-width: 768px) {
+  /* Drop the three raw averages; Proj and Status are what a phone
+     reader actually scans for. Tapping a name opens the full card. */
+  #seasonApp .pool-row.ss-pool-row,
+  #seasonApp .pool-header.ss-pool-row {
+    grid-template-columns: 28px minmax(0, 1fr) 60px 84px;
+    min-width: 0;
+  }
+  #seasonApp .ss-pool-row .pool-seed-cell,
+  #seasonApp .ss-pool-row .ph-seed { display: none; }
+  #seasonApp .ss-pool-row .pool-stat,
+  #seasonApp .ss-pool-row .ph-stat { display: none; }
+  /* Keep the Proj column on screen, targeted by its own class. */
+  #seasonApp .ss-pool-row .pool-fpts,
+  #seasonApp .ss-pool-row .ph-proj { display: block; }
+  #seasonApp .ss-pool-owner,
+  #seasonApp .ss-pool-free { font-size: 10px; padding: 3px 7px; }
+}
