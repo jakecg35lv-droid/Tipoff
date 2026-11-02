@@ -206,11 +206,22 @@
     return st;
   }
 
-  function syncPayload() {
-    var copy = JSON.parse(JSON.stringify(state || {}));
+  //  ONE function prepares a state blob for the wire. There used to be
+  //  two write paths — syncPayload() for normal pushes and a raw
+  //  `state: st` in joinSeasonLeague — and only the first encoded the
+  //  schedule. So creating a league worked and JOINING one threw
+  //  "Nested arrays are not supported", because the join wrote back the
+  //  decoded copy it had just read. Everything that writes goes through
+  //  here now; nothing passes a raw state object to Firestore.
+  function encodeState(st) {
+    var copy = JSON.parse(JSON.stringify(st || {}));
     delete copy.games;
     copy.schedule = encodeSchedule(copy.schedule);
     return copy;
+  }
+
+  function syncPayload() {
+    return encodeState(state);
   }
 
   function pushState() {
@@ -4636,7 +4647,7 @@
       }
 
       SYNC.rev = (typeof d.rev === 'number' ? d.rev : 0) + 1;
-      return ref.set({ rev: SYNC.rev, state: st, updatedAt: Date.now(), updatedBy: uid }, { merge: true })
+      return ref.set({ rev: SYNC.rev, state: encodeState(st), updatedAt: Date.now(), updatedBy: uid }, { merge: true })
         .then(function () {
           SYNC.applying = true;
           try {
