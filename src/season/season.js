@@ -4345,81 +4345,13 @@
             '<svg class="mode-ic" viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="9" width="36" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M6 18h36M15 5v8M33 5v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><rect x="13" y="25" width="6" height="6" rx="1.5" fill="currentColor"/><rect x="29" y="25" width="6" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>' +
             '<b>Regular season</b><span>Draft a roster, then face a new opponent every week.</span><i>November to March</i></button>' +
         '</div>' +
-        //  Joining had no reachable entry point for the one person who
-        //  needs it: the season join box lived in season Settings, which
-        //  you can only open once you are ALREADY in a season league.
-        //  Someone handed a code had nowhere to type it. One box here
-        //  serves both modes, because codes are unique across them.
-        '<div class="mode-join">' +
-          '<label class="mode-join-label" for="modeJoinCode">Have an invite code</label>' +
-          '<div class="mode-join-row">' +
-            '<input type="text" id="modeJoinCode" class="mode-join-input" placeholder="ABC123" maxlength="6" ' +
-              'autocapitalize="characters" autocomplete="off" spellcheck="false" inputmode="text" />' +
-            '<button type="button" class="mode-join-btn" data-mode="join">Join</button>' +
-          '</div>' +
-          '<p class="mode-join-msg" id="modeJoinMsg" role="status" aria-live="polite"></p>' +
-        '</div>' +
         '<button class="mode-cancel" data-mode="cancel">Cancel</button>' +
       '</div>';
     document.body.appendChild(bd);
     requestAnimationFrame(function () { bd.classList.add('in'); });
-    function onKey(ev) {
-      if (ev.key === 'Escape') { finish('cancel'); return; }
-      //  Phone keyboards show "Go", not a Join button they can see
-      //  while the keyboard is up. Enter has to work.
-      if (ev.key === 'Enter' && ev.target && ev.target.id === 'modeJoinCode') {
-        ev.preventDefault(); finish('join');
-      }
-    }
+    function onKey(ev) { if (ev.key === 'Escape') { finish('cancel'); } }
     document.addEventListener('keydown', onKey);
-    //  Resolve a code without closing the dialog, so a typo can be
-    //  corrected in place instead of starting the flow over.
-    function tryJoin() {
-      var inp = bd.querySelector('#modeJoinCode');
-      var msg = bd.querySelector('#modeJoinMsg');
-      var btn = bd.querySelector('.mode-join-btn');
-      var code = ((inp && inp.value) || '').trim().toUpperCase();
-      function say(text, kind) {
-        if (!msg) return;
-        msg.textContent = text || '';
-        msg.className = 'mode-join-msg' + (kind ? ' is-' + kind : '');
-      }
-      if (!/^[A-Z0-9]{6}$/.test(code)) { say('League codes are six letters and numbers.', 'err'); if (inp) inp.focus(); return; }
-      if (!myUid()) { say('Sign in first, then join with your code.', 'err'); return; }
-      if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
-      say('Looking up ' + code + '…', '');
-
-      function reset() { if (btn) { btn.disabled = false; btn.textContent = 'Join'; } }
-
-      lookupSeasonLeague(code).then(function (info) {
-        if (info && info.error) { reset(); say(joinErrorText(info.error), 'err'); return; }
-        if (info) {
-          // A season league. Hand off to the join sheet.
-          document.removeEventListener('keydown', onKey);
-          bd.remove();
-          showSeasonJoin(info, code);
-          return;
-        }
-        //  Not a season code. It may still be a tournament code, so
-        //  hand it to the tournament join modal pre-filled rather than
-        //  telling the user it does not exist.
-        document.removeEventListener('keydown', onKey);
-        bd.remove();
-        var tInput = document.getElementById('joinCodeInput');
-        var tBtn = document.getElementById('joinConfirmBtn');
-        var tModal = document.getElementById('joinModal');
-        if (!tInput || !tBtn) { notify('No league found with that code.', 'error'); return; }
-        if (tModal) tModal.style.display = 'flex';
-        tInput.value = code;
-        bypassJoin = true;
-        try { tBtn.click(); } finally { bypassJoin = false; }
-      }).catch(function () {
-        reset(); say('Could not reach the league database.', 'err');
-      });
-    }
-
     function finish(mode) {
-      if (mode === 'join') { tryJoin(); return; }
       document.removeEventListener('keydown', onKey);
       bd.remove();
       if (mode === 'tournament') {

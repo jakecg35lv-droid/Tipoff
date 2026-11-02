@@ -333,59 +333,6 @@ body.ss-open > *:not(#seasonApp):not(script):not(#toastContainer):not(.mode-back
 /* ── Join-by-code, inside the Start a league dialog ──────────
    The only entry point for someone who is in no league yet, so it
    has to be visible without scrolling and usable one-handed. */
-/*  A solid orange Join button made the SECONDARY action the loudest
-    thing on the screen — brighter than either format card, which is
-    what the modal is actually for. It is an outline button now:
-    clearly available, visually subordinate. */
-.mode-join {
-  margin-top: 20px; padding-top: 18px;
-  border-top: 1px solid rgba(255, 255, 255, .07);
-}
-.mode-join-label {
-  display: block; margin-bottom: 9px;
-  font: 600 11px var(--font-ui);
-  letter-spacing: .13em; text-transform: uppercase;
-  color: #7e93aa;
-}
-.mode-join-row { display: flex; gap: 8px; align-items: stretch; }
-.mode-join-input {
-  flex: 1 1 auto; min-width: 0;            /* or the button pushes out of the card */
-  padding: 0 14px; height: 46px;
-  border-radius: 11px;
-  border: 1px solid rgba(173, 192, 212, .18);
-  background: rgba(0, 0, 0, .28); color: #e8eff8;
-  /* 16px floor: anything smaller makes iOS Safari zoom the page on focus.
-     Tabular figures so a typed code does not reflow as it is entered. */
-  font: 600 16px/1 var(--font-mono);
-  letter-spacing: .22em; text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-  transition: border-color .15s, box-shadow .15s;
-}
-.mode-join-input::placeholder { color: #4f6480; letter-spacing: .22em; }
-.mode-join-input:focus {
-  outline: none; border-color: rgba(242, 137, 74, .7);
-  box-shadow: 0 0 0 3px rgba(242, 107, 33, .14);
-}
-.mode-join-btn {
-  flex: 0 0 auto; min-width: 86px; height: 46px; padding: 0 18px;
-  border: 1px solid rgba(242, 137, 74, .5); border-radius: 11px; cursor: pointer;
-  background: rgba(242, 107, 33, .1); color: #f2894a;
-  font: 700 13.5px var(--font-ui); letter-spacing: .02em;
-  transition: background-color .15s, border-color .15s, color .15s, opacity .15s;
-}
-.mode-join-btn:hover:not(:disabled) {
-  background: #f26b21; border-color: #f26b21; color: #fff;
-}
-.mode-join-btn:focus-visible { outline: 2px solid #ff8a45; outline-offset: 2px; }
-.mode-join-btn:disabled { opacity: .5; cursor: default; }
-.mode-join-msg {
-  /*  Reserves its line so the dialog does not jump when a message
-      appears — the card used to grow by 17px mid-interaction. */
-  margin: 9px 0 0; min-height: 18px;
-  font-size: 12.5px; line-height: 1.4; color: #7e93aa;
-}
-.mode-join-msg.is-err { color: #ff8a7a; }
-
 @media (max-width: 520px) {
   /*  Stacked, with the icon in its own column beside the text. The
       column was 40px, sized for the old 40px icon; the icon is 26px
@@ -394,7 +341,6 @@ body.ss-open > *:not(#seasonApp):not(script):not(#toastContainer):not(.mode-back
   .mode-opt { display: grid; grid-template-columns: 26px 1fr; column-gap: 12px; row-gap: 3px; padding: 15px 14px; }
   .mode-ic { grid-row: span 3; margin: 0; align-self: start; }
   .mode-opt i { padding-top: 4px; }
-  .mode-join-btn { min-width: 76px; padding: 0 14px; }
 }
 
 /* ══ Season league entry on the splash ════════════════════ */
