@@ -2241,8 +2241,14 @@
   // Phone tab bar: the pages people hit every day, one tap away.
   function tabBar() {
     var draft = state.phase === 'draft', unread = unreadChat();
+    //  Players was missing from the DRAFT row. navItems() (the sidebar
+    //  and the More sheet) got it, this separate mobile array did not —
+    //  so on a phone, during the draft, the pool browser was reachable
+    //  only by opening More. That is the one moment people actually
+    //  want it. Five tabs plus More matches the season row exactly, so
+    //  the width is already proven at this breakpoint.
     var tabs = draft
-      ? [['home', 'Home', appIcon('home')], ['draft', 'Draft', appIcon('players')], ['teams', 'Teams', appIcon('teams')], ['chat', 'Chat', appIcon('chat')]]
+      ? [['home', 'Home', appIcon('home')], ['draft', 'Draft', appIcon('players')], ['players', 'Players', ICON.players], ['teams', 'Teams', appIcon('teams')], ['chat', 'Chat', appIcon('chat')]]
       : [['home', 'Home', appIcon('home')], ['matchup', 'Matchups', ICON.matchup], ['lineup', 'Lineup', ICON.lineup], ['players', 'Players', ICON.players], ['chat', 'Chat', appIcon('chat')]];
     var inTabs = tabs.some(function (t) { return t[0] === ui.page; });
     var dec = !draft && state.phase === 'season' ? slotsOf(userTeam().id).filter(function (x) { return x.pending && !x.locked; }).length : 0;
