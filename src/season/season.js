@@ -595,6 +595,54 @@
     });
   }
 
+  //  ── Self-heal a league that never reached the server ──────
+  //  Confirmed in the wild: a league existed with a real code, ten
+  //  seats and a commissioner on one device, and no document at all in
+  //  Firestore. Anyone given that code got "League not found", and the
+  //  creator had no way to know — the one warning that would have told
+  //  him fires at creation and nothing re-checks afterwards.
+  //
+  //  So re-check on every open. If the document is missing and I am the
+  //  host, write it with the SAME code (never a new one — the code has
+  //  already been shared). If I am not the host, say so plainly rather
+  //  than pretending the league is live.
+  function ensureLeagueOnServer() {
+    var db = syncDb(), uid = myUid();
+    if (!db || !uid || !state || !state.league || !state.league.code) return Promise.resolve(false);
+    var code = state.league.code;
+    var ref = seasonDoc(code);
+    if (!ref) return Promise.resolve(false);
+
+    return ref.get().then(function (doc) {
+      if (doc.exists) return true;
+
+      var host = state.league.host;
+      //  A league created before host was recorded, or created while
+      //  signed out, has no host. Whoever opens it first and has it
+      //  locally is the only candidate to publish it.
+      var iAmHost = !host || host === uid;
+      if (!iAmHost) {
+        try {
+          notify('This league is not on the server, so nobody else can join. Ask the commissioner to open it once.', 'error');
+        } catch (e) { }
+        return false;
+      }
+
+      console.warn('[Season] league ' + code + ' missing on server; republishing');
+      if (!host) state.league.host = uid;      // claim it so draft authority works
+      return writeLeagueDoc(ref).then(function (ok) {
+        if (ok) {
+          try { notify('League ' + code + ' is now saved to the server. The code works for your friends.', 'success'); } catch (e) { }
+          subscribeSeason(code);
+        }
+        return ok;
+      });
+    }).catch(function (e) {
+      console.warn('[Season] server presence check failed:', e && e.code, e && e.message);
+      return false;
+    });
+  }
+
   function writeLeagueDoc(ref) {
     return ref.set({
       rev: SYNC.rev || 1,
@@ -4277,7 +4325,14 @@
     markMine();
     // Reconnect to the shared league so other managers' picks and
     // lineups arrive while this device is open.
-    if (state && state.league && state.league.code) subscribeSeason(state.league.code);
+    if (state && state.league && state.league.code) {
+      subscribeSeason(state.league.code);
+      //  Verify it actually exists server-side, and republish it if
+      //  not. Without this a league can look perfectly healthy on the
+      //  creator's device forever while being invisible to everyone
+      //  he sends the code to.
+      ensureLeagueOnServer();
+    }
     resetPool();
 
     //  Pull real box scores for the current week on open, then keep
