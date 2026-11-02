@@ -1520,3 +1520,10 @@ button.ss-lab-chip[aria-expanded="true"] { box-shadow: 0 0 0 2px rgba(246, 197, 
   #seasonApp .ss-pool-owner,
   #seasonApp .ss-pool-free { font-size: 10px; padding: 3px 7px; }
 }
+
+/* Week is being fed by real ESPN box scores rather than projections. */
+#seasonApp .ss-mode-tag--live em {
+  color: #4ecb96;
+  background: rgba(46, 182, 125, .14);
+  border-color: rgba(46, 182, 125, .34);
+}

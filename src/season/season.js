@@ -960,13 +960,29 @@
     var tip = i.part + (i.status === 'OUT' ? ', out through week ' + i.until : i.status === 'GTD' ? ', game-time decision this week' : ', out for the season');
     return '<span class="ss-inj ss-inj-' + i.status.toLowerCase() + '" title="' + esc(tip) + '">' + txt + '</span>';
   }
+  //  The old chip read "Preview — scores are simulated until the live
+  //  stats feed is connected". The feed IS connected now, so that text
+  //  was understating the product; but it is not true either that every
+  //  week is real, because a week with no games yet played still shows
+  //  projections. Report the week in front of the user instead of
+  //  making a standing claim about the whole mode.
+  function modeTagHTML() {
+    var real = !!(state && state.realWeeks && state.week && state.realWeeks[state.week]);
+    if (real) {
+      return '<div class="ss-mode-tag ss-mode-tag--live"><span>Regular season</span>' +
+        '<em title="Box scores for this week come from ESPN.">Live scoring</em></div>';
+    }
+    return '<div class="ss-mode-tag"><span>Regular season</span>' +
+      '<em title="No games played yet this week. Figures shown are projections from last season\u2019s averages, and switch to real box scores as games finish.">Projected</em></div>';
+  }
+
   function startWeek() {
     state.day = 0;
     updateInjuries(state.week);
     state.games[state.week] = generateWeekGames(state.week);
     //  Simulation first so the week is never empty, then replaced by
     //  real box scores if the feed has any for these dates.
-    upgradeWeekToReal(state.week);
+    upgradeWeekToReal(state.week, true);
     state.lineups[state.week] = {};
     state.teams.forEach(function (t) {
       var prev = state.lineups[state.week - 1] && state.lineups[state.week - 1][t.id];
@@ -1067,6 +1083,35 @@
     return Object.keys(ids);
   }
 
+  //  Last seen server revision and whether anything was in progress.
+  //  Shared across ticks so an unchanged feed costs one read, not 159.
+  var REAL = { rev: -1, live: 0, week: 0, checkedAt: 0 };
+
+  //  One read. Answers "has the feed changed since last time?" so the
+  //  full week read below only runs when it actually would return
+  //  something new. Resolves { changed, live }.
+  function seasonFeedRev() {
+    var db = syncDb();
+    if (!db) return Promise.resolve({ changed: false, live: 0 });
+    return db.collection('seasonStats').doc(SEASON_STATS_ID).get()
+      .then(function (doc) {
+        if (!doc.exists) return { changed: false, live: 0, missing: true };
+        var d = doc.data() || {};
+        var rev = typeof d.rev === 'number' ? d.rev : 0;
+        var live = d.liveGames || 0;
+        var changed = rev !== REAL.rev;
+        REAL.rev = rev;
+        REAL.live = live;
+        return { changed: changed, live: live };
+      })
+      .catch(function (e) {
+        console.warn('[Season] feed revision read failed:', e && e.code, e && e.message);
+        //  Unknown is not "unchanged": fall through to a full read
+        //  rather than silently showing stale scores forever.
+        return { changed: true, live: 0 };
+      });
+  }
+
   function loadRealWeek(week) {
     var db = syncDb();
     if (!db || !state) return Promise.resolve(null);
@@ -1101,7 +1146,14 @@
           });
         });
 
-        var ids = rosteredPlayers();
+        //  Only players whose school actually appears in this week's
+        //  games. buildRealWeek already discards the rest, so reading
+        //  their documents was buying nothing — and on a midweek slate
+        //  where half the conference is idle, that is half the reads.
+        var ids = rosteredPlayers().filter(function (pid) {
+          var p = P(pid);
+          return p && bySchool[normSchool(p.college)];
+        });
         if (!ids.length) return { bySchool: bySchool, lines: {} };
 
         return Promise.all(ids.map(function (pid) {
@@ -1159,16 +1211,52 @@
 
   //  Called after the simulated week is already in place. Swaps in
   //  real games if any exist, then repaints.
-  function upgradeWeekToReal(week) {
-    if (!state || !syncDb()) return;
-    loadRealWeek(week).then(function (real) {
-      if (!real || !state || state.week !== week) return;
-      var built = buildRealWeek(week, real);
-      if (!Object.keys(built).length) return;
-      state.games[week] = built;
-      save();
-      try { render(); } catch (e) { }
+  //  force: skip the revision gate. Used when the week changes, when
+  //  the app opens, and before a week is finalised — moments where we
+  //  must not serve a cached answer.
+  function upgradeWeekToReal(week, force) {
+    if (!state || !syncDb()) return Promise.resolve(false);
+
+    var gate = (force || REAL.week !== week)
+      ? Promise.resolve({ changed: true, live: REAL.live })
+      : seasonFeedRev();
+
+    return gate.then(function (g) {
+      REAL.week = week;
+      //  Nothing new on the server. Skipping here is the whole saving:
+      //  it avoids ~79 game documents plus one read per rostered
+      //  player, for the cost of the single document already read.
+      if (!g.changed) return false;
+
+      return loadRealWeek(week).then(function (real) {
+        if (!real || !state || state.week !== week) return false;
+        var built = buildRealWeek(week, real);
+        if (!Object.keys(built).length) return false;
+        state.games[week] = built;
+        //  Mark the week as fed by real data, so finalizeWeek can tell
+        //  a real result from a simulated one and the UI can stop
+        //  calling itself a preview.
+        state.realWeeks = state.realWeeks || {};
+        state.realWeeks[week] = Date.now();
+        save();
+        try { render(); } catch (e) { }
+        return true;
+      });
     });
+  }
+
+  //  Poll hard only while games are actually in progress. Between game
+  //  days the feed changes a handful of times a day, so a 90-second
+  //  tick was spending reads to learn nothing.
+  function statsTickMs() {
+    return REAL.live > 0 ? 60000 : 300000;
+  }
+  function scheduleStatsTick() {
+    clearTimeout(open._statsTick);
+    open._statsTick = setTimeout(function () {
+      if (state && state.week) upgradeWeekToReal(state.week);
+      scheduleStatsTick();
+    }, statsTickMs());
   }
 
   function generateWeekGames(week) {
@@ -1278,7 +1366,9 @@
       if (!t.isUser) botDecide(t);
     });
     state.day++;
-    if (state.day > 6) finalizeWeek();
+    //  Route through the wrapper so the real box scores are pulled
+    //  before the week is locked in.
+    if (state.day > 6) finalizeWeekWhenReal();
     save();
     var pend = slotsOf(userTeam().id).filter(function (s) { return s.pending && !s.locked; }).length;
     if (pend && state.day <= 7) deviceNotify('lockDecision', 'Lock or pass', pend + ' of your starters played. Decide before their next game.');
@@ -1316,7 +1406,31 @@
   function teamScore(teamId, week) {
     return slotsOf(teamId, week).reduce(function (sum, s) { return sum + slotScore(s).v; }, 0);
   }
+  //  A week used to finalise from whatever state.games held at that
+  //  moment. upgradeWeekToReal only ever ran for the CURRENT week and
+  //  refused anything else, so if nobody had the app open while the
+  //  real box scores landed, the week locked in SIMULATED scores and
+  //  nothing would ever correct them — the result, the standings and
+  //  the season record were permanently fiction.
+  //
+  //  Pull the real data first, then finalise. Returns a promise so the
+  //  caller can wait; falls through to the simulation only when the
+  //  feed genuinely has nothing for those dates.
+  function finalizeWeekWhenReal() {
+    var wk = state.week;
+    return upgradeWeekToReal(wk, true)
+      .catch(function () { return false; })
+      .then(function () {
+        if (!state || state.week !== wk) return;   // week moved under us
+        finalizeWeek();
+      });
+  }
+
   function finalizeWeek() {
+    //  Record what this result was actually built from, so standings
+    //  and the season record can be audited later and the UI can stop
+    //  describing real results as a preview.
+    var fromReal = !!(state.realWeeks && state.realWeeks[state.week]);
     var rankBefore = 0; standings().forEach(function (r, i) { if (r.isUser) rankBefore = i + 1; });
     state.teams.forEach(function (t) {
       slotsOf(t.id).forEach(function (s) {
@@ -1327,12 +1441,18 @@
     state.schedule[state.week - 1].forEach(function (m, i) {
       state.results.push({
         week: state.week, home: m[0], away: m[1], kind: matchKind(state.week, i),
-        homePts: Math.round(teamScore(m[0]) * 10) / 10, awayPts: Math.round(teamScore(m[1]) * 10) / 10
+        homePts: Math.round(teamScore(m[0]) * 10) / 10, awayPts: Math.round(teamScore(m[1]) * 10) / 10,
+        // true = built from ESPN box scores, false = simulated.
+        real: fromReal
       });
     });
-    var mine = state.results.filter(function (r) { return r.week === state.week && (r.home === 't0' || r.away === 't0'); })[0];
+    //  't0' is the CREATOR's team, not mine. A joiner in seat 3 was
+    //  getting the week-result notification for the host's matchup —
+    //  the same seat-0 assumption that userTeam() had.
+    var myId = (userTeam() || {}).id;
+    var mine = state.results.filter(function (r) { return r.week === state.week && (r.home === myId || r.away === myId); })[0];
     if (mine) {
-      var me = mine.home === 't0', mp = me ? mine.homePts : mine.awayPts, op = me ? mine.awayPts : mine.homePts;
+      var me = mine.home === myId, mp = me ? mine.homePts : mine.awayPts, op = me ? mine.awayPts : mine.homePts;
       deviceNotify('weekFinal', (mp > op ? 'Win' : mp < op ? 'Loss' : 'Tie') + ', ' + f1(mp) + '–' + f1(op), 'Week ' + state.week + ' is final.');
     }
     var wk = state.results.filter(function (r) { return r.week === state.week; });
@@ -1873,7 +1993,7 @@
             '<img src="logo-icon.png" class="logo-mark sidebar-logo-img" width="42" height="42" alt="Tipoff Fantasy" />' +
             '<span class="sidebar-logo-text"><strong>TIPOFF</strong><span class="slt-light">FANTASY</span></span>' +
           '</div>' +
-          '<div class="ss-mode-tag"><span>Regular season</span><em title="Scores are simulated until the live stats feed is connected.">Preview</em></div>' +
+          modeTagHTML() +
           '<nav class="sidebar-nav">' + (state ? navBtns : '') + '</nav>' +
           '<div class="sidebar-footer">' +
             '<button class="nav-btn signout-btn" data-act="exit">' + ICON.back + 'All Leagues</button>' +
@@ -2073,7 +2193,7 @@
         '<div><b>Season</b><span>' + (s.format === 'conference' ? fmtDate(CAL.conference.start) + ' – Feb 28, then playoffs to Mar 14' : s.weeks + ' weeks from ' + fmtDate(CAL.season.start)) + '</span></div>' +
       '</div>';
       if (!poolOk()) { blocked = true; html += '<p class="ss-pool-count warn">Not enough players for this league size. Go back and add conferences or make the league smaller.</p>'; }
-      html += '<p class="tut-code-hint">In the lab, the other teams are bots and games are simulated from real 2025–26 averages.</p>';
+      html += '<p class="tut-code-hint">Open seats are filled by bots. Weekly games show projections from 2025–26 averages until the real box scores land.</p>';
     }
     var last = ui.wiz === total - 1;
     return '<div class="tut-overlay ss-wiz" style="display:flex;">' +
@@ -2952,7 +3072,7 @@
       return '<div class="feed-item ' + (n.back ? 'feed-draft' : 'feed-undo') + '"><span class="feed-icon-badge">' + (n.back ? '✓' : '✚') + '</span><div class="feed-body"><span class="feed-msg">' + esc(P(n.pid).name) + (n.back ? ' is back' : ' ' + injLabel(i) + ' (' + esc(i.part) + ')') + '</span><span class="feed-time">' + esc(t.isUser ? 'Your team' : t.name) + '</span></div></div>';
     }).join('') + '</div></div>' : '';
     return '<div class="ss-card"><div class="ss-card-head"><h3 class="section-title">Injury Report</h3><span class="ss-hint-inline">Rostered players</span></div>' + rows + '</div>' + newsHtml +
-      '<p class="ss-hint"><span class="ss-inj ss-inj-gtd">GTD</span> game-time decision, about a coin flip to play each game. <span class="ss-inj ss-inj-out">OUT</span> misses every game until he’s back. <span class="ss-inj ss-inj-season">OUT-SZN</span> done for the year. In the lab, injuries are simulated each week.</p>';
+      '<p class="ss-hint"><span class="ss-inj ss-inj-gtd">GTD</span> game-time decision, about a coin flip to play each game. <span class="ss-inj ss-inj-out">OUT</span> misses every game until he’s back. <span class="ss-inj ss-inj-season">OUT-SZN</span> done for the year. Injury flags are simulated while the injury feed is being wired up.</p>';
   }
   function viewTx() {
     var tx = faCfg().tx;
@@ -3012,7 +3132,7 @@
       : '<button class="g-btn solid" data-act="simday">Play ' + DAYS_FULL[state.day] + '</button><button class="g-btn" data-act="simweek">Rest of Week</button>';
     return '<div class="ss-labpanel"' + (ui.lab ? '' : ' hidden') + ' role="dialog" aria-label="Lab game simulator">' +
       '<div class="ss-lp-h"><b>Week simulator</b><button class="ss-lp-x" data-act="labtoggle" aria-label="Close">×</button></div>' +
-      '<p>Developer tool. Advances the week from simulated box scores until the live stats feed is connected.</p>' +
+      '<p>Developer tool. Advances the week from simulated box scores, bypassing the live feed.</p>' +
       '<div class="ss-lp-btns">' + btns + '</div></div>';
   }
   function weekBar() {
@@ -3680,7 +3800,7 @@
       '<div class="spr-info"><span class="spr-name">' + esc(name) + '</span><span class="spr-sub">' + esc(u.name) + ' in ' + esc(L.name) + '</span></div></div>';
     html += '<div class="set-label">Account</div><div class="panel set-panel">' +
       setRow('Email', esc(email || 'Not signed in')) +
-      setRow('Password', 'Change it from the tournament Settings page', '<button class="set-row-btn" disabled title="Offline in the lab">Change</button>') +
+      setRow('Password', 'Change it from the tournament Settings page', '<button class="set-row-btn" disabled title="Change your password from the tournament Settings page">Change</button>') +
       setRow('Sign Out', 'You’ll stay in your leagues', '<button class="set-row-btn" data-act="signout">Sign Out</button>') +
     '</div>';
 
@@ -3779,7 +3899,7 @@
             '<button class="q-btn" data-act="ordermove" data-i="' + i + '" data-dir="1" aria-label="Move down"' + (i === r1.length - 1 ? ' disabled' : '') + '>&#9660;</button></span>' : '') + '</li>';
       }).join('') + '</ul>' +
       (editable ? '<button class="btn-ghost btn-sm" data-act="orderrandom" style="margin-top:10px;">Randomize Order</button>' : '') +
-      '<p class="ds-join-hint">Managers appear here when they join with your league code. In the lab, the other teams are bots.</p>' +
+      '<p class="ds-join-hint">Managers appear here when they join with your league code. Any seat still open at draft time is filled by a bot.</p>' +
       '<button class="btn-save" data-act="savesetup">Save Draft Setup</button></div>';
 
     var at = d.scheduledAt;
@@ -4138,11 +4258,10 @@
     //  Pull real box scores for the current week on open, then keep
     //  checking while the app is up: games finish, and a week that
     //  was simulated at kickoff becomes real as results land.
-    if (state && state.week) upgradeWeekToReal(state.week);
-    clearInterval(open._statsTick);
-    open._statsTick = setInterval(function () {
-      if (state && state.week) upgradeWeekToReal(state.week);
-    }, 90000);
+    //  force on open: the cached revision is from a previous session
+    //  and must not suppress the first read.
+    if (state && state.week) upgradeWeekToReal(state.week, true);
+    scheduleStatsTick();
     ui.setup = { name: 'Season League', team: sessionName() === 'You' ? 'My Team' : sessionName() + "'s Team", teams: 8, roster: 10, weeks: 12, timer: 90,
       format: 'conference', confMode: 'mix', conferences: MAJORS.slice() };
     ui.page = 'home'; ui.wiz = state ? null : 0; ui.explain = state && !explainerSeen() ? 0 : null; ui.sheet = false; ui.swapSlot = null; ui.search = ''; ui.filterPos = ''; ui.filterConf = ''; ui.confirmId = null; ui.faId = null; ui.tr = null; ui.ptab = 'fa'; ui.fstatus = ''; ui.fsort = 'proj';

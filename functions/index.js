@@ -1829,6 +1829,30 @@ async function runSeasonSyncESPN(opts) {
     if (!options.dryRun) {
       await gameBatch.commit();
       await playerBatch.commit();
+
+      //  ── Revision heartbeat on the PARENT document ──────────
+      //  Clients were polling the whole week every 90 seconds: the
+      //  games query returns ~79 documents and then one read per
+      //  rostered player, about 159 reads a tick. That is ~6,400
+      //  reads an hour, so a SINGLE person with the app open for an
+      //  8-hour game day exhausted the entire 50,000/day free tier.
+      //
+      //  This one tiny document lets a client ask "has anything
+      //  changed?" for one read. The expensive week read then only
+      //  happens when the answer is yes, which is at most once per
+      //  10-minute sync rather than 40 times an hour.
+      await seasonRef.set({
+        rev: admin.firestore.FieldValue.increment(1),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastDate: isoFromEspnDate(dateStr),
+        gamesOnDate: report.gamesOnDate || 0,
+        gamesWritten: report.gamesWritten || 0,
+        playersWritten: report.playersWritten || 0,
+        // How many of the day's games are still in progress. The
+        // client uses this to decide how hard to poll.
+        liveGames: report.liveGames || 0,
+        season: SEASON_ID
+      }, { merge: true });
     }
   } catch (e) {
     report.ok = false;
