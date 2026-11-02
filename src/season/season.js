@@ -156,8 +156,27 @@
     var db = syncDb();
     return db ? db.collection('seasonLeagues').doc(String(code).toUpperCase()) : null;
   }
+  //  Firebase resolves the signed-in user ASYNCHRONOUSLY, a beat or two
+  //  after the page starts running. This function is what builds the
+  //  localStorage key, so for that whole window it was returning null
+  //  and every read went to the ':anon' bucket instead of the user's.
+  //
+  //  Symptom: join a league, reload, and the league is "gone" — the
+  //  splash paints before auth lands, finds ':anon' empty, and offers
+  //  no league at all. The real one is sitting safely under the uid
+  //  key the entire time. You then re-enter the code, and the cycle
+  //  repeats on the next reload, forever.
+  //
+  //  The session record is written at sign-in and read synchronously,
+  //  so it gives a stable uid from the very first line of script. Every
+  //  other part of the app already falls back to it; this was the one
+  //  place that did not.
   function myUid() {
-    return (window._fbUser && window._fbUser.uid) || null;
+    if (window._fbUser && window._fbUser.uid) return window._fbUser.uid;
+    try {
+      var s = JSON.parse(localStorage.getItem('mmfantasy-session') || 'null');
+      return (s && s.uid) || null;
+    } catch (e) { return null; }
   }
 
   // The blob that travels. Games are stripped; everything else is
@@ -351,8 +370,35 @@
     try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { /* quota or private mode */ }
     schedulePush();
   }
+  //  Anyone who joined under the old myUid() wrote their league into
+  //  the ':anon' bucket at some point. Claim it on first load under a
+  //  real uid, so existing users recover without re-entering a code.
+  //  Only ever moves a league the account actually holds a seat in.
+  function adoptAnonStore() {
+    var uid = myUid();
+    if (!uid) return;
+    var anonKey = STORE_KEY_BASE + ':anon';
+    var mineKey = storeKey(uid);
+    if (anonKey === mineKey) return;
+    var raw;
+    try { raw = localStorage.getItem(anonKey); } catch (e) { return; }
+    if (!raw) return;
+    try {
+      var blob = JSON.parse(raw);
+      var seats = (blob && blob.teams) || [];
+      var holdsSeat = seats.some(function (t) { return t && t.uid === uid; });
+      // No uid on any seat = created while signed out; it is ours too.
+      var unclaimed = !seats.some(function (t) { return t && t.uid; });
+      if (!holdsSeat && !unclaimed) return;
+      if (!localStorage.getItem(mineKey)) localStorage.setItem(mineKey, raw);
+      localStorage.removeItem(anonKey);
+      console.log('[Season] recovered league from the anon bucket');
+    } catch (e) { /* unparseable; leave it */ }
+  }
+
   function load() {
     migrateLegacyStore();
+    adoptAnonStore();
     try { var raw = localStorage.getItem(storeKey()); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
   }
   function sessionName() {
@@ -4827,6 +4873,49 @@
   //
   //  Checks once per page load. Silent on any failure: a league is
   //  never dropped because a read did not come back.
+  //  Belt and braces on "my league vanished after a reload". Even with
+  //  a stable uid, a device can legitimately end up with no local copy
+  //  — cleared data, a different browser, a phone replaced. The league
+  //  is on the server and the account's own index names it, so find it
+  //  and pull it down instead of making the user hunt for a code.
+  //
+  //  Runs once per load, only when nothing is held locally, and only
+  //  for a league this account actually holds a seat in.
+  var RECOVERY_TRIED = false;
+  function recoverLeagueFromAccount() {
+    if (RECOVERY_TRIED) return;
+    var db = syncDb(), uid = myUid();
+    if (!db || !uid) return;                 // retried once auth lands
+    if (load()) return;                      // already have one locally
+    RECOVERY_TRIED = true;
+
+    db.collection('users').doc(uid).get().then(function (snap) {
+      var list = ((snap.exists && snap.data()) || {}).leagues || [];
+      var season = list.filter(function (l) { return l && l.kind === 'season' && l.code; })
+        .sort(function (a, b) { return (b.lastOpened || 0) - (a.lastOpened || 0); })[0];
+      if (!season) return;
+      return seasonDoc(season.code).get().then(function (doc) {
+        if (!doc.exists) return;
+        var st = decodeState((doc.data() || {}).state);
+        if (!st || !st.teams) return;
+        if (!st.teams.some(function (t) { return t && t.uid === uid; })) return;  // not ours
+        SYNC.applying = true;
+        try {
+          state = st;
+          state.games = state.games || {};
+          markMine();
+          try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
+        } finally { SYNC.applying = false; }
+        subscribeSeason(season.code);
+        console.log('[Season] recovered ' + season.code + ' from the account');
+        try { renderSplashCard(); } catch (e) { }
+      });
+    }).catch(function (e) {
+      RECOVERY_TRIED = false;
+      console.warn('[Season] account recovery failed:', e && e.code);
+    });
+  }
+
   var MEMBERSHIP_CHECKED = false;
   function verifySeasonMembership() {
     if (MEMBERSHIP_CHECKED) return;
@@ -4877,7 +4966,14 @@
     if (!slot) return;
     verifySeasonMembership();
     var s = load();
-    if (!s) { slot.innerHTML = ''; return; }
+    if (!s) {
+      //  Nothing local. Before concluding the user has no league, ask
+      //  the account — this is the path that stops a reload looking
+      //  like "you were never in a league, enter the code again".
+      recoverLeagueFromAccount();
+      slot.innerHTML = '';
+      return;
+    }
     var sub = s.phase === 'draft' ? 'Drafting, pick ' + (s.draft.pick + 1) + ' of ' + s.draft.order.length :
       s.phase === 'done' ? 'Season complete' : 'Week ' + s.week + ' of ' + s.league.weeks;
     slot.innerHTML = '<button class="ss-splash-card" data-season-open="1"><span class="ss-splash-tag">Season</span>' +
@@ -4927,6 +5023,7 @@
     if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
     SYNC.warnedDenied = false;
     MEMBERSHIP_CHECKED = false;   // re-verify under the new account
+    RECOVERY_TRIED = false;       // and retry recovery with a real uid
     state = null;
 
     migrateLegacyStore();
