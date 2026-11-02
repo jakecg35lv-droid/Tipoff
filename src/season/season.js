@@ -326,8 +326,26 @@
   //  Feb 28, semifinals Mar 1–7 (final week of conference play),
   //  championship Mar 8–14 (conference tournaments, ends Selection
   //  Sunday). Full season: week 1 is Mon Nov 2, 2026 (opening night).
+  //  NOTE: these are [year, MONTH-INDEX, day] — month is 0-based,
+  //  so 10 is November. Getting this wrong by one silently shifts a
+  //  whole league's calendar, which is exactly what happened below.
+  //
+  //  'conference' used to start [2026, 11, 28] = 28 DECEMBER, from
+  //  when this was conceived as a conference-play-only league. But
+  //  conference selection is now a POOL FILTER — "one conference or
+  //  all five" — and the wizard defaults every new league to this
+  //  format. The result: a league created in November had its week 1
+  //  starting in late December, so every game played before then fell
+  //  outside dayIndexFor's 0-6 window and was discarded. Real box
+  //  scores could never appear, however well the feed worked.
+  //
+  //  Both formats now start on 2 November 2026, the day the regular
+  //  season opens. 17 regular weeks + 2 playoff weeks from that date
+  //  lands on 15 March 2027 — the same date as SEASON_WINDOW.end in
+  //  functions/index.js, so the client calendar and the server's
+  //  sync window agree.
   var CAL = {
-    conference: { start: [2026, 11, 28], regWeeks: 9, playoffWeeks: 2 },
+    conference: { start: [2026, 10, 2], regWeeks: 17, playoffWeeks: 2 },
     season: { start: [2026, 10, 2], playoffWeeks: 0 }
   };
 
