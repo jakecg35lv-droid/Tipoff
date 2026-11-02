@@ -1095,7 +1095,14 @@
     if (!db) return Promise.resolve({ changed: false, live: 0 });
     return db.collection('seasonStats').doc(SEASON_STATS_ID).get()
       .then(function (doc) {
-        if (!doc.exists) return { changed: false, live: 0, missing: true };
+        //  No heartbeat document means the sync has never written one —
+        //  which is exactly the state production is in until the updated
+        //  function is deployed. Returning changed:false here would gate
+        //  the refresh shut forever and the week would only ever update
+        //  on the force paths. Treat missing as "go look", same as an
+        //  error: the whole point of the gate is to skip reads we KNOW
+        //  are pointless, not reads we cannot judge.
+        if (!doc.exists) return { changed: true, live: 0, missing: true };
         var d = doc.data() || {};
         var rev = typeof d.rev === 'number' ? d.rev : 0;
         var live = d.liveGames || 0;
