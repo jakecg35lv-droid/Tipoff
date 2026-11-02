@@ -333,6 +333,26 @@
   function multiplayer() {
     return !!(syncDb() && state && state.league && state.league.code && SYNC.unsub);
   }
+  //  Who the commissioner is, in words, so the refusal names a person
+  //  rather than saying "you can't".
+  function commissionerName() {
+    if (!state || !state.teams) return 'the commissioner';
+    var host = state.league && state.league.host;
+    var t = state.teams.filter(function (x) { return x && x.uid && x.uid === host; })[0];
+    return (t && t.name) || 'the commissioner';
+  }
+
+  //  Returns true when the current account may run league-wide draft
+  //  controls. Refuses out loud rather than silently doing nothing —
+  //  a dead button teaches people to tap it harder.
+  function requireCommissioner(what) {
+    if (isHost()) return true;
+    try {
+      notify('Only ' + commissionerName() + ' can ' + (what || 'do that') + '.', 'error');
+    } catch (e) { }
+    return false;
+  }
+
   function isHost() {
     if (!state || !state.league) return true;
     var host = state.league.host;
@@ -2445,7 +2465,11 @@
           '<div class="hero-manager">' + (dc.status === 'pre' ? 'Ready to draft' : mine ? 'Your pick' : esc(clock.name)) + '</div>' +
           '<div class="hero-pick-label">' + (dc.status === 'pre' ? 'You pick ' + ordinal(dc.order.indexOf(u.id) + 1) + ' in round 1' : mine ? 'You’re on the clock' : 'You pick in ' + away) + '</div>' +
           '<div class="hero-timer-controls">' +
-            (dc.status === 'pre' ? '<button class="btn-hero-primary" data-act="startdraft">Start Draft</button><button class="btn-hero-ghost" data-act="nav" data-page="draft">Draft Room</button>' :
+            (dc.status === 'pre' ? (isHost()
+              ? '<button class="btn-hero-primary" data-act="startdraft">Start Draft</button><button class="btn-hero-ghost" data-act="nav" data-page="draft">Draft Room</button>'
+              //  Not the commissioner: say who you are waiting on rather
+              //  than showing a button that will refuse.
+              : '<span class="ss-await-host">Waiting for ' + esc(commissionerName()) + ' to start the draft</span><button class="btn-hero-ghost" data-act="nav" data-page="draft">Draft Room</button>') :
              dc.status === 'paused' ? '<button class="btn-hero-primary" data-act="resumedraft">Resume</button><button class="btn-hero-ghost" data-act="nav" data-page="draft">Draft Room</button>' :
              '<button class="btn-hero-primary" data-act="nav" data-page="draft">' + (mine ? 'Make Pick' : 'Draft Room') + '</button><button class="btn-hero-ghost" data-act="pausedraft">Pause</button>') +
           '</div>' +
@@ -2547,7 +2571,7 @@
       '</div></div>' +
       '<div class="g-hero-r"><div><b>' + n + '</b><span>Teams</span></div><div><b>' + ordinal(dc.order.indexOf(u.id) + 1) + '</b><span>Your slot</span></div><div class="dim"><b>' + (dc.status === 'pre' ? total : total - d.pick) + '</b><span>Picks left</span></div></div></div>';
 
-    var ctrl = dc.status === 'pre' ? '<button class="g-btn solid" data-act="startdraft">Start Draft</button><button class="g-btn" data-act="nav" data-page="draft">Draft Room</button>' :
+    var ctrl = dc.status === 'pre' ? ((isHost() ? '<button class="g-btn solid" data-act="startdraft">Start Draft</button>' : '<span class="ss-await-host">Waiting for ' + esc(commissionerName()) + '</span>') + '<button class="g-btn" data-act="nav" data-page="draft">Draft Room</button>') :
       dc.status === 'paused' ? '<button class="g-btn solid" data-act="resumedraft">Resume</button><button class="g-btn" data-act="nav" data-page="draft">Draft Room</button>' :
       '<button class="g-btn solid" data-act="nav" data-page="draft">' + (mine ? 'Make Pick' : 'Draft Room') + '</button><button class="g-btn" data-act="pausedraft">Pause</button>';
     if (dc.status === 'pre') ctrl += '<button class="g-btn" data-act="invite">Invite Friends</button>';
@@ -2853,7 +2877,7 @@
       var t = team(d.order[k]);
       return '<div class="dg-dk' + (j === 0 && !pre ? ' now' : '') + (t.isUser ? ' me' : '') + '"><em>R' + (Math.floor(k / n) + 1) + '.' + ((k % n) + 1) + '</em>' + avatarHTML(t.name, 26) + '<span>' + esc(t.isUser ? 'You' : t.name) + '</span></div>';
     }).join('') + '</div>';
-    var ctrls = (pre ? '<button class="g-btn solid" data-act="startdraft">Start Draft</button>' :
+    var ctrls = (pre ? (isHost() ? '<button class="g-btn solid" data-act="startdraft">Start Draft</button>' : '<span class="ss-await-host">Waiting for ' + esc(commissionerName()) + ' to start</span>') :
         paused ? '<button class="g-btn solid" data-act="resumedraft">Resume</button>' :
         (canPick ? '<button class="g-btn solid" data-act="autopick">Autopick</button>' : '') + '<button class="g-btn" data-act="pausedraft">Pause</button>') +
       (!pre && devMode() ? '<button class="g-btn ghost" data-act="simdraft"' + (mine ? ' disabled' : '') + ' title="Dev: jump past bot picks">Skip to my pick</button>' : '');
@@ -4181,10 +4205,28 @@
         livePick(userTeam().id, ap, 'auto');
         if (state.phase !== 'draft') { ui.page = 'lineup'; ui.toastMsg = 'Draft complete. Set your week 1 lineup.'; ui.toastType = 'success'; }
         break;
-      case 'simdraft': if (draftCfg().status === 'pre') startDraft(); simToUser(); break;
-      case 'startdraft': startDraft(); ui.page = 'draft'; ui.toastMsg = 'The draft is live.'; ui.toastType = 'success'; break;
-      case 'pausedraft': pauseDraft(); break;
-      case 'resumedraft': resumeDraft(); break;
+      //  ── Draft control belongs to the commissioner ────────────
+      //  Starting, pausing and resuming change the clock for EVERY
+      //  manager at once, so any one of eight people could previously
+      //  start a draft the other seven were not sitting down for.
+      //
+      //  Gated here, at the handler, not only in the markup: hiding a
+      //  button hides it from the honest. This is the actual lock, and
+      //  it is also what protects a client running older cached code
+      //  that still renders the button.
+      case 'simdraft':
+        if (!requireCommissioner('start the draft')) return;
+        if (draftCfg().status === 'pre') startDraft();
+        simToUser(); break;
+      case 'startdraft':
+        if (!requireCommissioner('start the draft')) return;
+        startDraft(); ui.page = 'draft'; ui.toastMsg = 'The draft is live.'; ui.toastType = 'success'; break;
+      case 'pausedraft':
+        if (!requireCommissioner('pause the draft')) return;
+        pauseDraft(); break;
+      case 'resumedraft':
+        if (!requireCommissioner('resume the draft')) return;
+        resumeDraft(); break;
       case 'queue': toggleQueue(el.getAttribute('data-id')); break;
       case 'qmove': moveQueue(el.getAttribute('data-id'), +el.getAttribute('data-dir')); break;
       case 'qclear': draftCfg().queue = []; save(); break;
