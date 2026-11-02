@@ -1323,13 +1323,79 @@ function renderSavedLeagues() {
     const raw = localStorage.getItem('mmfantasy-leagues');
     const leagues = raw ? JSON.parse(raw) : [];
     if (!leagues.length) {
-      container.innerHTML = '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
-      return;
+      container.innerHTML = '<p class="no-leagues">Loading your leagues…</p>';
+    } else {
+      const sorted = leagues.slice().sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
+      container.innerHTML = sorted.map(_leagueCardHTML).join('');
+      _attachLeagueCardListeners(container);
     }
-    const sorted = leagues.slice().sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
-    container.innerHTML = sorted.map(_leagueCardHTML).join('');
-    _attachLeagueCardListeners(container);
   } catch (e) { container.innerHTML = '<p class="no-leagues">Could not load leagues.</p>'; }
+
+  //  Paint from the local cache first (instant), then reconcile against
+  //  the account. This list used to be localStorage and nothing else,
+  //  so it was a per-DEVICE list wearing an account's name: delete a
+  //  league on your phone and your laptop went on showing it forever,
+  //  because the laptop had its own unrelated copy and no reason to
+  //  doubt it.
+  reconcileSavedLeagues();
+}
+
+//  users/{uid}.leagues is the account's real membership list and is
+//  already maintained on create, join and delete. Treat it as the
+//  authority and prune anything local that it no longer contains.
+async function reconcileSavedLeagues() {
+  const container = document.getElementById('savedLeaguesList');
+  if (!container) return;
+  const ref = userDocRef();
+  if (!ref) {
+    // Signed out or offline: the local cache is all we have. Leave it.
+    if (container.textContent.indexOf('Loading') >= 0) {
+      container.innerHTML = '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
+    }
+    return;
+  }
+
+  let account = null;
+  try {
+    const snap = await ref.get();
+    if (snap.exists && Array.isArray(snap.data().leagues)) account = snap.data().leagues;
+  } catch (e) {
+    //  A failed read is not evidence a league is gone. Never prune on
+    //  a network error — that is how someone loses a league by walking
+    //  into a lift.
+    console.warn('[Leagues] account read failed, keeping local list:', e.message);
+    if (container.textContent.indexOf('Loading') >= 0) {
+      container.innerHTML = '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
+    }
+    return;
+  }
+  if (!account) account = [];
+
+  const live = {};
+  account.forEach(l => { if (l && l.code) live[String(l.code).toUpperCase()] = l; });
+
+  let local = [];
+  try { local = JSON.parse(localStorage.getItem('mmfantasy-leagues') || '[]'); } catch (e) { }
+
+  const kept = local.filter(l => {
+    if (!l || !l.leagueCode) return false;
+    // The league currently open stays regardless; we are in it.
+    if (state && state.leagueCode && l.leagueCode === state.leagueCode) return true;
+    return !!live[String(l.leagueCode).toUpperCase()];
+  });
+
+  if (kept.length !== local.length) {
+    try { localStorage.setItem('mmfantasy-leagues', JSON.stringify(kept)); } catch (e) { }
+    console.log('[Leagues] pruned ' + (local.length - kept.length) + ' league(s) deleted on another device');
+  }
+
+  if (!kept.length) {
+    container.innerHTML = '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
+    return;
+  }
+  const sorted = kept.slice().sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
+  container.innerHTML = sorted.map(_leagueCardHTML).join('');
+  _attachLeagueCardListeners(container);
 }
 
 //  League codes get read aloud down a phone and typed by somebody

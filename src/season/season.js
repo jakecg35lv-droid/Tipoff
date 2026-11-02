@@ -4636,9 +4636,49 @@
     } catch (e) { /* ignore */ }
   }
 
+  //  Has this device's cached season league been deleted from the
+  //  account somewhere else? The cache is per-device, so leaving a
+  //  league on your phone did nothing to the copy sitting in your
+  //  laptop's localStorage, and the laptop kept offering it.
+  //
+  //  Checks once per page load. Silent on any failure: a league is
+  //  never dropped because a read did not come back.
+  var MEMBERSHIP_CHECKED = false;
+  function verifySeasonMembership() {
+    if (MEMBERSHIP_CHECKED) return;
+    var db = syncDb(), uid = myUid();
+    if (!db || !uid) return;              // retried when auth lands
+    MEMBERSHIP_CHECKED = true;
+
+    var s = load();
+    var code = s && s.league && s.league.code;
+    if (!code) return;
+
+    db.collection('users').doc(uid).get().then(function (snap) {
+      var data = (snap.exists && snap.data()) || {};
+      if (!Array.isArray(data.leagues)) return;   // nothing recorded; say nothing
+      var still = data.leagues.some(function (l) {
+        return l && String(l.code).toUpperCase() === String(code).toUpperCase();
+      });
+      if (still) return;
+      //  Gone from the account. Drop the stale local copy and repaint.
+      unsubscribeSeason();
+      if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
+      state = null;
+      try { localStorage.removeItem(storeKey()); } catch (e) { }
+      console.log('[Season] local league ' + code + ' was removed from this account elsewhere; cleared');
+      try { renderSplashCard(); } catch (e) { }
+    }).catch(function (e) {
+      // Offline or denied. Keep what we have.
+      MEMBERSHIP_CHECKED = false;
+      console.warn('[Season] membership check failed:', e && e.code);
+    });
+  }
+
   function renderSplashCard() {
     var slot = document.getElementById('seasonLeagueSlot');
     if (!slot) return;
+    verifySeasonMembership();
     var s = load();
     if (!s) { slot.innerHTML = ''; return; }
     var sub = s.phase === 'draft' ? 'Drafting, pick ' + (s.draft.pick + 1) + ' of ' + s.draft.order.length :
@@ -4689,6 +4729,7 @@
     unsubscribeSeason();
     if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
     SYNC.warnedDenied = false;
+    MEMBERSHIP_CHECKED = false;   // re-verify under the new account
     state = null;
 
     migrateLegacyStore();
