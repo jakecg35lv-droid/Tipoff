@@ -1352,6 +1352,14 @@ function _loadAndEnterLeagueLocal(code) {
   } catch (e) { console.error('loadLocal', e); }
 }
 
+//  The season league renders into its own slot above the tournament
+//  list. Either list being empty is normal; "no leagues" is only true
+//  when BOTH are.
+function _hasSeasonCard() {
+  const slot = document.getElementById('seasonLeagueSlot');
+  return !!(slot && slot.innerHTML.trim().length);
+}
+
 function renderSavedLeagues() {
   const container = document.getElementById('savedLeaguesList');
   if (!container) return;
@@ -1359,7 +1367,7 @@ function renderSavedLeagues() {
     const raw = localStorage.getItem('mmfantasy-leagues');
     const leagues = raw ? JSON.parse(raw) : [];
     if (!leagues.length) {
-      container.innerHTML = '<p class="no-leagues">Loading your leagues…</p>';
+      container.innerHTML = _hasSeasonCard() ? '' : '<p class="no-leagues">Loading your leagues…</p>';
     } else {
       const sorted = leagues.slice().sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
       container.innerHTML = sorted.map(_leagueCardHTML).join('');
@@ -1386,7 +1394,7 @@ async function reconcileSavedLeagues() {
   if (!ref) {
     // Signed out or offline: the local cache is all we have. Leave it.
     if (container.textContent.indexOf('Loading') >= 0) {
-      container.innerHTML = '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
+      container.innerHTML = _hasSeasonCard() ? '' : '<p class="no-leagues">Create or join a league above.</p>';
     }
     return;
   }
@@ -1401,7 +1409,7 @@ async function reconcileSavedLeagues() {
     //  into a lift.
     console.warn('[Leagues] account read failed, keeping local list:', e.message);
     if (container.textContent.indexOf('Loading') >= 0) {
-      container.innerHTML = '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
+      container.innerHTML = _hasSeasonCard() ? '' : '<p class="no-leagues">Create or join a league above.</p>';
     }
     return;
   }
@@ -1474,7 +1482,14 @@ async function reconcileSavedLeagues() {
   }
 
   if (!kept.length) {
-    container.innerHTML = '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
+    //  "No leagues yet" was printed by the TOURNAMENT list, which knows
+    //  nothing about the season card rendered immediately above it. So
+    //  a user with a season league read "Season League, drafting, pick 1
+    //  of 96" and directly underneath "No leagues yet." Two statements,
+    //  one screen, one of them false.
+    container.innerHTML = _hasSeasonCard()
+      ? ''
+      : '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
     return;
   }
   const sorted = kept.slice().sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
