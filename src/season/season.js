@@ -1648,6 +1648,9 @@
     clearTimeout(open._statsTick);
     open._statsTick = setTimeout(function () {
       if (state && state.week) upgradeWeekToReal(state.week);
+      //  Also here, not just on open: a device left open overnight has
+      //  to cross the 6am boundary on its own.
+      runClock();
       scheduleStatsTick();
     }, statsTickMs());
   }
@@ -1748,6 +1751,15 @@
       return 'Week ' + state.week + ' starts ' + D[r.start.getDay()] + ', ' +
              M[r.start.getMonth()] + ' ' + r.start.getDate();
     }
+    //  The calendar has moved on but the league has not. On the
+    //  commissioner's device runClock is already fixing that; on
+    //  anyone else's it cannot, and saying so is better than showing a
+    //  week that looks stuck for no stated reason.
+    if (clockBehind()) {
+      return isHost()
+        ? 'Catching up on results\u2026'
+        : 'Waiting on ' + commissionerName() + ' to open the app';
+    }
     return 'Waiting on this week\u2019s box scores';
   }
 
@@ -1761,7 +1773,12 @@
 
   // Play one day: every unlocked starter who plays that day gets an
   // eligible game; that game becomes the pending lock decision.
-  function simDay() {
+  //  noFinalize: the real-time clock (runClock) finalises the week
+  //  itself so it can await the box scores and then roll straight into
+  //  the next week in one ordered sequence. Letting this fire its own
+  //  un-awaited finalizeWeekWhenReal in that case would race the loop
+  //  and could push a week's results twice.
+  function simDay(noFinalize) {
     if (state.day > 6) return;
     if (state.trades) botTradeReplies();
     var d = state.day;
@@ -1780,8 +1797,12 @@
     state.day++;
     //  Route through the wrapper so the real box scores are pulled
     //  before the week is locked in.
-    if (state.day > 6) finalizeWeekWhenReal();
+    if (state.day > 6 && !noFinalize) finalizeWeekWhenReal();
     save();
+    //  Catching up several days at once would otherwise fire one of
+    //  these per day, so a manager who was away for a week gets seven
+    //  identical notifications at once.
+    if (CLOCK.quiet) return;
     var pend = slotsOf(userTeam().id).filter(function (s) { return s.pending && !s.locked; }).length;
     if (pend && state.day <= 7) deviceNotify('lockDecision', 'Lock or pass', pend + ' of your starters played. Decide before their next game.');
   }
@@ -1839,6 +1860,21 @@
   }
 
   function finalizeWeek() {
+    //  ── Finalise a week exactly once ──────────────────────
+    //  finalizeWeek PUSHES onto state.results. Called twice for the
+    //  same week it pushes every matchup twice, and standings are
+    //  computed from state.results — so a double call does not show up
+    //  as an error, it shows up as a team with a 2-0 record after one
+    //  week and a season record nobody can explain.
+    //
+    //  There are now three callers (the dev simulator, the real-time
+    //  clock, and the late-box-score path), at least two of which can
+    //  fire for the same week. The guard is the cheap half of this; the
+    //  expensive half would have been debugging the standings later.
+    state.finalized = state.finalized || {};
+    if (state.finalized[state.week]) return;
+    state.finalized[state.week] = true;
+
     //  Record what this result was actually built from, so standings
     //  and the season record can be audited later and the UI can stop
     //  describing real results as a preview.
@@ -1933,6 +1969,163 @@
     botTradeOffer();
     save();
   }
+  /* ══════════════════════════════════════════════════════
+     REAL-TIME CLOCK
+
+     Until now the season only moved when somebody pressed a dev-only
+     button. state.day was advanced by simDay() and nothing else, so a
+     league that drafted on Wednesday sat on week 1 forever: the box
+     scores arrived, the games appeared, and not one of them was ever
+     counted, because no slot was ever handed its eligible game.
+
+     This drives the same machinery from the calendar instead.
+
+     THE DAY BOUNDARY IS 6AM ET, NOT MIDNIGHT
+       A 9pm PT tip finishes after midnight Eastern. Rolling the day at
+       midnight would file those box scores under tomorrow and then
+       process "yesterday" before they existed — and a day processed
+       before its box scores land is a day whose games are skipped
+       permanently, because simDay never revisits a day it has passed.
+       Rolling at 6am ET puts every game on the date it was played.
+
+     ONLY COMPLETED DAYS ARE PROCESSED
+       Today is never processed. The sync only writes finished games,
+       so processing a day still in progress would hand out the games
+       that happened to be final at that moment and silently drop the
+       rest. The cost is that tonight's games appear tomorrow morning;
+       the alternative is scores that are quietly wrong forever.
+
+     HOST ONLY
+       Bot lineup decisions and waiver processing are not deterministic
+       and chat posts are side effects, so two devices advancing the
+       same week would produce two different weeks and one of them
+       would win at random. The commissioner's device advances; every
+       other device receives the result through the existing snapshot
+       listener, same as a draft pick.
+
+       The limitation is real and worth stating plainly: if the
+       commissioner never opens the app, the league does not advance.
+       Moving this to a scheduled Cloud Function is the fix, and it is
+       the next job, not this one.
+  ══════════════════════════════════════════════════════ */
+  var CLOCK = { busy: false, quiet: false, lastRun: 0 };
+
+  //  Today in US Eastern, with the fantasy day rolling over at 6am ET.
+  //  Returns a local-midnight Date so it can be differenced against
+  //  the league anchor, which weekRange also builds locally.
+  function etToday() {
+    var shifted = new Date(Date.now() - 6 * 3600e3);
+    var p = {};
+    try {
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(shifted).forEach(function (x) { p[x.type] = x.value; });
+    } catch (e) {
+      //  No Intl time zones: fall back to the device clock. Wrong by at
+      //  most a day for a manager in another time zone, which is far
+      //  better than the clock refusing to run at all.
+      return new Date(shifted.getFullYear(), shifted.getMonth(), shifted.getDate());
+    }
+    return new Date(+p.year, +p.month - 1, +p.day);
+  }
+
+  //  Where the calendar says the league should be.
+  //    week  — league week number containing today
+  //    days  — how many days of that week are COMPLETE (0-6)
+  //  state.day holds the same count, so the two compare directly.
+  function clockTarget() {
+    var anc = (state && state.league && (state.league.seasonStart || state.league.start)) || null;
+    if (!anc) return null;
+    var start = new Date(anc[0], anc[1], anc[2]);
+    var elapsed = Math.floor((etToday().getTime() - start.getTime()) / 864e5);
+    if (elapsed < 0) return { started: false, week: 1, days: 0 };
+    return { started: true, week: Math.floor(elapsed / 7) + 1, days: elapsed % 7 };
+  }
+
+  //  True when the calendar is ahead of where the league actually is.
+  //  Used by the UI so a non-host can be told the week is waiting on
+  //  the commissioner rather than looking at a week that never ends.
+  function clockBehind() {
+    if (!state || state.phase !== 'season') return false;
+    var t = clockTarget();
+    if (!t || !t.started) return false;
+    if (t.week > state.week) return true;
+    return t.week === state.week && state.day < t.days;
+  }
+
+  function runClock() {
+    if (!state || state.phase !== 'season') return Promise.resolve(false);
+    if (!isHost()) return Promise.resolve(false);
+    if (CLOCK.busy) return Promise.resolve(false);
+    if (!clockBehind()) return Promise.resolve(false);
+    CLOCK.busy = true;
+    CLOCK.quiet = true;
+    var movedFrom = state.week;
+    return clockStep(0)
+      .catch(function (e) { console.warn('[Season] clock', e && e.message); })
+      .then(function () {
+        CLOCK.busy = false;
+        CLOCK.quiet = false;
+        CLOCK.lastRun = Date.now();
+        if (!state) return false;
+        //  One notification for the whole catch-up, not one per day.
+        if (state.week !== movedFrom) {
+          try {
+            deviceNotify('weekFinal', 'Week ' + state.week + ' is live',
+              'Set your lineup — ' + weekDates(state.week) + '.');
+          } catch (e) { }
+        }
+        save();
+        try { render(); } catch (e) { }
+        return true;
+      });
+  }
+
+  //  One day, or one week rollover, per step. Recursive rather than a
+  //  loop because each step may have to wait on a Firestore read.
+  //  guard caps it: a season is 19 weeks, so 200 steps cannot be a
+  //  legitimate catch-up and must be a cycle.
+  function clockStep(guard) {
+    if (guard > 200) {
+      console.warn('[Season] clock gave up after 200 steps');
+      return Promise.resolve(false);
+    }
+    if (!state || state.phase !== 'season') return Promise.resolve(false);
+    var t = clockTarget();
+    if (!t || !t.started) return Promise.resolve(false);
+
+    //  A week the calendar has left behind is played out in full.
+    var targetDays = t.week > state.week ? 7 : t.days;
+
+    if (state.day >= targetDays) {
+      if (t.week <= state.week) return Promise.resolve(false);   // caught up
+      //  Week complete. Pull the final box scores, finalise, roll over.
+      return finalizeWeekWhenReal()
+        .catch(function () { })
+        .then(function () {
+          if (!state || state.phase !== 'season') return false;
+          if (state.week >= state.league.weeks) { nextWeek(); return false; }
+          nextWeek();
+          return clockStep(guard + 1);
+        });
+    }
+
+    //  Refresh before each day so the games being handed out are the
+    //  ones the feed actually has.
+    return upgradeWeekToReal(state.week, true)
+      .catch(function () { })
+      .then(function () {
+        if (!state || state.phase !== 'season') return false;
+        var before = state.day;
+        simDay(true);
+        //  simDay refuses past day 6; if nothing moved, stop rather
+        //  than spin.
+        if (state.day === before) return false;
+        return clockStep(guard + 1);
+      });
+  }
+
   // ── Free agency & waivers ───────────────────────────────
   //  After the draft every undrafted player in the league's pool is a
   //  free agent: add him instantly (dropping someone if your roster is
@@ -4722,6 +4915,10 @@
     //  force on open: the cached revision is from a previous session
     //  and must not suppress the first read.
     if (state && state.week) upgradeWeekToReal(state.week, true);
+    //  Advance the calendar before anything renders, so a manager
+    //  opening the app on Tuesday sees Tuesday's week rather than
+    //  whatever week it was when somebody last had the app open.
+    runClock();
     scheduleStatsTick();
     ui.setup = { name: 'Season League', team: sessionName() === 'You' ? 'My Team' : sessionName() + "'s Team", teams: 8, roster: 10, weeks: 12, timer: 90,
       format: 'conference', confMode: 'mix', conferences: MAJORS.slice() };
