@@ -1490,3 +1490,14 @@ button.ss-lab-chip[aria-expanded="true"] { box-shadow: 0 0 0 2px rgba(246, 197, 
 @media (max-width: 520px) {
   #seasonApp .ss-await-host { width: 100%; justify-content: center; font-size: 12.5px; }
 }
+
+/* A game played before the draft finished. Shown, but clearly not
+   counted — a bare 0.0 reads as "he got blanked". */
+#seasonApp .ss-game.void { opacity: .45; }
+#seasonApp .ss-game.void i { font-style: normal; }
+#seasonApp .pc-void {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}

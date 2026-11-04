@@ -1101,9 +1101,33 @@
   }
 
   // ── Season / weeks ──────────────────────────────────────
+  //  First Monday STRICTLY after the given moment. A draft that ends
+  //  on a Monday gets the following Monday, not the same day — you
+  //  cannot play a week that has already started.
+  function nextMondayAfter(ms) {
+    var d = new Date(ms);
+    var m = new Date(d.getFullYear(), d.getMonth(), d.getDate());  // local midnight
+    do { m = new Date(m.getTime() + 864e5); } while (m.getDay() !== 1);
+    return [m.getFullYear(), m.getMonth(), m.getDate()];
+  }
+
   function startSeason() {
     faCfg();
     state.phase = 'season';
+    //  When the draft actually finished. Everything that asks "was
+    //  this game played before anyone had a roster?" keys off this.
+    state.draft.completedAt = Date.now();
+    //  Week 1 is anchored to the DRAFT, not to a fixed calendar date.
+    //  Previously every league measured from a hard-coded 2 November,
+    //  so a league drafting on Sunday 8 November started on a week
+    //  that was already six-sevenths over.
+    //
+    //  Only set for leagues that do not already have an anchor: an
+    //  existing league keeps the one its schedule was built against,
+    //  so nothing shifts underneath a season in progress.
+    if (!state.league.seasonStart) {
+      state.league.seasonStart = nextMondayAfter(state.draft.completedAt);
+    }
     state.week = 1;
     startWeek();
   }
@@ -1239,8 +1263,13 @@
   var SEASON_STATS_ID = '2026-27';
 
   function weekRange(week) {
-    var st = state && state.league && state.league.start
-      ? new Date(state.league.start[0], state.league.start[1], state.league.start[2])
+    //  seasonStart is set from the draft (see startSeason) and wins.
+    //  league.start is the old fixed calendar anchor and stays as the
+    //  fallback, so leagues created before this keep the exact schedule
+    //  they were built against.
+    var anchor = (state && state.league && (state.league.seasonStart || state.league.start)) || null;
+    var st = anchor
+      ? new Date(anchor[0], anchor[1], anchor[2])
       : SEASON_START;
     var a = new Date(st.getTime() + (week - 1) * 7 * 864e5);
     var b = new Date(a.getTime() + 6 * 864e5);
@@ -1374,6 +1403,24 @@
       });
   }
 
+  //  Was this game played before the draft finished?
+  //
+  //  Compared at DAY granularity against the ET date the feed stored,
+  //  not against the tip timestamp: a draft ending Sunday afternoon
+  //  should not retroactively claim Sunday evening's tip-offs, and a
+  //  game earlier that same day should not count either. Same day as
+  //  the draft = does not count.
+  function isPreDraftGame(g) {
+    var done = state && state.draft && state.draft.completedAt;
+    if (!done) return false;                 // draft not finished; nothing to void
+    if (!g || g.day == null || g.day < 0) return false;
+    var r = weekRange(state.week);
+    var gameDay = new Date(r.start.getTime() + g.day * 864e5);
+    var d = new Date(done);
+    var draftDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    return gameDay.getTime() <= draftDay.getTime();
+  }
+
   //  Turns the two collections into the exact structure the
   //  simulation produced, so nothing downstream changes.
   function buildRealWeek(week, real) {
@@ -1399,8 +1446,15 @@
           assists: raw ? raw.ast : 0, steals: raw ? raw.stl : 0,
           blocks: raw ? raw.blk : 0
         };
+        //  A game played before the draft finished cannot count: nobody
+        //  owned these players yet. Keep the real stat line so the card
+        //  can show what happened, but score it zero and flag it so the
+        //  UI says why rather than showing an unexplained blank.
+        var preDraft = isPreDraftGame(g);
         return {
-          day: g.day, line: line, fpts: Math.round(fpts(line) * 10) / 10, dnp: dnp,
+          day: g.day, line: line,
+          fpts: preDraft ? 0 : Math.round(fpts(line) * 10) / 10,
+          dnp: dnp, preDraft: preDraft,
           opp: g.opp, home: g.home, time: g.time, ts: g.ts, os: g.os,
           real: true, final: g.completed
         };
@@ -3354,7 +3408,7 @@
     return '<div class="ss-games">' + g.map(function (x) {
       var played = x.day < state.day;
       var isLocked = slotRec && slotRec.locked && slotRec.locked.playerId === pid && slotRec.locked.day === x.day;
-      return '<span class="ss-game ' + (isLocked ? 'lk' : played ? 'pl' : 'up') + '"><b>' + DAYS[x.day] + '</b>' + (played ? '<i>' + (x.dnp ? 'DNP' : f1(x.fpts)) + '</i>' : '') + '</span>';
+      return '<span class="ss-game ' + (x.preDraft ? 'void' : isLocked ? 'lk' : played ? 'pl' : 'up') + '" ' + (x.preDraft ? 'title="Played before the draft finished, so it does not count"' : '') + '><b>' + DAYS[x.day] + '</b>' + (played ? '<i>' + (x.preDraft ? '\u2013' : x.dnp ? 'DNP' : f1(x.fpts)) + '</i>' : '') + '</span>';
     }).join('') + '</div>';
   }
   function slotStatus(s, idx) {
@@ -3471,6 +3525,7 @@
     return '<span class="' + (w ? 'mx-w' : 'mx-l') + '">' + (w ? 'W ' : 'L ') + Math.max(g.ts, g.os) + '-' + Math.min(g.ts, g.os) + '</span>';
   }
   function statLine(g) {
+    if (g.preDraft) return 'Played before the draft finished \u2014 does not count';
     if (g.dnp) return 'Did not play';
     var L = g.line;
     return L.points + ' PTS, ' + L.rebounds + ' REB, ' + L.assists + ' AST, ' + L.steals + ' STL, ' + L.blocks + ' BLK';
@@ -3782,7 +3837,7 @@
       week = '<div class="pc-sec"><h3>' + weekLabel() + ' <small>' + weekDates(state.week) + '</small></h3>' + (gs.length ? '<div class="pc-week">' + gs.map(function (g) {
         var played = g.day < state.day;
         return '<div class="pc-g' + (played ? ' done' : '') + '"><span class="d">' + DAYS[g.day] + '</span>' + logoHTML(g.opp, 24) + '<span class="o">' + (g.home ? 'vs ' : '@ ') + esc(abbr(g.opp)) + '</span>' +
-          '<span class="r">' + (played ? (g.dnp ? 'DNP' : '<b>' + f1(g.fpts) + '</b>') : esc(g.time || '')) + '</span></div>';
+          '<span class="r">' + (played ? (g.preDraft ? '<em class="pc-void">Pre-draft</em>' : g.dnp ? 'DNP' : '<b>' + f1(g.fpts) + '</b>') : esc(g.time || '')) + '</span></div>';
       }).join('') + '</div>' : '<p class="pc-note">No games this week.</p>') + '</div>';
     }
     var log = draft ? [] : gameLog(pid).slice(0, 8);
