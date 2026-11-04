@@ -1023,6 +1023,15 @@
     var d = draftCfg();
     d.pick = 0; d.log = []; d.status = 'pre'; d.queue = []; d.endsAt = null; d.botAt = null;
     d.order = snake(round1(), state.league.rosterSize);
+    //  Clear the draft stamp and the calendar anchor, or a restart
+    //  keeps the ORIGINAL week 1. Restart a league in December and
+    //  startSeason() would find seasonStart already set, leave it at
+    //  the old November Monday, and open on a week that finished
+    //  weeks ago — the exact bug the draft anchoring was added to fix,
+    //  reintroduced by pressing Restart.
+    d.completedAt = null;
+    state.league.seasonStart = null;
+    state.realWeeks = null;
     state.phase = 'draft'; state.week = 0; state.day = 0;
     state.games = {}; state.lineups = {}; state.results = [];
     state.kinds = {}; state.playoff = null; state.champion = null; state.fa = null; state.trades = null; state.injuries = null; state.injuryNews = null;
