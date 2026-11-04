@@ -5531,6 +5531,29 @@
     open: open, close: close,
     onAuthChanged: onAuthChanged,
     // exposed for testing in the lab
-    _debug: function () { return state; }
+    _debug: function () { return state; },
+    //  Read-only snapshot of what the real-time clock thinks. Exists so
+    //  "did the new build load, and is the calendar right?" is one line
+    //  in the console instead of an inference from the UI. Changes
+    //  nothing: runClock is not exposed, so this cannot advance a week.
+    _clock: function () {
+      if (!state) return { loaded: true, league: null, note: 'no season league on this device' };
+      var t = clockTarget();
+      return {
+        loaded: true,
+        build: 'clock-v1',
+        code: (state.league && state.league.code) || null,
+        phase: state.phase,
+        at: { week: state.week, day: state.day },
+        target: t,
+        behind: clockBehind(),
+        isHost: isHost(),
+        anchor: (state.league && (state.league.seasonStart || state.league.start)) || null,
+        anchorSource: (state.league && state.league.seasonStart) ? 'seasonStart'
+          : (state.league && state.league.start) ? 'start (legacy)' : 'none',
+        weeksFinalized: Array.from(new Set((state.results || []).map(function (r) { return r.week; }))).sort(function (a, b) { return a - b; }),
+        etToday: (function () { var d = etToday(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })()
+      };
+    }
   };
 })(window, document);
