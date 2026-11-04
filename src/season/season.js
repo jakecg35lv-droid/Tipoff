@@ -1871,9 +1871,24 @@
     //  clock, and the late-box-score path), at least two of which can
     //  fire for the same week. The guard is the cheap half of this; the
     //  expensive half would have been debugging the standings later.
-    state.finalized = state.finalized || {};
-    if (state.finalized[state.week]) return;
-    state.finalized[state.week] = true;
+    //
+    //  DERIVED, NOT STORED, AND DELIBERATELY SO
+    //  The obvious version of this guard is a state.finalized map. It
+    //  would also have been wrong for every league that already exists:
+    //  a league mid-season has results in state.results and no such
+    //  map, so the flag would read "not finalised", the clock would
+    //  finalise the current week a second time, and that league's
+    //  standings would silently double-count a week — caused by the
+    //  very guard meant to prevent it.
+    //
+    //  state.results is the actual record of which weeks are done, it
+    //  is written by this function and nothing else (verified: one
+    //  push site in the whole module), and it is already present in
+    //  every stored league. So ask it directly. No migration, no new
+    //  field to keep in step, and correct on leagues created before
+    //  this code existed.
+    var already = state.results.some(function (r) { return r.week === state.week; });
+    if (already) return;
 
     //  Record what this result was actually built from, so standings
     //  and the season record can be audited later and the UI can stop

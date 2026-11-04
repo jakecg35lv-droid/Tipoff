@@ -1895,6 +1895,186 @@ async function runSeasonSyncESPN(opts) {
   return report;
 }
 
+/* ══════════════════════════════════════════════════════════
+   SEASON FIXTURES — games that have NOT been played yet
+
+   WHY THIS IS SEPARATE FROM runSeasonSyncESPN
+     That function syncs exactly one date: today. It is the right shape
+     for box scores, which only exist after a tip. But it means nothing
+     ever writes a future date, so the app could not answer the first
+     question any manager asks — "who do my players have this week?"
+     A manager who joined mid-week saw an empty screen with no way to
+     tell whether his roster was idle or the app simply did not know.
+
+   WHY IT IS CHEAP
+     A future game has no box score, so there is nothing to fetch
+     beyond the scoreboard itself: one API call per date, versus the
+     dozens of summary calls a played date costs. ESPN rejects a date
+     RANGE on this endpoint (dates=A-B returns HTTP 400, verified), so
+     it is one call per day, walked forward.
+
+     At FIXTURE_DAYS=14 run once daily that is ~420 calls a month
+     against a 60,000 ceiling. It shares the same health record and
+     circuit breaker as every other sync, so it cannot overrun the
+     budget on its own.
+
+   WHAT IT WRITES
+     The same games/{eventId} documents, with merge:true and the same
+     `schools` array the client queries on. A fixture written today is
+     simply overwritten with scores by the box-score sync on the day it
+     is played — no second code path, no reconciliation.
+══════════════════════════════════════════════════════════ */
+const FIXTURE_DAYS = 14;
+
+async function runSeasonFixtures(opts) {
+  const options = opts || {};
+  const days = Math.max(1, Math.min(28, parseInt(options.days, 10) || FIXTURE_DAYS));
+  const report = {
+    ok: true, season: SEASON_ID, dryRun: !!options.dryRun,
+    days: days, from: null, to: null,
+    datesChecked: 0, datesSkipped: 0, gamesSeen: 0,
+    relevantGames: 0, fixturesWritten: 0, apiCalls: 0, perDate: {},
+  };
+
+  const now = new Date();
+  const health = await readHealth();
+  const client = makeApiClient(health, now);
+
+  if (health.breakerUntil > Date.now()) {
+    report.ok = false; report.reason = 'circuit breaker open';
+    return report;
+  }
+
+  try {
+    const start = options.startDate ? new Date(options.startDate + 'T12:00:00Z') : now;
+    const seasonRef = db.collection('seasonStats').doc(SEASON_ID);
+    const batch = db.batch();
+
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start.getTime() + i * 864e5);
+      const dateStr = espnDateParam(d);
+      const iso = isoFromEspnDate(dateStr);
+      if (i === 0) report.from = iso;
+      report.to = iso;
+
+      //  Outside the regular season there is nothing worth a call.
+      if (!withinSeasonWindow(iso)) { report.datesSkipped++; continue; }
+
+      let sb;
+      try {
+        const res = await client.apiFetch(
+          `${ESPN}/scoreboard?dates=${dateStr}&${ESPN_DIVISION_I}&limit=500`, 'season-fixtures');
+        if (!res.ok) { report.perDate[iso] = `HTTP ${res.status}`; continue; }
+        sb = await res.json();
+      } catch (e) { report.perDate[iso] = 'fetch failed'; continue; }
+
+      report.datesChecked++;
+      const events = sb.events || [];
+      report.gamesSeen += events.length;
+      let kept = 0;
+
+      for (const ev of events) {
+        const comp = (ev.competitions || [])[0];
+        if (!comp) continue;
+        const competitors = (comp.competitors || []).map(c => ({
+          school: ((c.team || {}).location) || '',
+          abbr: ((c.team || {}).abbreviation) || '',
+          homeAway: c.homeAway,
+          score: toInt(c.score),
+          winner: c.winner === true,
+        }));
+        if (!competitors.some(c => SEASON_SCHOOLS.has(normName(c.school)))) continue;
+        report.relevantGames++;
+        kept++;
+
+        const stType = (comp.status || {}).type || {};
+        const gameState = stType.state || 'pre';
+        const completed = stType.completed === true;
+        const home = competitors.find(c => c.homeAway === 'home') || competitors[0] || {};
+        const away = competitors.find(c => c.homeAway === 'away') || competitors[1] || {};
+
+        if (options.dryRun) continue;
+        //  merge:true matters here. If the box-score sync has already
+        //  written this game today, this must not blank its scores —
+        //  and because every field below is re-derived from the same
+        //  scoreboard payload, a merge is always safe.
+        batch.set(seasonRef.collection('games').doc(String(ev.id)), {
+          eventId: String(ev.id),
+          date: iso,
+          startsAt: ev.date || null,
+          shortName: ev.shortName || ev.name || '',
+          state: gameState,
+          completed: completed,
+          statusDetail: stType.shortDetail || stType.detail || '',
+          home: { school: home.school, abbr: home.abbr, score: home.score },
+          away: { school: away.school, abbr: away.abbr, score: away.score },
+          winnerSchool: completed ? ((competitors.find(c => c.winner) || {}).school || null) : null,
+          schools: [normName(home.school), normName(away.school)].filter(Boolean),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        report.fixturesWritten++;
+      }
+      report.perDate[iso] = kept;
+    }
+
+    if (!options.dryRun && report.fixturesWritten) {
+      await batch.commit();
+      //  Bump the same heartbeat the client's revision gate reads, so
+      //  an open app notices new fixtures instead of waiting out its
+      //  cache.
+      await seasonRef.set({
+        rev: admin.firestore.FieldValue.increment(1),
+        fixturesUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        season: SEASON_ID,
+      }, { merge: true });
+    }
+  } catch (e) {
+    report.ok = false;
+    report.reason = e.message;
+    console.error('[Tipoff fixtures]', e);
+  }
+
+  try { await commitHealth(health, client.state, now); } catch (e) {}
+  report.apiCalls = client.state.calls;
+  report.callsThisMonth = health.calls;
+  return report;
+}
+
+//  Once a day, early morning ET: the slate for the next two weeks does
+//  not change often enough to justify polling it.
+exports.syncSeasonFixtures = onSchedule(
+  {
+    schedule: '15 7 * * *',
+    timeZone: 'America/New_York',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+  },
+  async () => {
+    const report = await runSeasonFixtures({});
+    console.log('[Tipoff fixtures]', JSON.stringify(report));
+  }
+);
+
+// On-demand:
+//   /seasonFixturesNow                        (dry run, next 14 days)
+//   /seasonFixturesNow?write=1
+//   /seasonFixturesNow?write=1&days=21&start=2026-11-09
+exports.seasonFixturesNow = onRequest(
+  { timeoutSeconds: 300, memory: '512MiB' },
+  async (req, res) => {
+    try {
+      const report = await runSeasonFixtures({
+        dryRun: req.query.write !== '1',
+        days: req.query.days,
+        startDate: req.query.start || undefined,
+      });
+      res.status(200).json(report);
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+);
+
 exports.syncSeasonStats = onSchedule(
   {
     schedule: 'every 10 minutes',
