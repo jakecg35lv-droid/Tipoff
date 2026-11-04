@@ -12434,3 +12434,90 @@ select:focus {
   .splash-account { width: 100%; justify-content: flex-start; }
   .sa-email { max-width: calc(100vw - 132px); font-size: 12.5px; }
 }
+
+/* ── Fixture list: events that are not brackets ──────────────
+   Battle 4 Atlantis pods, the Jimmy V doubleheader, the ESPN Events
+   Invitational group. Drawing a knockout bracket for these invents
+   rounds that do not exist, so they get the real schedule instead. */
+.fixture-wrap { padding: 4px 0 24px; }
+
+.fixture-note {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2, #b3c4d6);
+}
+.fixture-tba {
+  margin: 0 0 20px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.fx-day { margin-bottom: 22px; }
+.fx-day-h {
+  margin: 0 0 10px;
+  font: 600 12px var(--font-ui);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fx-game {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+}
+.fx-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.fx-team:last-of-type { justify-content: flex-end; text-align: right; }
+.fx-vs {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.fx-meta {
+  min-width: 96px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.fx-score { font-size: 15px; font-weight: 700; color: var(--text); }
+.fx-final, .fx-live {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.fx-final { color: var(--muted); }
+.fx-live { color: #4ecb96; }
+
+@media (max-width: 560px) {
+  /* Stack so two long school names never collide on a phone. */
+  .fx-game {
+    grid-template-columns: 1fr auto;
+    row-gap: 6px;
+    padding: 12px;
+  }
+  .fx-vs { display: none; }
+  .fx-team:last-of-type { justify-content: flex-start; text-align: left; }
+  .fx-meta { grid-column: 1 / -1; text-align: left; min-width: 0; }
+  .fx-final, .fx-live { display: inline; margin-left: 8px; }
+}

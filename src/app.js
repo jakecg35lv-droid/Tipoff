@@ -3345,28 +3345,60 @@ const TOURNAMENTS = {
       ]
     },
     {
+      //  SOURCE: Xavier Athletics bracket release (31 Aug 2026),
+      //  Virginia Athletics schedule, Last Word on Sports (24 Jun 2026),
+      //  and the official Atlantis Signature Series schedule page.
+      //  All re-checked 4 Nov 2026.
+      //
+      //  FORMAT: two pods of four. Every team plays exactly TWO games
+      //  against pod-mates. No knockout rounds, nobody is eliminated,
+      //  and per the reporting there is no overall champion.
+      //
+      //  This was listed as an 8-team single-elimination bracket with
+      //  Quarterfinals / Semifinals / Championship. None of those rounds
+      //  exist. The earlier comment here even said "the group winners
+      //  only meet in the final" — a final that was inferred, not
+      //  sourced. RealGM still shows a championship game; it is stale
+      //  and contradicts the schools' own releases.
       id: 'b4a-2026',
       name: 'Battle 4 Atlantis',
-      subtitle: '15th Anniversary Edition',
-      location: 'Imperial Arena, Bahamas',
-      dates: 'Nov 25–27, 2026',
+      subtitle: 'Two pods of four · every team plays twice',
+      location: 'Imperial Arena, Paradise Island, Bahamas',
+      dates: 'Nov 25 & 27, 2026',
       startMs: new Date('2026-11-25').getTime(),
-      bracketFormat: 'single8',
-      roundNames: ['Quarterfinals', 'Semifinals', 'Championship'],
+      bracketFormat: 'pod',
+      roundNames: [],
       canSelect: true,
       playerRegion: 'Atlantis',
-      //  Battle 4 Atlantis is not seeded either: it splits the field
-      //  into two groups of four. The old seeds produced four games
-      //  that do not exist AND mixed the two groups together, so the
-      //  bracket halves were wrong on top of the pairings.
       seeded: false,
-      teams: ['Penn State', 'Marquette', 'Memphis', 'Mississippi State', 'Texas A&M', 'Virginia', 'Wake Forest', 'Xavier'],
+      teams: ['Marquette', 'Texas A&M', 'Virginia', 'Xavier',
+              'Memphis', 'Mississippi State', 'Penn State', 'Wake Forest'],
       seededTeams: [],
-      //  Official bracket, released 31 Aug 2026.
-      //  Group 1: Marquette, Texas A&M, Virginia, Xavier
-      //  Group 2: Memphis, Mississippi State, Penn State, Wake Forest
-      //  Games 0-1 are Group 1, games 2-3 are Group 2, so the group
-      //  winners only meet in the final.
+      pods: [
+        { name: 'Pod 1', teams: ['Virginia', 'Marquette', 'Texas A&M', 'Xavier'] },
+        { name: 'Pod 2', teams: ['Wake Forest', 'Mississippi State', 'Memphis', 'Penn State'] }
+      ],
+      //  Pod 1 times and networks are published. Pod 2's pairings are
+      //  confirmed but its tip times are not, so they are left blank
+      //  rather than invented.
+      fixtures: [
+        { day: 'Wednesday, Nov 25', games: [
+          { home: 'Virginia', away: 'Marquette', time: '12:00 PM ET', tv: 'ESPN' },
+          { home: 'Xavier', away: 'Texas A&M', time: '2:30 PM ET', tv: 'ESPN2' },
+          { home: 'Wake Forest', away: 'Mississippi State' },
+          { home: 'Memphis', away: 'Penn State' }
+        ] },
+        { day: 'Friday, Nov 27', games: [
+          { home: 'Xavier', away: 'Virginia', time: '11:00 AM ET', tv: 'ESPN2' },
+          { home: 'Texas A&M', away: 'Marquette', time: '5:00 PM ET', tv: 'SEC Network' }
+        ] }
+      ],
+      //  Pod 2's second-round pairings have not been published. Pod 1
+      //  crosses over (A-B, C-D on Wednesday becomes C-A, D-B on
+      //  Friday), so Pod 2 almost certainly does the same — but
+      //  "almost certainly" is exactly the reasoning that produced
+      //  every wrong fixture in this file. Left out until sourced.
+      scheduleNote: 'Pod 2 plays its second game on Nov 27. Pairings and tip times are not published yet.',
       matchups: [
         ['Virginia', 'Marquette'],
         ['Xavier', 'Texas A&M'],
@@ -3410,48 +3442,61 @@ const TOURNAMENTS = {
       seededTeams: []
     },
     {
+      //  SOURCE: ESPN Events, Jimmy V Classic page (checked 4 Nov 2026).
+      //  FORMAT: a four-team DOUBLEHEADER. Two standalone games on one
+      //  night, no bracket, no second round, no champion. It was listed
+      //  here as an 8-team single-elimination bracket, which would have
+      //  invented a semifinal and a final that do not exist.
       id: 'jimmyv-2026',
       name: 'Jimmy V Classic',
-      subtitle: 'Presented by Modelo · 32nd Year',
+      subtitle: 'Doubleheader · two games, one night',
       location: 'Madison Square Garden, New York',
       dates: 'Dec 8, 2026',
       startMs: new Date('2026-12-08').getTime(),
-      bracketFormat: 'single8',
-      roundNames: ['Quarterfinals', 'Semifinals', 'Championship'],
+      bracketFormat: 'doubleheader',
+      roundNames: [],
+      seeded: false,
       canSelect: false, comingSoon: true,
-      teams: [], seededTeams: []
+      teams: ['Houston', 'Alabama', 'Georgia', 'Duke'],
+      matchups: [['Houston', 'Alabama'], ['Georgia', 'Duke']],
+      seededTeams: []
     },
     {
+      //  SOURCE: emeraldcoastclassic.com (checked 4 Nov 2026).
+      //  Dates were Nov 27-28 here and the town was Niceville; the 2026
+      //  event is Nov 23-24 in DESTIN. The men's field is not published
+      //  yet, so teams stay empty rather than guessed.
       id: 'emerald-2026',
       name: 'Emerald Coast Classic',
-      subtitle: '',
-      location: 'Niceville, FL',
-      dates: 'Nov 27–28, 2026',
-      startMs: new Date('2026-11-27').getTime(),
+      subtitle: 'Field not announced',
+      location: 'Destin, FL',
+      dates: 'Nov 23–24, 2026',
+      startMs: new Date('2026-11-23').getTime(),
       bracketFormat: 'single8',
-      roundNames: ['Quarterfinals', 'Semifinals', 'Championship'],
-      canSelect: false, comingSoon: true,
-      teams: [], seededTeams: []
-    },
-    {
-      id: 'lvclassic-2026',
-      name: 'Las Vegas Classic',
-      subtitle: 'Resorts World Las Vegas',
-      location: 'Las Vegas, NV',
-      dates: 'Nov 27–28, 2026',
-      startMs: new Date('2026-11-27').getTime(),
-      bracketFormat: 'single8',
-      roundNames: ['Quarterfinals', 'Semifinals', 'Championship'],
+      roundNames: ['Semifinals', 'Championship'],
       canSelect: false, comingSoon: true,
       teams: [], seededTeams: []
     }
+    //  REMOVED: "Las Vegas Classic".
+    //
+    //  The only real Nov 2026 event by that name is the Resorts World
+    //  Las Vegas Classic, 25-28 November at Valley High School — not
+    //  27-28 at Resorts World as listed here. More to the point its
+    //  Division I field is UC Davis, Omaha, Pacific and Jacksonville
+    //  State, with six Division II sides alongside them. Not one of
+    //  those schools is in this app's 79-school pool, so a league could
+    //  never draft a single player from it.
+    //
+    //  Advertising an event nobody can play is worse than not listing
+    //  it. If it ever draws power-conference teams it can come back,
+    //  with a source note like the others.
   ],
   conference: [
     { id: 'big12-2027', name: 'Big 12 Tournament', subtitle: '16-team field', location: 'T-Mobile Center, Kansas City, MO', dates: 'Mar 9–14, 2027', startMs: new Date('2027-03-09').getTime(), bracketFormat: 'single16', roundNames: ['Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'], canSelect: false, comingSoon: true, teams: [], seededTeams: [] },
     { id: 'acc-2027', name: 'ACC Tournament', subtitle: '16-team field', location: 'Gainbridge Fieldhouse, Indianapolis, IN', dates: 'Mar 10–14, 2027', startMs: new Date('2027-03-10').getTime(), bracketFormat: 'single16', roundNames: ['Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'], canSelect: false, comingSoon: true, teams: [], seededTeams: [] },
-    { id: 'big10-2027', name: 'Big Ten Tournament', subtitle: '18-team field', location: 'Gainbridge Fieldhouse, Indianapolis, IN', dates: 'Mar 10–14, 2027', startMs: new Date('2027-03-10').getTime(), bracketFormat: 'single16', roundNames: ['Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'], canSelect: false, comingSoon: true, teams: [], seededTeams: [] },
+    { id: 'big10-2027', name: 'Big Ten Tournament', subtitle: '18-team field', location: 'Gainbridge Fieldhouse, Indianapolis, IN', dates: 'Mar 10–14, 2027', startMs: new Date('2027-03-10').getTime(), /* 18 teams: needs byes, not a flat 16-slot bracket */ bracketFormat: 'single18', roundNames: ['Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'], canSelect: false, comingSoon: true, teams: [], seededTeams: [] },
     { id: 'sec-2027', name: 'SEC Tournament', subtitle: '16-team field', location: 'Bridgestone Arena, Nashville, TN', dates: 'Mar 10–14, 2027', startMs: new Date('2027-03-10').getTime(), bracketFormat: 'single16', roundNames: ['Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'], canSelect: false, comingSoon: true, teams: [], seededTeams: [] },
-    { id: 'bigeast-2027', name: 'Big East Tournament', subtitle: '11-team field', location: 'Madison Square Garden, New York', dates: 'Mar 10–13, 2027', startMs: new Date('2027-03-10').getTime(), bracketFormat: 'single16', roundNames: ['Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'], canSelect: false, comingSoon: true, teams: [], seededTeams: [] },
+    { id: 'bigeast-2027', name: 'Big East Tournament', subtitle: '11-team field', location: 'Madison Square Garden, New York', dates: 'Mar 10–13, 2027', startMs: new Date('2027-03-10').getTime(), /* 11 teams: five get byes */ bracketFormat: 'single11', roundNames: ['Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'], canSelect: false, comingSoon: true, teams: [], seededTeams: [] },
     { id: 'american-2027', name: 'American Tournament', subtitle: '', location: 'Dickies Arena, Fort Worth, TX', dates: 'Mar 2027', startMs: new Date('2027-03-06').getTime(), bracketFormat: 'single16', roundNames: ['Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'], canSelect: false, comingSoon: true, teams: [], seededTeams: [] },
     { id: 'a10-2027', name: 'Atlantic 10 Tournament', subtitle: '', location: 'Barclays Center, Brooklyn, NY', dates: 'Mar 2027', startMs: new Date('2027-03-06').getTime(), bracketFormat: 'single16', roundNames: ['Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'], canSelect: false, comingSoon: true, teams: [], seededTeams: [] },
     { id: 'mwc-2027', name: 'Mountain West Tournament', subtitle: '', location: 'Thomas & Mack Center, Las Vegas', dates: 'Mar 2027', startMs: new Date('2027-03-06').getTime(), bracketFormat: 'single16', roundNames: ['Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'], canSelect: false, comingSoon: true, teams: [], seededTeams: [] }
@@ -3488,7 +3533,11 @@ const TOURNAMENTS = {
       location: 'Various sites (Final: MSG, New York)',
       dates: 'Mar 2027',
       startMs: new Date('2027-03-16').getTime(),
-      bracketFormat: 'single16',
+      //  A 32-team field was declared as 'single16'. The round names
+      //  below already describe five rounds, which is 32 teams — so the
+      //  format string and the rounds contradicted each other, and the
+      //  generator only knows how to build 8, 16 and 64.
+      bracketFormat: 'single32',
       roundNames: ['Round of 32', 'Round of 16', 'Quarterfinals', 'Semifinals', 'Championship'],
       canSelect: false, comingSoon: true,
       teams: [], seededTeams: []
@@ -4412,6 +4461,19 @@ function renderBracket() {
   const fmt = state.selectedTournament.bracketFormat;
   const bracketData = getBracketState() || { regions: {}, finalFour: [null, null], championship: null };
 
+  //  ── Events that are not brackets ─────────────────────────
+  //  Battle 4 Atlantis is two pods of four, every team playing two
+  //  games, nobody eliminated and no champion. The Jimmy V Classic is
+  //  two standalone games on one night. The ESPN Events Invitational
+  //  is six-team group play.
+  //
+  //  Drawing a knockout bracket for any of them invents rounds that do
+  //  not exist. Draw the actual schedule instead.
+  if (fmt === 'pod' || fmt === 'doubleheader' || fmt === 'group6') {
+    renderFixtureList(content, state.selectedTournament);
+    return;
+  }
+
   if (fmt === 'ncaa64') {
     const activeTab = document.querySelector('.bracket-tab.active');
     const region = activeTab ? activeTab.dataset.region : 'East';
@@ -4426,6 +4488,76 @@ function renderBracket() {
     const customRoundNames = state.selectedTournament.roundNames || null;
     renderRegionSimple(content, regData, bracketData, regData.name, customRoundNames);
   }
+}
+
+//  ── Schedule view for non-elimination events ──────────────
+//  Renders the fixtures as they are actually played, grouped by day,
+//  with live scores from the same feed the bracket uses. No winners
+//  advance anywhere, because in these formats they do not.
+//
+//  t.fixtures: [{ day: 'Wed Nov 25', games: [{ home, away, time, tv }] }]
+//  Falls back to t.matchups when no day grouping is supplied.
+function renderFixtureList(content, t) {
+  const days = Array.isArray(t.fixtures) && t.fixtures.length
+    ? t.fixtures
+    : [{ day: t.dates || '', games: (t.matchups || []).map(m => ({ home: m[0], away: m[1] })) }];
+
+  const totalGames = days.reduce((n, d) => n + (d.games || []).length, 0);
+  if (!totalGames) {
+    content.innerHTML = '<p style="color:var(--muted);padding:20px">Schedule not announced yet.</p>';
+    return;
+  }
+
+  //  Per-team game count, so a manager can see at a glance that every
+  //  player gets the same number of games — the thing that makes this
+  //  format different from a bracket.
+  const counts = {};
+  days.forEach(d => (d.games || []).forEach(g => {
+    counts[g.home] = (counts[g.home] || 0) + 1;
+    counts[g.away] = (counts[g.away] || 0) + 1;
+  }));
+  const per = [...new Set(Object.values(counts))];
+  //  Only state a game count when every team genuinely has the same
+  //  number listed. A partial schedule must not read as a fact.
+  const perLabel = per.length === 1
+    ? 'Every team plays ' + per[0] + ' game' + (per[0] === 1 ? '' : 's') + '. Nobody is eliminated.'
+    : 'Nobody is eliminated in this format.';
+
+  const live = (window._liveGames && typeof _liveGames === 'object') ? _liveGames : {};
+  function scoreFor(home, away) {
+    const hit = Object.values(live).find(g =>
+      g && ((_sameSchool(g.home && g.home.school, home) && _sameSchool(g.away && g.away.school, away)) ||
+            (_sameSchool(g.home && g.home.school, away) && _sameSchool(g.away && g.away.school, home))));
+    if (!hit) return '';
+    const hs = (hit.home && hit.home.score), as = (hit.away && hit.away.score);
+    if (hs == null || as == null) return '';
+    const flip = !_sameSchool(hit.home && hit.home.school, home);
+    return '<span class="fx-score">' + (flip ? as : hs) + '–' + (flip ? hs : as) + '</span>' +
+      (hit.completed ? '<span class="fx-final">Final</span>' : '<span class="fx-live">Live</span>');
+  }
+
+  content.innerHTML =
+    '<div class="fixture-wrap">' +
+      '<p class="fixture-note">' + esc(perLabel) + '</p>' +
+      (t.scheduleNote ? '<p class="fixture-tba">' + esc(t.scheduleNote) + '</p>' : '') +
+      days.map(d =>
+        '<div class="fx-day"><h4 class="fx-day-h">' + esc(d.day || '') + '</h4>' +
+        (d.games || []).map(g =>
+          '<div class="fx-game">' +
+            '<span class="fx-team">' + getSchoolLogoHTML(g.home, 22) + esc(g.home) + '</span>' +
+            '<span class="fx-vs">vs</span>' +
+            '<span class="fx-team">' + getSchoolLogoHTML(g.away, 22) + esc(g.away) + '</span>' +
+            '<span class="fx-meta">' + (scoreFor(g.home, g.away) || esc([g.time, g.tv].filter(Boolean).join(' · '))) + '</span>' +
+          '</div>').join('') +
+        '</div>').join('') +
+    '</div>';
+}
+
+//  Loose school-name match, same normalisation the stats sync uses.
+function _sameSchool(a, b) {
+  if (!a || !b) return false;
+  const n = s => String(s).toLowerCase().replace(/[.']/g, '').replace(/\s+/g, ' ').trim();
+  return n(a) === n(b);
 }
 
 function renderRegionSimple(content, regData, bracketData, region, customRoundNames) {
