@@ -345,6 +345,14 @@
   //  Returns true when the current account may run league-wide draft
   //  controls. Refuses out loud rather than silently doing nothing —
   //  a dead button teaches people to tap it harder.
+  //  The seat the league was created from. Shown on the Teams page so
+  //  it is obvious who can start the draft, rather than people finding
+  //  out by tapping a button that refuses them.
+  function isCommissionerSeat(t) {
+    var host = state && state.league && state.league.host;
+    return !!(host && t && t.uid && t.uid === host);
+  }
+
   function requireCommissioner(what) {
     if (isHost()) return true;
     try {
@@ -3729,7 +3737,20 @@
       return '<div class="team-card' + (t.isUser ? ' current-user' : '') + (i < 3 && state.results.length ? ' rank-' + (i + 1) + '-card' : '') + '">' +
         '<div class="team-card-header">' + avatarHTML(t.name, 38) +
           '<div class="tc-header-info"><span class="tc-name">' + esc(t.name) + '</span><span class="tc-badges">' +
-            (onClockNow ? '<span class="tc-onclock">On Clock</span>' : '') + (t.isUser ? '<span class="tc-you">You</span>' : '<span class="tc-commissioner">Bot</span>') +
+            //  Three states, not two. This read `isUser ? 'You' : 'Bot'`,
+            //  so every seat that was not yours was labelled a bot —
+            //  including real people who had joined and were sitting
+            //  there with their own names on screen.
+            //
+            //  uid is the authority on whether a human holds a seat;
+            //  it is what markMine() and the draft logic both use. The
+            //  `bot` flag is only set at creation and cleared on join,
+            //  so it can drift. uid cannot.
+            (onClockNow ? '<span class="tc-onclock">On Clock</span>' : '') +
+            (t.isUser ? '<span class="tc-you">You</span>'
+              : t.uid ? '<span class="tc-manager">Player</span>'
+              : '<span class="tc-commissioner">Bot</span>') +
+            (isCommissionerSeat(t) ? '<span class="tc-commish">Commissioner</span>' : '') +
           '</span></div>' +
           '<span class="tc-rank-badge' + (i < 3 && state.results.length ? ' ' + medal[i] : '') + '">' + (i + 1) + '</span>' +
         '</div>' +

@@ -12521,3 +12521,39 @@ select:focus {
   .fx-meta { grid-column: 1 / -1; text-align: left; min-width: 0; }
   .fx-final, .fx-live { display: inline; margin-left: 8px; }
 }
+
+/* ── Team card: who is actually sitting in this seat ─────────
+   Three states, not two. The card used to read "You" or "Bot", so a
+   real manager who had joined was labelled a bot on everyone else's
+   screen. Driven by uid, which is the same thing markMine() and the
+   draft logic use to decide whether a seat is human. */
+.tc-manager {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: rgba(78, 203, 150, 0.14);
+  border: 1px solid rgba(78, 203, 150, 0.3);
+  color: #4ecb96;
+}
+
+/* The seat that created the league — the only one that can start,
+   pause or resume the draft. */
+.tc-commish {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: rgba(246, 197, 78, 0.14);
+  border: 1px solid rgba(246, 197, 78, 0.32);
+  color: var(--gold, #f6c54e);
+}
+
+/* Several badges can appear together (On Clock + Player +
+   Commissioner), so let them wrap rather than overflow the card. */
+.tc-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
