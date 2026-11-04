@@ -59,6 +59,23 @@
     app_returned:           1,
     notification_permission_granted: 1,
     notification_permission_denied:  1,
+
+    //  ── Regular Season mode ─────────────────────────────────
+    //  Deliberately NOT reusing league_created / draft_completed from
+    //  the tournament list. The two modes have different funnels and
+    //  different failure points, and merging them means a healthy
+    //  tournament number can hide a broken season one — which is
+    //  exactly the blind spot being fixed here: season.js had zero
+    //  analytics calls in 5,200 lines, so every season league created
+    //  so far is invisible.
+    season_league_created:  1,
+    season_league_joined:   1,
+    season_draft_scheduled: 1,
+    season_draft_started:   1,
+    season_draft_completed: 1,
+    season_pick_made:       1,
+    season_lineup_set:      1,
+    season_week_advanced:   1,
   };
 
   // ── PII scrubbing ───────────────────────────────────────
@@ -137,9 +154,34 @@
 
     window.posthog.init(POSTHOG_KEY, {
       api_host: POSTHOG_HOST,
-      // We call identify() ourselves with the Firebase UID.
+      //  ── autocapture OFF, pageviews ON ───────────────────
+      //  These two are not the same trade-off and were wrongly set
+      //  together.
+      //
+      //  autocapture is the invasive one: it records every click and
+      //  input interaction and ships the element's text with it, which
+      //  for this app would mean chat messages and team names. It stays
+      //  off, permanently.
+      //
+      //  capture_pageview just records "a page was viewed, here is the
+      //  URL". Turning it off cost far more than it bought: with zero
+      //  $pageview events, PostHog's Web Analytics tab, the starter
+      //  dashboard, sessions, bounce rate and entry/exit pages are all
+      //  permanently blank — verified, the $pageview count over 120
+      //  days was exactly zero. The tool looked broken on every screen
+      //  PostHog shows first, which is a good way to stop trusting your
+      //  own analytics.
       autocapture: false,
-      capture_pageview: false,
+      capture_pageview: true,
+      capture_pageleave: true,
+      //  This app is a single-page app that never navigates, so the
+      //  automatic pageview fires once on load and never again. Route
+      //  changes are reported explicitly via Analytics.page() below.
+      //
+      //  $web_vitals was the single highest-volume event in the project
+      //  (560, more than every product event combined) and nothing
+      //  reads it. Off until something does.
+      capture_performance: { web_vitals: false },
       // Masks all text in session replay by default. Chat messages and
       // email fields must never end up in a recording.
       session_recording: {
@@ -191,6 +233,36 @@
   }
 
   /**
+   * Report a route change in this single-page app.
+   *
+   * The automatic pageview fires once, on load, and the URL never
+   * changes after that — so without this every session looks like one
+   * visit to "/" no matter how much of the app someone used. Sends a
+   * real $pageview with a synthetic path, which is what makes PostHog's
+   * pageview and funnel tooling usable.
+   *
+   * `name` must be a short route slug ('draft', 'lineup'), never
+   * free text — it becomes a URL.
+   */
+  var lastPage = null;
+  function page(name, props) {
+    if (!ready || !window.posthog || !name) return;
+    var slug = String(name).toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40);
+    if (!slug) return;
+    //  Re-rendering the same screen is not a new pageview. The season
+    //  module repaints on every Firestore snapshot, which would
+    //  otherwise turn one draft into hundreds of pageviews.
+    if (slug === lastPage) return;
+    lastPage = slug;
+    try {
+      window.posthog.capture('$pageview', scrubProps(
+        Object.assign({ $current_url: location.origin + '/#' + slug, route: slug }, props || {}), 0));
+    } catch (e) {
+      console.warn('[Analytics] page failed:', e && e.message);
+    }
+  }
+
+  /**
    * Acquisition source. Reads UTM params and ?ref= on first load and
    * stores them, so a signup three screens later still knows where the
    * person came from.
@@ -222,6 +294,7 @@
   window.Analytics = {
     init: init,
     track: track,
+    page: page,
     identify: identify,
     reset: reset,
     captureAcquisition: captureAcquisition,

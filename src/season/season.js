@@ -321,6 +321,28 @@
     }, function (e) { console.warn('[Season] snapshot error:', e && e.message); });
   }
 
+  // ── Analytics ────────────────────────────────────────────
+  //  This module had no analytics at all. 5,200 lines covering league
+  //  creation, joining, the whole draft and every lineup change, and
+  //  none of it reached PostHog — so every season league built so far
+  //  is invisible, while the tournament side (app.js) reports fully.
+  //  Season events are named season_* rather than reusing the
+  //  tournament names, so a healthy tournament funnel cannot mask a
+  //  broken season one.
+  //
+  //  Never pass a team name, league name, chat text or anything a user
+  //  typed. analytics.js would scrub it, but the rule is to not send it.
+  function track(event, props) {
+    try {
+      if (window.Analytics) window.Analytics.track(event, props || {});
+    } catch (e) { /* analytics must never break a draft */ }
+  }
+  function trackPage(name) {
+    try {
+      if (window.Analytics && window.Analytics.page) window.Analytics.page(name);
+    } catch (e) { }
+  }
+
   // ── Dev tools gate ───────────────────────────────────────
   //  The week simulator is the only thing that advances a week until
   //  the real stats pipeline lands, so it cannot simply be deleted.
@@ -709,6 +731,19 @@
     //  the first anyone learned of it was a friend being told "no
     //  league found". Write once, now, and wait for the answer.
     confirmLeagueSaved();
+
+    track('season_league_created', {
+      format: fmt,
+      num_teams: n,
+      roster_size: opts.rosterSize,
+      reg_weeks: regWeeks,
+      playoff_weeks: cal.playoffWeeks,
+      // How many conferences, not which — a count is enough to see
+      // whether anyone uses the single-conference mode.
+      conference_count: (state.league.conferences || []).length,
+      timer_secs: opts.timerSecs || 90,
+      signed_in: !!myUid()
+    });
   }
 
   //  Writes the new league immediately and tells the creator the truth
@@ -865,11 +900,25 @@
     var d = drafted();
     return pool().filter(function (p) { return !d[p.id]; });
   }
-  function makePick(teamId, playerId) {
+  //  `how` is 'user', 'auto' (your clock expired) or 'bot', and is
+  //  already threaded through livePick. Recording it on the log entry
+  //  is what makes it possible to tell a draft people actually attended
+  //  from one the autodraft finished for them — the pick count alone
+  //  looks identical either way.
+  function makePick(teamId, playerId, how) {
     var t = team(teamId);
     t.roster.push(playerId);
-    state.draft.log.push({ pick: state.draft.pick, teamId: teamId, playerId: playerId });
+    state.draft.log.push({
+      pick: state.draft.pick, teamId: teamId, playerId: playerId,
+      how: how || 'bot'
+    });
     state.draft.pick++;
+    track('season_pick_made', {
+      pick_number: state.draft.pick,
+      round: Math.floor((state.draft.pick - 1) / state.league.numTeams) + 1,
+      how: how || 'bot',
+      position: (P(playerId) || {}).pos || null
+    });
     if (state.draft.pick >= state.draft.order.length) startSeason();
     save();
   }
@@ -891,7 +940,7 @@
     return ranked[0].id;
   }
   function simToUser() {
-    while (state.phase === 'draft' && onClock() !== userTeam().id) makePick(onClock(), botChoose(onClock()));
+    while (state.phase === 'draft' && onClock() !== userTeam().id) makePick(onClock(), botChoose(onClock()), 'bot');
     if (state.phase === 'draft' && draftLive()) restartClock();
   }
 
@@ -922,6 +971,17 @@
     var d = draftCfg();
     if (d.status !== 'pre') return;
     d.status = 'live'; restartClock();
+    track('season_draft_started', {
+      num_teams: state.league.numTeams,
+      roster_size: state.league.rosterSize,
+      format: state.league.format,
+      //  The number that matters: a draft with 7 bots and 1 human is a
+      //  very different event from 8 humans, and the funnel should not
+      //  treat them as the same thing.
+      human_seats: (state.teams || []).filter(function (t) { return t && t.uid; }).length,
+      timer_secs: d.timerSecs,
+      was_scheduled: !!d.scheduledAt
+    });
   }
   function pauseDraft() {
     var d = draftCfg();
@@ -985,7 +1045,7 @@
     var q = draftCfg().queue, at = q.indexOf(pid); if (at >= 0) q.splice(at, 1);
     var gap = Date.now() - (livePick._last || 0);
     livePick._last = Date.now();
-    makePick(teamId, pid);
+    makePick(teamId, pid, how);
     // Full-screen card for your picks and for picks made at a human pace.
     // Rapid-fire bot picks just slide into Recent Picks so the room
     // isn't blacked out every few seconds.
@@ -1157,6 +1217,33 @@
     }
     state.week = 1;
     startWeek();
+
+    //  The event that has never once fired in 120 days on the
+    //  tournament side either. It is the only real activation signal
+    //  this product has: a league that drafts is a league that plays.
+    var d = state.draft || {};
+    var log = d.log || [];
+    track('season_draft_completed', {
+      num_teams: state.league.numTeams,
+      roster_size: state.league.rosterSize,
+      format: state.league.format,
+      human_seats: (state.teams || []).filter(function (t) { return t && t.uid; }).length,
+      total_picks: log.length,
+      //  How much of the draft people actually made. A draft that is
+      //  90% bot and expired-clock picks still "completes", and the
+      //  pick count alone cannot tell you nobody was there for it.
+      user_picks: log.filter(function (p) { return p && p.how === 'user'; }).length,
+      auto_picks: log.filter(function (p) { return p && p.how === 'auto'; }).length,
+      bot_picks: log.filter(function (p) { return p && (!p.how || p.how === 'bot'); }).length,
+      // Days from draft to the Monday week 1 opens on.
+      days_to_week1: (function () {
+        try {
+          var a = state.league.seasonStart;
+          return Math.round((new Date(a[0], a[1], a[2]).getTime() -
+            new Date(new Date(d.completedAt).toDateString()).getTime()) / 864e5);
+        } catch (e) { return null; }
+      })()
+    });
   }
   // ── Injuries ────────────────────────────────────────────
   //  Status per player: GTD (game-time decision, ~50% to sit each game),
@@ -2090,6 +2177,17 @@
             deviceNotify('weekFinal', 'Week ' + state.week + ' is live',
               'Set your lineup — ' + weekDates(state.week) + '.');
           } catch (e) { }
+          //  The clock is the piece with no server-side fallback, so
+          //  this is the only way to find out whether it is actually
+          //  running in the wild. weeks_jumped > 1 means a league sat
+          //  stale because nobody opened the app.
+          track('season_week_advanced', {
+            from_week: movedFrom,
+            to_week: state.week,
+            weeks_jumped: state.week - movedFrom,
+            num_teams: state.league.numTeams,
+            real_results: !!(state.realWeeks && state.realWeeks[movedFrom])
+          });
         }
         save();
         try { render(); } catch (e) { }
@@ -2444,6 +2542,15 @@
     }
     s.playerId = pid; s.pending = null;
     save();
+    //  Lineup changes are the weekly engagement signal — the thing that
+    //  separates a league that is being played from one that drafted
+    //  and was abandoned. Nothing was measuring it.
+    track('season_lineup_set', {
+      week: state.week,
+      day: state.day,
+      slot: s.slot,
+      position: (P(pid) || {}).pos || null
+    });
   }
   function opponentOf(teamId, week) {
     var w = state.schedule[(week || state.week) - 1] || [];
@@ -2579,6 +2686,12 @@
     if (valid.indexOf(ui.page) < 0) ui.page = 'home';
     var changed = ui.page !== lastPage;
     lastPage = ui.page;
+    //  Route change = pageview. render() runs on every Firestore
+    //  snapshot and every 250ms draft tick, so this MUST hang off
+    //  `changed` — hooking it to render() itself would turn one draft
+    //  into thousands of pageviews. Analytics.page() de-dupes too, as
+    //  a second line of defence.
+    if (changed) trackPage('season_' + ui.page);
 
     var glass = theme() === 'glass';
     root.classList.toggle('ss-glass', glass);
@@ -4838,6 +4951,12 @@
         var when = new Date(dv + 'T' + tv).getTime();
         if (!(when > Date.now())) { notify('Pick a time in the future.', 'error'); return; }
         draftCfg().scheduledAt = when; state.draft.soonSent = false; save();
+        track('season_draft_scheduled', {
+          // Hours out, not the timestamp: how far ahead people plan.
+          hours_ahead: Math.round((when - Date.now()) / 36e5),
+          num_teams: state.league.numTeams,
+          human_seats: (state.teams || []).filter(function (t) { return t && t.uid; }).length
+        });
         ui.toastMsg = 'Draft scheduled for ' + fmtWhen(when) + '.'; ui.toastType = 'success'; break;
       case 'clearschedule': draftCfg().scheduledAt = null; save(); break;
       case 'copycode': copyText(state.league.code, 'League code copied.'); return;
@@ -5178,6 +5297,10 @@
     //  next genuinely free seat.
     var db = syncDb();
     var claimed = null;
+    //  Set inside the transaction, so a retry overwrites it with the
+    //  attempt that actually committed rather than keeping a stale
+    //  answer from a losing attempt.
+    var wasRejoin = false;
 
     return db.runTransaction(function (tx) {
       return tx.get(ref).then(function (doc) {
@@ -5191,6 +5314,7 @@
         //  harmless — which matters, because telling someone to "try
         //  again" must never cost the league a seat.
         var mine = st.teams.filter(function (t) { return t && t.uid === uid; })[0];
+        wasRejoin = !!mine;
         if (!mine) {
           var seat = st.teams.filter(function (t) { return t && !t.uid; })[0];
           if (!seat) throw new Error('That league is full.');
@@ -5222,6 +5346,18 @@
       } finally { SYNC.applying = false; }
       subscribeSeason(code);
       rememberSeasonLeague(code, (state.league && state.league.name) || 'Season League');
+
+      var seats = state.teams || [];
+      track('season_league_joined', {
+        format: state.league && state.league.format,
+        num_teams: seats.length,
+        //  Seats taken after this join. league_filled on the tournament
+        //  side is a separate event; here the ratio is more useful,
+        //  because the question is whether invites convert at all.
+        human_seats: seats.filter(function (t) { return t && t.uid; }).length,
+        was_rejoin: wasRejoin,
+        phase: state.phase
+      });
       return state;
     });
   }
