@@ -202,6 +202,16 @@
         return { h: (m && m[0]) || null, a: (m && m[1]) || null };
       });
     });
+
+    var miss = Object.keys(missing);
+    if (miss.length) {
+      //  Expected most weeks — a team genuinely idle has no games.
+      //  Worth logging anyway: if a school NEVER appears while its
+      //  conference-mates do, that is a name mismatch, not a bye.
+      console.log('[Season] week ' + week + ': no games found for ' +
+        miss.map(function (c) { return c + ' (' + missing[c] + ' rostered)'; }).join(', ') +
+        ' — idle teams, unless one of these never appears all season.');
+    }
     return out;
   }
 
@@ -1456,11 +1466,26 @@
   //  simulation produced, so nothing downstream changes.
   function buildRealWeek(week, real) {
     var out = {};
+    //  If a player's school cannot be found in the week's games, he
+    //  silently gets no games — indistinguishable from a bye. That is
+    //  the failure mode a name mismatch produces, and it would look
+    //  like the app had simply forgotten him.
+    //
+    //  All 79 schools currently match ESPN's `location` field exactly
+    //  (verified against the full 362-team list), but ESPN renames
+    //  schools and the roster builder has fallbacks. Say so rather
+    //  than let it pass as an empty week.
+    var missing = {};
+    var weekHasAnyGames = Object.keys(real.bySchool || {}).length > 0;
+
     rosteredPlayers().forEach(function (pid) {
       var p = P(pid);
       if (!p) return;
       var sched = real.bySchool[normSchool(p.college)] || [];
-      if (!sched.length) return;
+      if (!sched.length) {
+        if (weekHasAnyGames) missing[p.college] = (missing[p.college] || 0) + 1;
+        return;
+      }
 
       var rec = real.lines[pid] || {};
       var played = rec.games || {};
@@ -1526,6 +1551,20 @@
           });
           if (fake) {
             state.games[week] = {};
+            //  Slots hold copies of game records in `eligible` and
+            //  `locked`. Clearing only state.games would leave a
+            //  fabricated score locked into someone's week for good,
+            //  where it would still count towards the result.
+            var lu = (state.lineups || {})[week] || {};
+            Object.keys(lu).forEach(function (tid) {
+              (lu[tid] || []).forEach(function (slot) {
+                if (!slot) return;
+                slot.eligible = [];
+                slot.locked = null;
+                slot.pending = null;
+              });
+            });
+            state.day = 0;
             save();
             try { render(); } catch (e) { }
           }

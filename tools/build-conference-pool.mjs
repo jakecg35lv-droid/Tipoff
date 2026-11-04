@@ -110,7 +110,25 @@ function injuryFields(a) {
 async function teamPlayers(team, conference) {
   const json = await getJSON(`${SITE}/teams/${team.id}/roster`);
   const t = json?.team || {};
-  team.school = t.location || t.shortDisplayName || t.displayName || team.id;
+  //  MUST be `location`, with no fallback.
+  //
+  //  The stats sync writes `school: team.location` into every game
+  //  document, and the client matches a player to his games by
+  //  comparing this field against that one. Falling back to
+  //  shortDisplayName or displayName would produce a name that never
+  //  matches — and the symptom is not an error, it is a player who
+  //  quietly has no games all season while his team-mates do.
+  //
+  //  All 79 schools currently have a location. If one ever does not,
+  //  stop rather than write a pool that scores nobody.
+  if (!t.location) {
+    throw new Error(
+      'ESPN returned no `location` for team ' + team.id + ' (' + (t.displayName || 'unknown') + '). ' +
+      'The stats sync keys games on `location`, so writing any other name here would ' +
+      'silently give every player on this team zero games. Fix the mapping before rebuilding.'
+    );
+  }
+  team.school = t.location;
   team.abbr = t.abbreviation || '';
   team.color = t.color ? '#' + t.color : null;
   const athletes = json?.athletes || [];
