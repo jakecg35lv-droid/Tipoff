@@ -454,6 +454,25 @@ exports.syncNow = onRequest(
 // ═══════════════════════════════════════════════════════════════
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball';
 
+//  ── groups=50 is NOT optional ─────────────────────────────
+//  Without it the scoreboard returns a FEATURED SUBSET, not the day's
+//  slate. Measured 4 Nov 2026 against ESPN directly:
+//
+//      2 Nov   18 games returned   182 actually played
+//     10 Nov    9 games returned    69 actually played
+//     11 Nov    6 games returned    67 actually played
+//
+//  So the sync had been seeing roughly 13% of college basketball.
+//  Every missing game is a drafted player who silently scores zero
+//  for that day — indistinguishable from an idle team, which is
+//  exactly how it went unnoticed.
+//
+//  groups=50 is ESPN's Division I group. With it, all 79 pool schools
+//  appear across a normal week; without it, 18 of 32 rostered schools
+//  looked like they had no games at all.
+const ESPN_DIVISION_I = 'groups=50';
+
+
 // Schools across every selectable tournament, exactly as they appear
 // in src/app.js. ESPN's "location" field is what we match against.
 const TOURNAMENT_SCHOOLS = [
@@ -541,7 +560,7 @@ exports.espnProbe = onRequest(
       out.rosterKeys = ath.length ? Object.keys(ath[0]) : [];
 
       // 3. Scoreboard for a date, compacted
-      const sRes = await fetch(`${ESPN}/scoreboard?dates=${date}&limit=400`);
+      const sRes = await fetch(`${ESPN}/scoreboard?dates=${date}&${ESPN_DIVISION_I}&limit=500`);
       out.scoreboardStatus = sRes.status;
       const sJson = await sRes.json();
       const events = sJson.events || [];
@@ -738,7 +757,7 @@ async function runSyncESPN(opts) {
     const dateStr = options.dateOverride || espnDateParam(now);
     report.date = dateStr;
 
-    const sbRes = await client.apiFetch(`${ESPN}/scoreboard?dates=${dateStr}&limit=400`, 'scoreboard');
+    const sbRes = await client.apiFetch(`${ESPN}/scoreboard?dates=${dateStr}&${ESPN_DIVISION_I}&limit=500`, 'scoreboard');
     if (!sbRes.ok) throw new Error(`scoreboard HTTP ${sbRes.status}`);
     const sb = await sbRes.json();
     const events = sb.events || [];
@@ -1695,7 +1714,7 @@ async function runSeasonSyncESPN(opts) {
     const dateStr = options.dateOverride || espnDateParam(now);
     report.date = dateStr;
 
-    const sbRes = await client.apiFetch(`${ESPN}/scoreboard?dates=${dateStr}&limit=400`, 'season-scoreboard');
+    const sbRes = await client.apiFetch(`${ESPN}/scoreboard?dates=${dateStr}&${ESPN_DIVISION_I}&limit=500`, 'season-scoreboard');
     if (!sbRes.ok) throw new Error(`scoreboard HTTP ${sbRes.status}`);
     const sb = await sbRes.json();
     const events = sb.events || [];
@@ -1759,6 +1778,13 @@ async function runSeasonSyncESPN(opts) {
           home: { school: home.school, abbr: home.abbr, score: home.score },
           away: { school: away.school, abbr: away.abbr, score: away.score },
           winnerSchool: completed ? ((competitors.find(c => c.winner) || {}).school || null) : null,
+          //  Normalised participants, so a client can ask for "games
+          //  involving MY schools" instead of pulling an entire week.
+          //  With groups=50 a week is ~700 games; a league rosters
+          //  about 30 schools and needs maybe 30 of those games.
+          //  Without this field the only filter available is the date
+          //  range, and every client would read all 700.
+          schools: [normName(home.school), normName(away.school)].filter(Boolean),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
         report.gamesWritten++;

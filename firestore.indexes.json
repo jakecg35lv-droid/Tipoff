@@ -1,0 +1,23 @@
+{
+  "indexes": [
+    {
+      "//": "loadRealWeek asks for 'games this week involving my schools'. A range filter on date plus array-contains-any on schools needs a composite index; without it the query throws failed-precondition and the client silently falls back to reading the whole week (~700 docs).",
+      "collectionGroup": "games",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "schools", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "The sync's own lookup: which games on this date are already final, so their box scores are not refetched every ten minutes.",
+      "collectionGroup": "games",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "completed", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

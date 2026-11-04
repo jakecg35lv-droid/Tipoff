@@ -1398,11 +1398,55 @@
     var r = weekRange(week);
     var statsRef = db.collection('seasonStats').doc(SEASON_STATS_ID);
 
-    return statsRef.collection('games')
-      .where('date', '>=', r.startISO)
-      .where('date', '<=', r.endISO)
-      .get()
-      .then(function (snap) {
+    //  ── Ask only for games this league cares about ──────────
+    //  A date-range query returns the whole slate. With full Division I
+    //  coverage that is ~700 documents a week, of which a league needs
+    //  about thirty. Reading the rest put a single open client over the
+    //  daily quota on its own.
+    //
+    //  array-contains-any takes at most ten values, so the rostered
+    //  schools go in chunks and the results are merged. Falls back to
+    //  the date-range query for documents written before the schools
+    //  field existed.
+    var mySchools = [];
+    (state.teams || []).forEach(function (t) {
+      (t.roster || []).forEach(function (pid) {
+        var p = P(pid);
+        if (p && p.college) mySchools.push(normSchool(p.college));
+      });
+    });
+    mySchools = mySchools.filter(function (v, i, a) { return a.indexOf(v) === i; });
+
+    function gamesQuery() {
+      if (!mySchools.length) return Promise.resolve([]);
+      var chunks = [];
+      for (var i = 0; i < mySchools.length; i += 10) chunks.push(mySchools.slice(i, i + 10));
+      return Promise.all(chunks.map(function (c) {
+        return statsRef.collection('games')
+          .where('date', '>=', r.startISO)
+          .where('date', '<=', r.endISO)
+          .where('schools', 'array-contains-any', c)
+          .get();
+      })).then(function (snaps) {
+        var seen = {}, docs = [];
+        snaps.forEach(function (sn) {
+          sn.forEach(function (d) { if (!seen[d.id]) { seen[d.id] = 1; docs.push(d); } });
+        });
+        return docs;
+      }).catch(function (e) {
+        //  Missing index, or documents without the schools field.
+        console.warn('[Season] narrowed game query failed, falling back:', e && e.code);
+        return statsRef.collection('games')
+          .where('date', '>=', r.startISO)
+          .where('date', '<=', r.endISO)
+          .get()
+          .then(function (sn) { var d = []; sn.forEach(function (x) { d.push(x); }); return d; });
+      });
+    }
+
+    return gamesQuery()
+      .then(function (docs) {
+        var snap = { empty: !docs.length, forEach: function (fn) { docs.forEach(fn); } };
         if (snap.empty) return null;              // nothing real for this week
 
         // school -> the games it played this week
