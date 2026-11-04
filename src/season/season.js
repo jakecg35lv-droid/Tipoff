@@ -794,7 +794,28 @@
     if (!ref) return Promise.resolve(false);
 
     return ref.get().then(function (doc) {
-      if (doc.exists) return true;
+      if (doc.exists) {
+        //  ── Self-heal the account index ─────────────────────
+        //  Membership was only ever recorded at create and join time.
+        //  That was fine until a bug in the tournament My Leagues
+        //  pruner (app.js) deleted every season entry out of
+        //  users/{uid}.leagues, because it looked season codes up in
+        //  leagues/{code} instead of seasonLeagues/{code} and wrote the
+        //  pruned array back.
+        //
+        //  Fixing the pruner stops new damage. It does nothing for an
+        //  index already emptied — and with no entry there,
+        //  recoverLeagueFromAccount() cannot find the league, so every
+        //  affected person would have to re-enter their code by hand on
+        //  each device, for ever.
+        //
+        //  So re-record it whenever the league is confirmed present on
+        //  the server and this account genuinely holds a seat. One
+        //  write per open, and the index repairs itself.
+        var holdsSeat = (state.teams || []).some(function (t) { return t && t.uid === uid; });
+        if (holdsSeat) rememberSeasonLeague(code, state.league.name);
+        return true;
+      }
 
       var host = state.league.host;
       //  A league created before host was recorded, or created while

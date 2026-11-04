@@ -7439,6 +7439,26 @@ async function renderMyLeagues() {
     const checked = await Promise.all(leagues.map(async function (l) {
       if (!l || !l.code) return null;
       if (l.code === state.leagueCode) return l;      // we are in it; it exists
+      //  ── Season leagues are NOT in leagues/{code} ──────────
+      //  They live in seasonLeagues/{code}. This pruner looked every
+      //  entry up in the tournament collection, so a season league came
+      //  back as "does not exist", was treated as deleted, and the
+      //  pruned array was written STRAIGHT BACK to Firestore — wiping
+      //  every season league out of the account's own index.
+      //
+      //  The damage was invisible on the device that created the
+      //  league, because that device still had its local copy. It only
+      //  surfaced somewhere with no local copy — a second computer, or
+      //  the same computer after switching accounts — where
+      //  recoverLeagueFromAccount() asks this index and was told the
+      //  user belongs to no season leagues at all. Verified: three
+      //  leagues held this account's seat server-side while the index
+      //  listed none of them.
+      //
+      //  Season entries are the season module's to manage
+      //  (rememberSeasonLeague / forgetSeasonLeague, which check the
+      //  right collection). This function must not judge them.
+      if (l.kind === 'season') return l;
       try {
         const doc = await window._db.collection('leagues').doc(l.code).get();
         return doc.exists ? l : null;
@@ -7463,6 +7483,18 @@ async function renderMyLeagues() {
   if (state.leagueCode && !leagues.some(l => l && l.code === state.leagueCode)) {
     leagues.unshift({ code: state.leagueCode, name: state.leagueName || 'My League', lastOpened: Date.now() });
   }
+
+  //  ── This list is the TOURNAMENT switcher ──────────────────
+  //  Every row here routes to switchToLeague(), which loads
+  //  leagues/{code}. A season league is not in that collection, so a
+  //  row for one would look fine and do nothing when tapped.
+  //
+  //  Season entries previously never got this far: the pruner above
+  //  deleted them first. Now that they correctly survive, they have to
+  //  be filtered out at render instead — same rule reconcileSavedLeagues
+  //  already applies. Season leagues are reached from their own card on
+  //  the home screen.
+  leagues = leagues.filter(l => l && l.kind !== 'season');
 
   if (!leagues.length) {
     host.innerHTML = '<div class="set-row"><div class="set-row-main">' +
