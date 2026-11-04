@@ -3,7 +3,17 @@
    Cache-first for static assets, network-first for data
 ══════════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'tipoff-v201';
+/*  ── BUMP THIS ON EVERY SHIPPED CHANGE ──────────────────────
+    The fetch handler below is cache-first with NO revalidation:
+    `if (cached) return cached;`. So once a file is in the cache under
+    this name, that copy is served forever — reloading does not help,
+    and neither does a hard reload on iOS standalone.
+
+    CACHE_NAME is therefore the only thing that delivers new code. Push
+    a fix without changing it and users keep running the old build with
+    no error, no warning, and no way to tell. If you change any file in
+    STATIC_ASSETS, change this line in the same commit.             */
+const CACHE_NAME = 'tipoff-v202';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -24,7 +34,12 @@ const STATIC_ASSETS = [
   './apple-touch-icon.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Bebas+Neue&display=swap'
+  //  MUST match the <link> in index.html exactly. It did not: this
+  //  still asked for Bebas Neue after the app moved to Barlow
+  //  Condensed + JetBrains Mono, so install downloaded a stylesheet
+  //  nothing uses and the real one was never precached — a first load
+  //  with no connection rendered without the display font.
+  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap'
 ];
 
 // ── INSTALL: cache all static assets ─────────────────────
