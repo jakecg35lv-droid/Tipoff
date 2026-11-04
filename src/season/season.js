@@ -1201,12 +1201,35 @@
       '<em title="No games played yet this week. Figures shown are projections from last season\u2019s averages, and switch to real box scores as games finish.">Projected</em></div>';
   }
 
+  //  Has this league week actually begun in real time?
+  function weekHasStarted(week) {
+    var r = weekRange(week);
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return today.getTime() >= r.start.getTime();
+  }
+
   function startWeek() {
     state.day = 0;
     updateInjuries(state.week);
-    state.games[state.week] = generateWeekGames(state.week);
-    //  Simulation first so the week is never empty, then replaced by
-    //  real box scores if the feed has any for these dates.
+
+    //  ── Do not invent opponents ───────────────────────────
+    //  generateWeekGames picks a random school from a conference list
+    //  and calls it the opponent, then rolls a score for it. That was
+    //  a development stand-in from before the ESPN feed existed, and
+    //  it is why a league drafted on Wednesday showed its players
+    //  facing Morehead State and Kentucky on days that had not
+    //  happened: week 1 is anchored to the Monday AFTER the draft, so
+    //  loadRealWeek queried dates in the future, found nothing, and
+    //  left the fiction on screen.
+    //
+    //  A week that has not begun now shows no games at all, and a week
+    //  in progress shows only what the feed actually has. An empty
+    //  schedule is honest; an invented one is not. The simulator stays
+    //  available behind devMode for testing.
+    state.games[state.week] = (devMode() && !weekHasStarted(state.week))
+      ? generateWeekGames(state.week)
+      : {};
     upgradeWeekToReal(state.week, true);
     state.lineups[state.week] = {};
     state.teams.forEach(function (t) {
@@ -1491,7 +1514,23 @@
       if (!g.changed) return false;
 
       return loadRealWeek(week).then(function (real) {
-        if (!real || !state || state.week !== week) return false;
+        if (!state || state.week !== week) return false;
+        if (!real) {
+          //  Feed has nothing for these dates. If what we are holding
+          //  is simulated, drop it rather than keep showing invented
+          //  opponents — a league created before this change still has
+          //  a full week of them cached.
+          var cur = state.games[week] || {};
+          var fake = Object.keys(cur).some(function (pid) {
+            return (cur[pid] || []).some(function (g) { return g && !g.real; });
+          });
+          if (fake) {
+            state.games[week] = {};
+            save();
+            try { render(); } catch (e) { }
+          }
+          return false;
+        }
         var built = buildRealWeek(week, real);
         if (!Object.keys(built).length) return false;
         state.games[week] = built;
@@ -1596,11 +1635,30 @@
   // Week 1 starts Monday, Nov 2, 2026 (opening week of the season).
   var SEASON_START = new Date(2026, 10, 2);
   function weekDates(week) {
-    var st = state && state.league && state.league.start ? new Date(state.league.start[0], state.league.start[1], state.league.start[2]) : SEASON_START;
+    //  Same anchor rule as weekRange: seasonStart (set from the draft)
+    //  wins over the old fixed league.start. This was still reading
+    //  league.start, so a draft-anchored league printed dates a week
+    //  out from the ones it was actually scoring.
+    var anc = (state && state.league && (state.league.seasonStart || state.league.start)) || null;
+    var st = anc ? new Date(anc[0], anc[1], anc[2]) : SEASON_START;
     var a = new Date(st.getTime() + (week - 1) * 7 * 864e5), b = new Date(a.getTime() + 6 * 864e5);
     var M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return M[a.getMonth()] + ' ' + a.getDate() + '–' + (a.getMonth() === b.getMonth() ? '' : M[b.getMonth()] + ' ') + b.getDate();
   }
+  //  Why is this week empty? Three different reasons, and a bare
+  //  "No games this week" hid all of them.
+  function emptyWeekText() {
+    if (!state || !state.week) return 'No games this week';
+    if (!weekHasStarted(state.week)) {
+      var r = weekRange(state.week);
+      var D = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      var M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return 'Week ' + state.week + ' starts ' + D[r.start.getDay()] + ', ' +
+             M[r.start.getMonth()] + ' ' + r.start.getDate();
+    }
+    return 'Waiting on this week\u2019s box scores';
+  }
+
   function gamesFor(pid, week) { return ((state.games[week || state.week] || {})[pid]) || []; }
   function gameOn(pid, day) {
     var g = gamesFor(pid);
@@ -3412,7 +3470,7 @@
   }
   function gameChips(pid, slotRec) {
     var g = gamesFor(pid);
-    if (!g.length) return '<div class="ss-games"><span class="ss-games-none">No games this week</span></div>';
+    if (!g.length) return '<div class="ss-games"><span class="ss-games-none">' + esc(emptyWeekText()) + '</span></div>';
     return '<div class="ss-games">' + g.map(function (x) {
       var played = x.day < state.day;
       var isLocked = slotRec && slotRec.locked && slotRec.locked.playerId === pid && slotRec.locked.day === x.day;
@@ -3567,7 +3625,7 @@
         return '<button class="' + cls + '" data-act="selgame" data-k="' + key + '" data-g="' + gi + '" aria-label="' + DAYS_FULL[g.day] + ' vs ' + esc(g.opp || '') + '">' + logoHTML(g.opp, 26) + '</button>';
       }).join('') + '</div>' +
       '<div class="mx-track"><span style="width:' + (100 / games.length) + '%;transform:translateX(' + (sel * 100) + '%)"></span></div>' +
-    '</div>' : '<div class="mx-sched mx-none">No games this week</div>';
+    '</div>' : '<div class="mx-sched mx-none">' + esc(emptyWeekText()) + '</div>';
 
     var detail = '';
     if (sg) {
@@ -3859,7 +3917,7 @@
         var played = g.day < state.day;
         return '<div class="pc-g' + (played ? ' done' : '') + '"><span class="d">' + DAYS[g.day] + '</span>' + logoHTML(g.opp, 24) + '<span class="o">' + (g.home ? 'vs ' : '@ ') + esc(abbr(g.opp)) + '</span>' +
           '<span class="r">' + (played ? (g.preDraft ? '<em class="pc-void">Pre-draft</em>' : g.dnp ? 'DNP' : '<b>' + f1(g.fpts) + '</b>') : esc(g.time || '')) + '</span></div>';
-      }).join('') + '</div>' : '<p class="pc-note">No games this week.</p>') + '</div>';
+      }).join('') + '</div>' : '<p class="pc-note">' + esc(emptyWeekText()) + '</p>') + '</div>';
     }
     var log = draft ? [] : gameLog(pid).slice(0, 8);
     var logSec = draft ? '' : '<div class="pc-sec"><h3>Game log</h3>' + (log.length ? '<div class="pc-log"><div class="pc-lh"><span>Game</span><span>PTS</span><span>REB</span><span>AST</span><span>STL</span><span>BLK</span><span>FPTS</span></div>' + log.map(function (x) {
