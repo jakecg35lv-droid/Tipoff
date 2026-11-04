@@ -73,14 +73,25 @@ const FIELDS = [
     ],
   },
   {
-    //  ESPN Events Invitational, Adventure Group. Six teams, group
-    //  play, nobody eliminated. The event is disabled in the app
-    //  until group play exists; the pool is built so it is ready.
-    region: 'Showcase',
+    //  ESPN Events Invitational, ADVENTURE Group. Six teams, three
+    //  games each across 23-25 Nov. Group play, nobody eliminated.
+    region: 'Adventure',
     seeded: false,
     teams: [
       ['Akron', null], ['App State', null], ['Belmont', null],
       ['St. Bonaventure', null], ['Wright State', null], ['Yale', null],
+    ],
+  },
+  {
+    //  ESPN Events Invitational, MAGIC Group. Four teams, two games
+    //  each across 26-27 Nov. This half of the event was missing
+    //  entirely — which mattered, because it is the half with the
+    //  power-conference schools.
+    region: 'Magic',
+    seeded: false,
+    teams: [
+      ['Boston College', null], ['UCF', null],
+      ['Cincinnati', null], ['Georgia', null],
     ],
   },
 ];

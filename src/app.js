@@ -3407,39 +3407,63 @@ const TOURNAMENTS = {
       ]
     },
     {
-      id: 'etsc-2026',
-      //  DISABLED, and not because of a data typo. Three things were
-      //  wrong and the third one is structural:
+      //  SOURCE: ESPN Events field release (6 Aug 2026); Boston
+      //  College, Yale and UCF athletics releases; St. Bonaventure
+      //  schedule announcement (28 Sep 2026). Re-checked 4 Nov 2026.
       //
-      //   1. The name. There is no "ESPN Thanksgiving Showcase" — the
-      //      event is the ESPN Events Invitational.
-      //   2. The field. Our Adventure Group had 4 of its 6 teams;
-      //      St. Bonaventure and Yale were missing entirely.
-      //   3. The format. It is NOT a bracket. The Adventure Group is
-      //      group play: all six teams play three games across Nov
-      //      23-25 and nobody is eliminated.
+      //  This was ONE 6-team entry, which silently dropped half the
+      //  event — the half containing every power-conference team. The
+      //  real event is two groups on different dates with different
+      //  game counts, so it is two entries.
       //
-      //  (3) is why this cannot just be re-seeded. This app scores a
-      //  roster until the player's team is knocked out — and in group
-      //  play nothing ever is. Every drafted player would play exactly
-      //  three games regardless of results, so the bracket, the
-      //  elimination logic and the projection engine would all be
-      //  describing a tournament that is not happening.
-      //
-      //  Shipping it selectable meant letting someone run a real draft
-      //  on a format we cannot score. Off until group play is built.
+      //  FORMAT: group play. Nobody is eliminated, there is no bracket.
+      id: 'etsc-adventure-2026',
       name: 'ESPN Events Invitational',
-      subtitle: 'Adventure Group · group play, not a bracket',
+      subtitle: 'Adventure Group · six teams, three games each',
       location: 'State Farm Field House, Kissimmee, FL',
       dates: 'Nov 23–25, 2026',
       startMs: new Date('2026-11-23').getTime(),
-      bracketFormat: 'group6',
+      bracketFormat: 'pod',
       roundNames: [],
-      canSelect: false,
-      comingSoon: true,
-      playerRegion: 'Showcase',
+      seeded: false,
+      canSelect: true,
+      playerRegion: 'Adventure',
       teams: ['Akron', 'App State', 'Belmont', 'St. Bonaventure', 'Wright State', 'Yale'],
-      seededTeams: []
+      seededTeams: [],
+      fixtures: [
+        { day: 'Monday, Nov 23', games: [
+          { home: 'St. Bonaventure', away: 'App State', time: '11:00 AM ET' }
+        ] }
+      ],
+      scheduleNote: 'Each team plays three games across Nov 23-25. Only the opening pairing is published; the rest are not announced yet.'
+    },
+    {
+      //  SOURCE: as above. The half of the event with power-conference
+      //  teams — and the only half whose schools already exist in this
+      //  app's player data.
+      //
+      //  FORMAT: four teams, two games each. Two games on Thanksgiving,
+      //  then the same four switch opponents the next day.
+      id: 'etsc-magic-2026',
+      name: 'ESPN Events Invitational',
+      subtitle: 'Magic Group · four teams, two games each',
+      location: 'State Farm Field House, Kissimmee, FL',
+      dates: 'Nov 26–27, 2026',
+      startMs: new Date('2026-11-26').getTime(),
+      bracketFormat: 'pod',
+      roundNames: [],
+      seeded: false,
+      canSelect: true,
+      playerRegion: 'Magic',
+      teams: ['Boston College', 'UCF', 'Cincinnati', 'Georgia'],
+      seededTeams: [],
+      //  The four teams are confirmed; who plays whom on each day is
+      //  not. This group is described the same way as Atlantis Pod 1,
+      //  which crosses over — but "described the same way" is the
+      //  reasoning that produced every wrong fixture in this file, so
+      //  nothing is inferred here.
+      fixtures: [],
+      scheduleNote: 'Two games on Thu Nov 26, the same four teams switching opponents on Fri Nov 27. Exact pairings and tip times are not published yet.'
     },
     {
       //  SOURCE: ESPN Events, Jimmy V Classic page (checked 4 Nov 2026).
