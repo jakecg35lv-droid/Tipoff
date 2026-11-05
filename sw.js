@@ -14,17 +14,22 @@
     no error, no warning, and no way to tell. If you change any file in
     STATIC_ASSETS, change this line in the same commit.             */
 const CACHE_NAME = 'tipoff-v205';
+//  MUST match the ?v= on the <script> and <link> tags in index.html.
+//  The page requests the versioned URL, so precaching the bare one
+//  would store a file nothing ever asks for while the real request
+//  falls through to the network.
+const BUILD = '205';
 const STATIC_ASSETS = [
   './',
   './index.html',
-  './src/styles.css',
-  './src/app.js',
-  './src/analytics.js',
-  './data/bracket.js',
-  './data/players.js',
-  './data/conference-players.js',
-  './src/season/season.js',
-  './src/season/season.css',
+  './src/styles.css?v=' + BUILD,
+  './src/app.js?v=' + BUILD,
+  './src/analytics.js?v=' + BUILD,
+  './data/bracket.js?v=' + BUILD,
+  './data/players.js?v=' + BUILD,
+  './data/conference-players.js?v=' + BUILD,
+  './src/season/season.js?v=' + BUILD,
+  './src/season/season.css?v=' + BUILD,
   './logo-icon.png',
   './logo-wordmark.png',
   './favicon.ico',
@@ -46,9 +51,16 @@ const STATIC_ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
+      //  cache: 'reload' forces each precache fetch to go to the
+      //  network and ignore Chrome's HTTP cache. Without it, install
+      //  can fetch a stale copy out of the browser cache and store
+      //  THAT as the new version's "fresh" asset — a stale file
+      //  laundered into a brand-new cache, which then serves happily
+      //  for as long as the version lasts.
       return Promise.allSettled(
         STATIC_ASSETS.map(url =>
-          cache.add(url).catch(err => console.warn('[SW] Failed to cache:', url, err))
+          cache.add(new Request(url, { cache: 'reload' }))
+            .catch(err => console.warn('[SW] Failed to cache:', url, err))
         )
       );
     }).then(() => self.skipWaiting())
