@@ -13,7 +13,7 @@
     a fix without changing it and users keep running the old build with
     no error, no warning, and no way to tell. If you change any file in
     STATIC_ASSETS, change this line in the same commit.             */
-const CACHE_NAME = 'tipoff-v204';
+const CACHE_NAME = 'tipoff-v205';
 const STATIC_ASSETS = [
   './',
   './index.html',

@@ -202,16 +202,6 @@
         return { h: (m && m[0]) || null, a: (m && m[1]) || null };
       });
     });
-
-    var miss = Object.keys(missing);
-    if (miss.length) {
-      //  Expected most weeks — a team genuinely idle has no games.
-      //  Worth logging anyway: if a school NEVER appears while its
-      //  conference-mates do, that is a name mismatch, not a bye.
-      console.log('[Season] week ' + week + ': no games found for ' +
-        miss.map(function (c) { return c + ' (' + missing[c] + ' rostered)'; }).join(', ') +
-        ' — idle teams, unless one of these never appears all season.');
-    }
     return out;
   }
 
@@ -1677,6 +1667,28 @@
         };
       });
     });
+
+    //  This block belongs HERE, with the `missing` map it reads and the
+    //  `week` argument it names. It had been pasted into
+    //  encodeSchedule() instead, where neither identifier exists — so
+    //  encodeSchedule threw ReferenceError: missing is not defined on
+    //  every call.
+    //
+    //  encodeSchedule is on the path of every single season write
+    //  (encodeState -> syncPayload), so that one stray paste broke
+    //  creating a league, joining one, every draft pick and every
+    //  lineup change, for every user. It surfaced as "Open League"
+    //  doing nothing with a red "missing is not defined" under the
+    //  button.
+    var miss = Object.keys(missing);
+    if (miss.length) {
+      //  Expected most weeks — a team genuinely idle has no games.
+      //  Worth logging anyway: if a school NEVER appears while its
+      //  conference-mates do, that is a name mismatch, not a bye.
+      console.log('[Season] week ' + week + ': no games found for ' +
+        miss.map(function (c) { return c + ' (' + missing[c] + ' rostered)'; }).join(', ') +
+        ' — idle teams, unless one of these never appears all season.');
+    }
     return out;
   }
 
