@@ -1675,7 +1675,12 @@
               home: pair[0] === 'home',
               ts: me.score, os: them.score,
               time: g.startsAt || '',
-              completed: !!g.completed
+              completed: !!g.completed,
+              //  'in' means the ball is up. Without this, "not tipped
+              //  yet" and "in progress" are indistinguishable — both
+              //  are simply not-completed — and a game four hours away
+              //  would be treated as a live 0.0.
+              live: g.state === 'in'
             });
           });
         });
@@ -1799,7 +1804,7 @@
           fpts: preDraft ? 0 : Math.round(fpts(line) * 10) / 10,
           dnp: dnp, preDraft: preDraft,
           opp: g.opp, home: g.home, time: g.time, ts: g.ts, os: g.os,
-          real: true, final: g.completed
+          real: true, final: g.completed, live: !!g.live
         };
       });
     });
@@ -2067,6 +2072,27 @@
   //  and are complete by definition.
   function gameIsFinal(g) { return !g ? false : g.final !== false; }
 
+  //  Has the ball gone up? Real games carry `live` (ESPN state 'in')
+  //  and `final`. Simulated games have neither and are complete by
+  //  definition, so they count as started.
+  function gameHasStarted(g) {
+    if (!g) return false;
+    if (g.real !== true) return true;          // simulated / dev
+    return !!g.live || g.final === true;
+  }
+
+  //  Tip-off, short. Real games carry an ISO timestamp from the feed;
+  //  simulated ones already carry a display string.
+  function tipText(g) {
+    if (!g || !g.time) return '';
+    var t = Date.parse(g.time);
+    if (isNaN(t)) return String(g.time);
+    var d = new Date(t), h = d.getHours(), m = d.getMinutes();
+    var ap = h >= 12 ? 'p' : 'a';
+    h = h % 12; if (!h) h = 12;
+    return h + (m ? ':' + (m < 10 ? '0' : '') + m : '') + ap;
+  }
+
   function applyDay(d) {
     var changed = false;
     (state.teams || []).forEach(function (t) {
@@ -2074,6 +2100,10 @@
         if (!s || s.locked || !s.playerId) return;
         var g = gameOn(s.playerId, d);
         if (!g) return;
+        //  A game that has not tipped is not a result. Without this a
+        //  7pm tip would appear at breakfast as a live 0.0 and sit in
+        //  the manager's decision queue all day.
+        if (!gameHasStarted(g)) return;
         var rec = {
           playerId: s.playerId, day: d, fpts: g.fpts, dnp: g.dnp,
           final: gameIsFinal(g), gameId: g.gameId || null
@@ -4267,13 +4297,38 @@
   function weekBar() {
     return '<div class="ss-weekbar">' + dayStrip() + '<div class="ss-weekbar-ctrl">' + weekControls() + '</div></div>';
   }
+  /*  This player's week: one chip per game, with the OPPONENT on it.
+      Previously the chips carried a weekday and a number, which told
+      a manager when his player had played but never who against \u2014
+      the single thing you want when deciding whether to hold out for
+      a better matchup.
+
+      Each chip reads: weekday / opponent / value, where value is the
+      fantasy points for a finished game, the live total for one in
+      progress, or the tip time for one still to come.          */
   function gameChips(pid, slotRec) {
     var g = gamesFor(pid);
     if (!g.length) return '<div class="ss-games"><span class="ss-games-none">' + esc(emptyWeekText()) + '</span></div>';
     return '<div class="ss-games">' + g.map(function (x) {
-      var played = x.day < state.day;
+      var done = gameIsFinal(x), live = !done && gameHasStarted(x);
       var isLocked = slotRec && slotRec.locked && slotRec.locked.playerId === pid && slotRec.locked.day === x.day;
-      return '<span class="ss-game ' + (x.preDraft ? 'void' : isLocked ? 'lk' : played ? 'pl' : 'up') + '" ' + (x.preDraft ? 'title="Played before the draft finished, so it does not count"' : '') + '><b>' + DAYS[x.day] + '</b>' + (played ? '<i>' + (x.preDraft ? '\u2013' : x.dnp ? 'DNP' : f1(x.fpts)) + '</i>' : '') + '</span>';
+      var cls = x.preDraft ? 'void' : isLocked ? 'lk' : live ? 'lv' : done ? 'pl' : 'up';
+
+      var val = x.preDraft ? '\u2013'
+        : done ? (x.dnp ? 'DNP' : f1(x.fpts))
+        : live ? f1(x.fpts)
+        : (tipText(x) || '\u2013');
+
+      var opp = (x.home ? '' : '@') + abbr(x.opp || '');
+      var title = (x.home ? 'vs ' : 'at ') + (x.opp || 'TBD') +
+        (x.preDraft ? ' \u2014 played before the draft finished, so it does not count'
+          : done ? ' \u2014 final' : live ? ' \u2014 in progress' : (tipText(x) ? ' \u2014 tips ' + tipText(x) : ''));
+
+      return '<span class="ss-game ' + cls + '" title="' + esc(title) + '">' +
+        '<b>' + DAYS[x.day] + '</b>' +
+        '<u>' + (live ? '<span class="ss-livedot"></span>' : '') + esc(opp) + '</u>' +
+        '<i>' + val + '</i>' +
+      '</span>';
     }).join('') + '</div>';
   }
   function slotStatus(s, idx) {
