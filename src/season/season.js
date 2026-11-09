@@ -1903,7 +1903,14 @@
   function scheduleStatsTick() {
     clearTimeout(open._statsTick);
     open._statsTick = setTimeout(function () {
-      if (state && state.week) upgradeWeekToReal(state.week);
+      if (state && state.week) {
+        //  Pull fresh box scores, THEN fold today's numbers into the
+        //  lineups. Order matters: refreshing first would recompute
+        //  from the data we already had.
+        upgradeWeekToReal(state.week).then(function () {
+          if (refreshLiveDay()) { try { render(); } catch (e) { } }
+        }).catch(function () { });
+      }
       //  Also here, not just on open: a device left open overnight has
       //  to cross the 6am boundary on its own.
       runClock();
@@ -2034,20 +2041,78 @@
   //  the next week in one ordered sequence. Letting this fire its own
   //  un-awaited finalizeWeekWhenReal in that case would race the loop
   //  and could push a week's results twice.
+  /* ══════════════════════════════════════════════════════
+     LIVE SCORING
+
+     The box-score sync writes in-progress lines every 10 minutes, so
+     `state.games` has had live fantasy points in it all along. What
+     stopped them reaching the scoreboard was this: a day used to be
+     consumed exactly ONCE, by simDay, which snapshotted each player's
+     points at that instant and advanced past the day forever.
+
+     Run that mid-evening and two things break. Games still in play
+     freeze at whatever they happened to show. Games tipping later
+     that night are skipped entirely, because their day is already
+     gone. That is why scoring waited for a day to end.
+
+     applyDay() replaces the one-shot push with an upsert: a day's
+     entry is rewritten in place every time fresher numbers arrive.
+     Called continuously while today is in progress, it climbs with
+     the games; called once by the clock for a finished day, it
+     behaves exactly as before.
+  ══════════════════════════════════════════════════════ */
+
+  //  Is this game over? Real games carry `final` from the feed's
+  //  `completed` flag. Simulated (dev-only) games have no such field
+  //  and are complete by definition.
+  function gameIsFinal(g) { return !g ? false : g.final !== false; }
+
+  function applyDay(d) {
+    var changed = false;
+    (state.teams || []).forEach(function (t) {
+      (slotsOf(t.id) || []).forEach(function (s) {
+        if (!s || s.locked || !s.playerId) return;
+        var g = gameOn(s.playerId, d);
+        if (!g) return;
+        var rec = {
+          playerId: s.playerId, day: d, fpts: g.fpts, dnp: g.dnp,
+          final: gameIsFinal(g), gameId: g.gameId || null
+        };
+        //  Upsert on the day, never append a second entry for it.
+        var at = -1;
+        for (var k = s.eligible.length - 1; k >= 0; k--) {
+          if (s.eligible[k] && s.eligible[k].day === d) { at = k; break; }
+        }
+        if (at >= 0) {
+          var prev = s.eligible[at];
+          if (prev.fpts !== rec.fpts || prev.final !== rec.final) { s.eligible[at] = rec; changed = true; }
+        } else {
+          s.eligible.push(rec); changed = true;
+        }
+        //  `pending` is the decision in front of the manager. Don't
+        //  resurrect one he has already passed on today.
+        if (s.passedDay !== d) s.pending = rec;
+      });
+    });
+    return changed;
+  }
+
+  //  Called from the stats tick while today's games are being played.
+  //  Does NOT advance the day — that stays the clock's job.
+  function refreshLiveDay() {
+    if (!state || state.phase !== 'season') return false;
+    if (state.day > 6) return false;
+    var changed = applyDay(state.day);
+    if (changed) save();
+    return changed;
+  }
+
   function simDay(noFinalize) {
     if (state.day > 6) return;
     if (state.trades) botTradeReplies();
     var d = state.day;
+    applyDay(d);
     state.teams.forEach(function (t) {
-      slotsOf(t.id).forEach(function (s) {
-        if (s.locked || !s.playerId) return;
-        var g = gameOn(s.playerId, d);
-        if (g) {
-          var rec = { playerId: s.playerId, day: d, fpts: g.fpts, dnp: g.dnp };
-          s.eligible.push(rec);
-          s.pending = rec;
-        }
-      });
       if (!t.isUser) botDecide(t);
     });
     state.day++;
@@ -2062,15 +2127,35 @@
     var pend = slotsOf(userTeam().id).filter(function (s) { return s.pending && !s.locked; }).length;
     if (pend && state.day <= 7) deviceNotify('lockDecision', 'Lock or pass', pend + ' of your starters played. Decide before their next game.');
   }
+  //  ── A slot can only be locked on a FINISHED game ────────
+  //  Now that points move during a game, locking a live one would let
+  //  a manager freeze a player at his best moment — 22 points in the
+  //  second half, then he fouls out — and bank a number he never
+  //  finished earning. The whole mechanic is "choose which of his
+  //  games counts", and a game in progress is not yet one of them.
+  //
+  //  Enforced here rather than only in the UI, because the UI is a
+  //  suggestion and this is a rule.
+  function canLock(s) {
+    return !!(s && !s.locked && s.pending && s.pending.final);
+  }
+
   function lockSlot(teamId, idx) {
     var s = slotsOf(teamId)[idx];
     if (!s || s.locked || !s.pending) return;
+    if (!s.pending.final) {
+      try { notify('You can lock this once the game is final.', 'info'); } catch (e) { }
+      return;
+    }
     s.locked = s.pending; s.pending = null;
     save();
   }
   function passSlot(teamId, idx) {
     var s = slotsOf(teamId)[idx];
     if (!s || s.locked) return;
+    //  Remember WHICH day was passed on, so the live refresh does not
+    //  hand the same decision straight back on the next tick.
+    s.passedDay = s.pending ? s.pending.day : state.day;
     s.pending = null;
     save();
   }
@@ -2081,10 +2166,14 @@
   function botDecide(t) {
     slotsOf(t.id).forEach(function (s, i) {
       if (s.locked || !s.pending) return;
+      //  Same rule as a human: a bot cannot lock a game in progress.
+      //  Without this the bots would quietly get an advantage no
+      //  manager in the league is allowed to use.
+      if (!s.pending.final) return;
       var p = P(s.pending.playerId);
       var left = remainingGames(s.playerId, state.day + 1);
       if (left === 0 || s.pending.fpts >= p.proj * 1.15) lockSlot(t.id, i);
-      else s.pending = null;
+      else passSlot(t.id, i);
     });
   }
   function slotScore(s) {
@@ -3474,7 +3563,10 @@
       '<div class="g-ring' + (dec.length ? ' hot' : '') + (ui.stamp != null ? ' flash' : '') + '" style="--p:' + ringPct + '"><div><b>' + (dec.length ? dec.length : locked + '/5') + '</b><span>' + (dec.length ? 'to decide' : 'locked') + '</span></div></div>' +
       (dec.length ? '<div class="g-list">' + dec.slice(0, 3).map(function (s) {
         var i = slots.indexOf(s);
-        return '<div class="g-row"><span>' + esc(shortName(P(s.pending.playerId).name)) + ' <em>' + f1(s.pending.fpts) + '</em></span><button class="g-chip-btn" data-act="lock" data-i="' + i + '">Lock</button></div>';
+        return '<div class="g-row"><span>' + esc(shortName(P(s.pending.playerId).name)) + ' <em>' + f1(s.pending.fpts) + '</em></span>' +
+          (s.pending.final
+            ? '<button class="g-chip-btn" data-act="lock" data-i="' + i + '">Lock</button>'
+            : '<span class="g-chip-live"><span class="ss-livedot"></span>Live</span>') + '</div>';
       }).join('') + '</div>' : '<p class="g-note">' + (locked === 5 ? 'Every starter is locked in.' : 'Nothing waiting. Scores appear after games.') + '</p>'));
 
     var st = standings();
@@ -4194,11 +4286,18 @@
     }
     var left = remainingGames(s.playerId, state.day);
     if (s.pending) {
-      return '<div class="ss-st pending"><span class="ss-st-label">' + DAYS_FULL[s.pending.day] + (s.pending.dnp ? ', DNP' : '') + '</span>' +
+      //  Live game: show the points climbing, but no Lock button. The
+      //  decision only exists once the game is over.
+      var liveNow = !s.pending.final;
+      return '<div class="ss-st pending' + (liveNow ? ' ss-st-live' : '') + '">' +
+        '<span class="ss-st-label">' + (liveNow ? '<span class="ss-livedot"></span>Live &middot; ' : '') + DAYS_FULL[s.pending.day] + (s.pending.dnp ? ', DNP' : '') + '</span>' +
         '<span class="ss-st-pts">' + f1(s.pending.fpts) + '</span>' +
-        '<span class="ss-st-note">' + (left ? left + ' more game' + (left > 1 ? 's' : '') + ' this week' : 'Last game, so it counts') + '</span>' +
-        '<div class="ss-lp"><button class="ss-lock-btn" data-act="lock" data-i="' + idx + '">' + ICON.lock + 'Lock</button>' +
-        (left ? '<button class="btn-sm btn-ghost" data-act="pass" data-i="' + idx + '">Pass</button>' : '') + '</div></div>';
+        '<span class="ss-st-note">' + (liveNow ? 'Still playing. Lock opens when the game is final.'
+          : (left ? left + ' more game' + (left > 1 ? 's' : '') + ' this week' : 'Last game, so it counts')) + '</span>' +
+        (liveNow ? '' :
+          '<div class="ss-lp"><button class="ss-lock-btn" data-act="lock" data-i="' + idx + '">' + ICON.lock + 'Lock</button>' +
+          (left ? '<button class="btn-sm btn-ghost" data-act="pass" data-i="' + idx + '">Pass</button>' : '') + '</div>') +
+      '</div>';
     }
     var inj = injuryOf(s.playerId);
     if (inj && inj.status !== 'GTD' && !s.eligible.length) {
@@ -4349,8 +4448,12 @@
     var actions = '';
     if (interactive && s.pending && !s.locked) {
       var left = remainingGames(s.playerId, state.day);
-      actions = '<div class="mx-actions"><button class="ss-lock-btn" data-act="lock" data-i="' + idx + '">' + ICON.lock + 'Lock ' + f1(s.pending.fpts) + '</button>' +
-        (left ? '<button class="btn-sm btn-ghost" data-act="pass" data-i="' + idx + '">Pass</button>' : '<span class="mx-note">Last game counts</span>') + '</div>';
+      //  No Lock while the ball is still in the air. The points shown
+      //  are live and will keep moving.
+      actions = s.pending.final
+        ? '<div class="mx-actions"><button class="ss-lock-btn" data-act="lock" data-i="' + idx + '">' + ICON.lock + 'Lock ' + f1(s.pending.fpts) + '</button>' +
+          (left ? '<button class="btn-sm btn-ghost" data-act="pass" data-i="' + idx + '">Pass</button>' : '<span class="mx-note">Last game counts</span>') + '</div>'
+        : '<div class="mx-actions"><span class="mx-note mx-note-live"><span class="ss-livedot"></span>In progress &middot; lock when final</span></div>';
     }
     return '<div class="mx-card ' + state_ + (right ? ' r' : '') + (ui.stamp === idx && interactive ? ' stamp' : '') + '">' + top + track + detail + actions + '</div>';
   }

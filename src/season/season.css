@@ -1643,3 +1643,38 @@ button.ss-lab-chip[aria-expanded="true"] { box-shadow: 0 0 0 2px rgba(246, 197, 
 @media (prefers-reduced-motion: reduce) {
   .ss-pt { transition: opacity .18s ease; transform: none; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   LIVE SCORING
+   Points now climb while a game is being played. A live slot shows
+   a pulsing dot and NO lock button — the lock only appears once the
+   game is final, so nobody can freeze a player mid-run.
+══════════════════════════════════════════════════════════ */
+.ss-livedot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, .6);
+  animation: ssLivePulse 1.8s ease-out infinite;
+  vertical-align: baseline;
+}
+@keyframes ssLivePulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, .55); }
+  70%  { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.ss-st.ss-st-live { border-color: rgba(239, 68, 68, .35); }
+.ss-st.ss-st-live .ss-st-pts { color: var(--text); }
+.mx-note-live { display: inline-flex; align-items: center; color: var(--muted); font-size: 12px; }
+.g-chip-live {
+  display: inline-flex; align-items: center;
+  font-size: 11px; font-weight: 650; color: var(--muted);
+  padding: 3px 9px; border-radius: 999px;
+  background: rgba(239, 68, 68, .1);
+  border: 1px solid rgba(239, 68, 68, .25);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ss-livedot { animation: none; }
+}
