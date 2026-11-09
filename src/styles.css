@@ -3100,18 +3100,71 @@ select:focus {
 }
 
 /* ── SCHOOL BADGE ───────────────────────────────────────── */
+/* ── School badges ────────────────────────────────────────
+   These stand in for school logos everywhere: draft board, rosters,
+   standings, matchups, pick notifications. Real athletic logos are
+   registered trademarks and licensing them is a fight this app does
+   not need, so the badge has to carry the identity on its own —
+   which means it should look like a deliberate object, not a flat
+   coloured circle with letters in it.
+
+   Depth comes from a gradient layered over the inline background
+   COLOUR (never the `background` shorthand, which would wipe it),
+   plus a light rim at the top and a shadow pooling at the bottom.
+   The condensed display face matters more than it sounds: it fits
+   four characters legibly at 22px, which Inter at weight 900
+   genuinely cannot.                                               */
 .school-badge {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-family: 'Inter', sans-serif;
-  font-weight: 900;
+  font-family: var(--font-display, 'Inter', sans-serif);
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.015em;
+  line-height: 1;
   flex-shrink: 0;
   vertical-align: middle;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+  /* Sheen over the school colour: light from above, shade below. */
+  background-image:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.22) 0%,
+      rgba(255, 255, 255, 0.05) 38%,
+      rgba(0, 0, 0, 0.10) 62%,
+      rgba(0, 0, 0, 0.26) 100%);
+  background-repeat: no-repeat;
+  /* Inner rim + outer drop. The inset pair is what makes it read as
+     a physical chip rather than a filled shape. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.22),
+    0 2px 7px rgba(0, 0, 0, 0.42);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.32);
+}
+/* A pale school colour (Oregon yellow, Syracuse orange) needs the
+   opposite treatment — a dark rim, and no white text-shadow eating
+   the letterforms. */
+.school-badge.sb-light {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.14),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.14),
+    0 2px 7px rgba(0, 0, 0, 0.38);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+/* The ring rules in season.css override box-shadow wholesale, so the
+   badge keeps its own edge through an overlay instead. */
+.mx-logo .school-badge::after,
+.mx-card .school-badge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), inset 0 -2px 5px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
 }
 
 /* ════════════════════════════════════════════════════════

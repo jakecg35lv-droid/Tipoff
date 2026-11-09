@@ -148,7 +148,13 @@ function getSchoolLogoHTML(college, size) {
   const b = parseInt(color.slice(5, 7), 16);
   const isLight = (r * 299 + g * 587 + b * 114) / 1000 > 145;
   const textColor = isLight ? 'rgba(0,0,0,0.82)' : 'rgba(255,255,255,0.93)';
-  return '<span class="school-badge" style="width:' + sz + 'px;height:' + sz + 'px;background:' + color + ';font-size:' + fontSize + 'px;color:' + textColor + ';">' + initials + '</span>';
+  //  background-COLOR, not the background shorthand. The shorthand
+  //  resets background-image, which kills the depth gradient the
+  //  stylesheet layers on top of the school colour.
+  //  sb-light flips the rim and text-shadow for pale school colours
+  //  (Oregon yellow, Syracuse orange), which otherwise lose their
+  //  letterforms against a dark panel.
+  return '<span class="school-badge' + (isLight ? ' sb-light' : '') + '" style="width:' + sz + 'px;height:' + sz + 'px;background-color:' + color + ';font-size:' + fontSize + 'px;color:' + textColor + ';">' + initials + '</span>';
 }
 
 // ── BLOCKED TERMS ─────────────────────────────────────────

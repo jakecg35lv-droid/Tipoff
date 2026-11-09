@@ -1296,6 +1296,28 @@
   function nextMondayAfter(ms) {
     var d = new Date(ms);
     var m = new Date(d.getFullYear(), d.getMonth(), d.getDate());  // local midnight
+
+    //  ── A draft that ends ON a Monday starts that Monday ──
+    //  This always skipped to the FOLLOWING Monday, on the reasoning
+    //  that you cannot play a week already underway. That is right for
+    //  a draft finishing Monday night, and wrong for one finishing
+    //  Monday morning: the week has barely begun and none of that
+    //  evening's games have tipped.
+    //
+    //  It cost a real league seven days. A draft scheduled for Sunday
+    //  6pm ran long, finished around midday Monday, and the league was
+    //  told week 1 began the following Monday — an idle week for eight
+    //  people who had just drafted.
+    //
+    //  So: finish on a Monday before 5pm local and that Monday is week
+    //  1. College basketball tips in the evening, and isPreDraftGame
+    //  now compares actual tip-off times, so any game that did start
+    //  before the draft ended still scores zero. The cutoff is the
+    //  coarse guard; the tip-time check is the precise one.
+    if (m.getDay() === 1 && d.getHours() < 17) {
+      return [m.getFullYear(), m.getMonth(), m.getDate()];
+    }
+
     do { m = new Date(m.getTime() + 864e5); } while (m.getDay() !== 1);
     return [m.getFullYear(), m.getMonth(), m.getDate()];
   }
@@ -1697,6 +1719,29 @@
     var done = state && state.draft && state.draft.completedAt;
     if (!done) return false;                 // draft not finished; nothing to void
     if (!g || g.day == null || g.day < 0) return false;
+
+    //  ── Compare TIP-OFF, not calendar day ─────────────────
+    //  This used to void any game falling on the draft's calendar
+    //  day. The reasoning was that a draft ending Sunday afternoon
+    //  should not retroactively claim Sunday evening's games — but
+    //  that is backwards. If you owned the player before the ball went
+    //  up, you owned him for the entire game, and the date on the
+    //  calendar has nothing to do with it.
+    //
+    //  The blunt version cost a real league a day: a draft that ran
+    //  long and finished at midday Monday would have scored every one
+    //  of that night's 23 games as zero, despite them tipping six
+    //  hours later.
+    //
+    //  startsAt is the ISO tip time the sync writes on every game doc.
+    //  When it is present, use it. When it is not — an older document,
+    //  or a simulated game — fall back to the day comparison, which is
+    //  the conservative answer and never credits a game that might
+    //  have been played before anyone had a roster.
+    if (g.time) {
+      var tip = Date.parse(g.time);
+      if (!isNaN(tip)) return tip <= done;
+    }
     var r = weekRange(state.week);
     var gameDay = new Date(r.start.getTime() + g.day * 864e5);
     var d = new Date(done);
@@ -2805,8 +2850,14 @@
     if (si && si.abbr) {
       var c = si.color || '#1e2235', r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
       var light = (r * 299 + g * 587 + b * 114) / 1000 > 150, len = si.abbr.length;
-      return '<span class="school-badge" style="width:' + size + 'px;height:' + size + 'px;background:' + c + ';color:' + (light ? 'rgba(0,0,0,.82)' : '#fff') +
-        ';font-size:' + Math.max(7, Math.round(size * (len > 3 ? .26 : len > 2 ? .31 : .36))) + 'px;" title="' + esc(college) + '">' + esc(si.abbr) + '</span>';
+      //  background-COLOR, not the shorthand: the shorthand wipes
+      //  background-image and the stylesheet layers the depth gradient
+      //  there. `light` also drives a class rather than only a colour,
+      //  because a pale school colour needs a darker rim to stay
+      //  readable against a dark panel.
+      return '<span class="school-badge' + (light ? ' sb-light' : '') + '" style="width:' + size + 'px;height:' + size +
+        'px;background-color:' + c + ';color:' + (light ? 'rgba(0,0,0,.84)' : '#fff') +
+        ';font-size:' + Math.max(7, Math.round(size * (len > 3 ? .27 : len > 2 ? .32 : .37))) + 'px;" title="' + esc(college) + '">' + esc(si.abbr) + '</span>';
     }
     return typeof window.getSchoolLogoHTML === 'function' ? window.getSchoolLogoHTML(college, size)
       : '<span class="school-badge" style="width:' + size + 'px;height:' + size + 'px;">' + esc((college || '?').charAt(0)) + '</span>';
