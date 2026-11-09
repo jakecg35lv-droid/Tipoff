@@ -149,7 +149,17 @@
        seasonLeagues/{code}/weeks/{n} instead — which is also the
        shape the server-side stats job will write.
   ══════════════════════════════════════════════════════ */
-  var SYNC = { code: null, unsub: null, rev: 0, applying: false, timer: null };
+  //  skew: milliseconds this device's clock is BEHIND the device that
+  //  last wrote the league (positive = we are behind). Measured on
+  //  every snapshot; see subscribeSeason.
+  var SYNC = { code: null, unsub: null, rev: 0, applying: false, timer: null, skew: 0 };
+
+  //  The clock to use for anything compared against a timestamp that
+  //  came from another device — which is every draft deadline.
+  //  Date.now() is still correct for purely local timing (how long ago
+  //  did THIS device do something), so it is deliberately not replaced
+  //  everywhere.
+  function nowSynced() { return Date.now() + SYNC.skew; }
 
   function syncDb() { return window._db || null; }
   function seasonDoc(code) {
@@ -253,7 +263,12 @@
     var payload = {
       rev: SYNC.rev,
       state: syncPayload(),
-      updatedAt: Date.now(),
+      //  nowSynced, NOT Date.now. updatedAt is the reference every
+      //  other device measures its own offset against, and endsAt is
+      //  written on the synced scale — mixing the two would make each
+      //  device correct towards the other's raw clock on every write
+      //  and oscillate instead of converging on one shared scale.
+      updatedAt: nowSynced(),
       updatedBy: myUid() || 'anon'
     };
     ref.set(payload, { merge: true })
@@ -297,6 +312,37 @@
       if (!d.state) return;
 
       SYNC.rev = d.rev;
+
+      /* ── Measure this device's clock offset from the writer ──
+         draft.endsAt is an ABSOLUTE timestamp taken from whichever
+         device made the last pick. Every other device then compares it
+         against its own Date.now(). Phone and laptop clocks routinely
+         differ by tens of seconds, and that one assumption produced
+         both of the draft bugs reported after the first live draft:
+
+           • a device running BEHIND the writer sees a timer far longer
+             than 60s — the reported 3 1/2 minute clock
+           • a device running AHEAD opens the draft with endsAt already
+             in the past, so its very first tick fires the autopick —
+             the reported "my first pick got taken instantly".
+             Confirmed in the log: picks 0 and 1 are how:'auto', and
+             'auto' can only come from the owner's OWN device.
+
+         updatedAt is written by the same clock, in the same write, as
+         endsAt. So the gap between it and our clock at the moment the
+         snapshot lands is that writer's offset from us. Network
+         latency inflates it by a few hundred ms, which is noise next
+         to the drift this exists to cancel.
+
+         Everything that reads the draft clock uses nowSynced() below
+         instead of Date.now(). */
+      if (typeof d.updatedAt === 'number' && d.updatedAt > 0) {
+        var observed = d.updatedAt - Date.now();
+        //  Sanity clamp. A wild value means a broken device clock, and
+        //  trusting it would be worse than ignoring it.
+        SYNC.skew = Math.abs(observed) > 6 * 3600e3 ? 0 : observed;
+      }
+
       SYNC.applying = true;
       try {
         var games = (state && state.games) || {};   // keep locally cached games
@@ -350,7 +396,19 @@
   //  Multiplayer only matters once the league is actually shared.
   //  Offline or signed out, every client is trivially the host and
   //  the draft behaves exactly as it did in the lab.
-  var HOST_TAKEOVER_MS = 6000;   // grace before the host covers a silent human
+  //  Grace before the host covers a human seat whose clock has expired.
+  //
+  //  This was 6 seconds, which is not a grace period — it is a race.
+  //  A manager's own device has to notice the expiry, pick, write to
+  //  Firestore (400ms debounce) and have that land before the host's
+  //  tick fires, all inside six seconds, on a phone that may have just
+  //  woken up. Lose that race and the host drafts for you while your
+  //  screen still shows time on the clock.
+  //
+  //  20 seconds is still well short of a 60-second pick timer, so a
+  //  genuinely disconnected manager cannot stall the room for long,
+  //  but a live one is no longer robbed by ordinary network latency.
+  var HOST_TAKEOVER_MS = 20000;
 
   function multiplayer() {
     return !!(syncDb() && state && state.league && state.league.code && SYNC.unsub);
@@ -838,7 +896,7 @@
     return ref.set({
       rev: SYNC.rev || 1,
       state: syncPayload(),
-      updatedAt: Date.now(),
+      updatedAt: nowSynced(),   // same shared clock scale as pushState
       updatedBy: myUid()
     }, { merge: true }).then(function () {
       SYNC.rev = SYNC.rev || 1;
@@ -972,9 +1030,11 @@
   function draftLive() { return state && state.phase === 'draft' && draftCfg().status === 'live'; }
   function restartClock() {
     var d = draftCfg();
-    d.endsAt = Date.now() + d.timerSecs * 1000;
+    //  Written on the synced clock so the deadline means the same
+    //  instant on every device, not just this one.
+    d.endsAt = nowSynced() + d.timerSecs * 1000;
     // Lab bots "think" for 2–5 seconds so you can watch the board move.
-    d.botAt = team(onClock()).isUser ? null : Date.now() + 2000 + Math.floor(Math.random() * 3000);
+    d.botAt = team(onClock()).isUser ? null : nowSynced() + 2000 + Math.floor(Math.random() * 3000);
     save();
     if (team(onClock()).isUser) deviceNotify('onClock', 'You’re on the clock', 'Round ' + (Math.floor(d.pick / state.league.numTeams) + 1) + ' in ' + state.league.name + '. ' + fmtClock(d.timerSecs) + ' to pick.');
   }
@@ -997,22 +1057,28 @@
   function pauseDraft() {
     var d = draftCfg();
     if (d.status !== 'live') return;
-    d.status = 'paused'; d.pausedLeft = Math.max(0, d.endsAt - Date.now());
-    d.botLeft = d.botAt ? Math.max(0, d.botAt - Date.now()) : null;
+    d.status = 'paused'; d.pausedLeft = Math.max(0, d.endsAt - nowSynced());
+    d.botLeft = d.botAt ? Math.max(0, d.botAt - nowSynced()) : null;
     save();
   }
   function resumeDraft() {
     var d = draftCfg();
     if (d.status !== 'paused') return;
-    d.status = 'live'; d.endsAt = Date.now() + (d.pausedLeft || d.timerSecs * 1000);
-    d.botAt = d.botLeft != null ? Date.now() + d.botLeft : null;
+    d.status = 'live'; d.endsAt = nowSynced() + (d.pausedLeft || d.timerSecs * 1000);
+    d.botAt = d.botLeft != null ? nowSynced() + d.botLeft : null;
     save();
   }
   function timeLeft() {
     var d = draftCfg();
     if (d.status === 'pre') return d.timerSecs;
     if (d.status === 'paused') return (d.pausedLeft || 0) / 1000;
-    return Math.max(0, (d.endsAt - Date.now()) / 1000);
+    //  Synced clock, and capped at timerSecs. The cap is a second line
+    //  of defence: whatever goes wrong with a deadline, the displayed
+    //  clock can never read higher than the configured pick time, so
+    //  nobody sees a 60-second timer counting down from 3 1/2 minutes
+    //  again.
+    var left = (d.endsAt - nowSynced()) / 1000;
+    return Math.max(0, Math.min(d.timerSecs, left));
   }
   function fmtClock(secs) {
     var t = Math.max(0, Math.ceil(secs)), m = Math.floor(t / 60);
@@ -1145,17 +1211,36 @@
   // Called 4× a second while the season view is open.
   function draftTick() {
     if (state && state.phase === 'draft' && draftCfg().status === 'pre' && state.draft.scheduledAt) {
-      var at = state.draft.scheduledAt, now0 = Date.now();
+      //  scheduledAt is a shared timestamp, so compare it on the shared
+      //  clock like every other cross-device deadline.
+      var at = state.draft.scheduledAt, now0 = nowSynced();
       if (!state.draft.soonSent && at - now0 <= 15 * 60000 && at > now0) {
         state.draft.soonSent = true; save();
         deviceNotify('draftSoon', 'Draft starts soon', state.league.name + ' drafts in 15 minutes.');
       }
-      if (now0 >= at) { startDraft(); ui.toastMsg = 'Scheduled start reached. The draft is live.'; ui.toastType = 'success'; render(); return; }
+      //  ── Only the host may fire the scheduled start ──────────
+      //  This was ungated, so at the scheduled minute EVERY device in
+      //  the league called startDraft(), and each one wrote its own
+      //  restartClock() deadline. Eight devices, eight competing
+      //  writes, last one wins — and the whole room inherits whatever
+      //  deadline the winner's clock produced, at the exact moment
+      //  the draft opens. That is the worst possible time for the
+      //  clock to be wrong, and it lines up with the first two picks
+      //  of the real draft being autopicked.
+      //
+      //  Non-hosts simply wait: the host's write flips status to
+      //  'live' and the snapshot brings it to everyone.
+      if (now0 >= at) {
+        if (!isHost()) { paintClock(); return; }
+        startDraft(); ui.toastMsg = 'Scheduled start reached. The draft is live.'; ui.toastType = 'success'; render(); return;
+      }
       var cd = root && root.querySelectorAll('[data-ss-countdown]');
       if (cd) cd.forEach(function (el) { el.textContent = countdownText(at); });
     }
     if (!draftLive()) return;
-    var d = draftCfg(), now = Date.now(), t = team(onClock());
+    //  Synced clock: endsAt and botAt were written by whichever device
+    //  made the last pick, so they must be compared on the same scale.
+    var d = draftCfg(), now = nowSynced(), t = team(onClock());
 
     /* ── Who is allowed to make this pick ──────────────────
        Every client runs this tick. Solo, that is harmless. With
@@ -1958,6 +2043,88 @@
   }
   function teamScore(teamId, week) {
     return slotsOf(teamId, week).reduce(function (sum, s) { return sum + slotScore(s).v; }, 0);
+  }
+
+  /* ══════════════════════════════════════════════════════
+     PROJECTIONS
+
+     The matchup page read "0.0 to 0.0" until somebody's game tipped,
+     which is the least useful thing it could say in the days when
+     people actually look at it.
+
+     Projecting this scoring system is not "add up the projections".
+     A slot does NOT accumulate every game its player plays — it keeps
+     exactly ONE performance, the one the manager locks. So a player
+     with three games this week is worth more than the same player
+     with one game, not because he scores three times, but because his
+     owner gets to choose the best of three.
+
+     OPTIONALITY is that choice, expressed as a multiplier on the
+     per-game projection. Deliberately modest: the expected maximum of
+     n draws grows quickly at first and then flattens, and a manager
+     who locks early does not realise the full benefit anyway.
+  ══════════════════════════════════════════════════════ */
+  var OPTIONALITY = [0, 1, 1.15, 1.25, 1.30];
+
+  //  What this slot is expected to be worth by the end of the week.
+  function slotProjected(s) {
+    if (!s) return 0;
+    //  Locked is settled: no projection, it is a fact.
+    if (s.locked) return s.locked.fpts;
+    var banked = s.eligible.length ? s.eligible[s.eligible.length - 1].fpts : 0;
+    if (!s.playerId) return banked;
+    var p = P(s.playerId);
+    if (!p) return banked;
+
+    var inj = injuryOf(s.playerId);
+    var mult = !inj ? 1 : inj.status === 'GTD' ? 0.5 : 0;
+    //  Games still ahead of us this week. Pre-draft games score zero,
+    //  so they are not upside.
+    var left = gamesFor(s.playerId).filter(function (g) {
+      return g.day >= state.day && !isPreDraftGame(g);
+    }).length;
+    if (!left) return banked;              // nothing more to play for
+
+    var k = Math.min(left, OPTIONALITY.length - 1);
+    //  A manager never has to take a worse game than the one already
+    //  banked, so the floor is what is already on the board.
+    return Math.max(banked, p.proj * OPTIONALITY[k] * mult);
+  }
+
+  function teamProjected(teamId, week) {
+    return slotsOf(teamId, week).reduce(function (sum, s) { return sum + slotProjected(s); }, 0);
+  }
+
+  //  How much of this matchup is already decided, 0..1. Used to shrink
+  //  the uncertainty band as the week plays out.
+  function settledFraction(teamId, week) {
+    var slots = slotsOf(teamId, week) || [];
+    if (!slots.length) return 0;
+    var done = 0;
+    slots.forEach(function (s) {
+      if (!s) return;
+      if (s.locked) { done++; return; }
+      if (!s.playerId) { done++; return; }           // empty slot cannot change
+      var left = gamesFor(s.playerId).filter(function (g) { return g.day >= state.day; }).length;
+      if (!left) done++;
+    });
+    return done / slots.length;
+  }
+
+  //  Win probability for `teamId` against `oppId`.
+  //
+  //  A logistic on the projected margin. Sigma is the spread of a
+  //  weekly total and shrinks towards zero as slots settle, so a
+  //  matchup that is already decided reads 99%, not 70%. The floor
+  //  keeps it from ever claiming certainty while games remain.
+  function winProbability(teamId, oppId, week) {
+    var mine = teamProjected(teamId, week);
+    var theirs = teamProjected(oppId, week);
+    var settled = (settledFraction(teamId, week) + settledFraction(oppId, week)) / 2;
+    var scale = (mine + theirs) * 0.5;
+    var sigma = Math.max(2, scale * 0.16 * (1 - settled) + 1.5);
+    var p = 1 / (1 + Math.exp(-(mine - theirs) / sigma));
+    return Math.max(0.01, Math.min(0.99, p));
   }
   //  A week used to finalise from whatever state.games held at that
   //  moment. upgradeWeekToReal only ever ran for the CURRENT week and
@@ -4117,10 +4284,16 @@
       var m = games[i], mine = i === mineIdx;
       var l = mine && m[1] === u.id ? m[1] : m[0], r = l === m[0] ? m[1] : m[0];
       var ls = teamScore(l), rs = teamScore(r);
+      //  Before anything tips, the live score is 0-0 for every matchup
+      //  in the list, which makes the whole switcher useless. Show the
+      //  projection alongside it so the rows mean something.
+      var lpr = teamProjected(l), rpr = teamProjected(r);
+      var anyLive = (ls + rs) > 0;
+      var sub = function (v) { return '<em class="mx-sw-proj">' + f1(v) + '</em>'; };
       return '<button role="tab" aria-selected="' + (i === cur) + '" class="mx-sw' + (i === cur ? ' on' : '') + (mine ? ' mine' : '') + '" data-act="mview" data-i="' + i + '">' +
         (mine || matchKind(state.week, i) !== 'reg' ? '<span class="mx-sw-tag' + (mine ? '' : ' k') + '">' + (mine ? 'Your matchup' : '') + (mine && matchKind(state.week, i) !== 'reg' ? ' · ' : '') + KIND_LABEL(matchKind(state.week, i)) + '</span>' : '') +
-        '<span class="mx-sw-row' + (ls >= rs ? ' lead' : '') + '">' + avatarHTML(team(l).name, 22) + '<span class="mx-sw-n">' + esc(team(l).name) + '</span><b>' + f1(ls) + '</b></span>' +
-        '<span class="mx-sw-row' + (rs > ls ? ' lead' : '') + '">' + avatarHTML(team(r).name, 22) + '<span class="mx-sw-n">' + esc(team(r).name) + '</span><b>' + f1(rs) + '</b></span>' +
+        '<span class="mx-sw-row' + ((anyLive ? ls >= rs : lpr >= rpr) ? ' lead' : '') + '">' + avatarHTML(team(l).name, 22) + '<span class="mx-sw-n">' + esc(team(l).name) + '</span>' + (anyLive ? '<b>' + f1(ls) + '</b>' : sub(lpr)) + '</span>' +
+        '<span class="mx-sw-row' + ((anyLive ? rs > ls : rpr > lpr) ? ' lead' : '') + '">' + avatarHTML(team(r).name, 22) + '<span class="mx-sw-n">' + esc(team(r).name) + '</span>' + (anyLive ? '<b>' + f1(rs) + '</b>' : sub(rpr)) + '</span>' +
       '</button>';
     }).join('') + '</div>';
 
@@ -4130,11 +4303,34 @@
     var L = team(lId), R = team(rId), a = slotsOf(lId), b = slotsOf(rId);
     var ls = teamScore(lId), rs = teamScore(rId);
     var dec = isMine ? a.filter(function (s) { return s.pending && !s.locked; }).length : 0;
+
+    //  Projected totals and win probability. Shown whenever the week
+    //  is not finished, which is exactly when "0.0 to 0.0" used to be
+    //  the only thing on screen.
+    var lp = teamProjected(lId), rp = teamProjected(rId);
+    var lwin = Math.round(winProbability(lId, rId) * 100);
+    var settledPct = Math.round(((settledFraction(lId) + settledFraction(rId)) / 2) * 100);
+    var weekOver = settledPct >= 100;
+    var projRow = weekOver ? '' :
+      '<div class="mx-proj">' +
+        '<div class="mx-proj-side"><span class="mx-proj-lab">Projected</span><b>' + f1(lp) + '</b></div>' +
+        '<div class="mx-proj-bar" role="img" aria-label="' + lwin + ' percent win chance for ' + esc(L.name) + '">' +
+          '<span class="mx-proj-fill" style="width:' + lwin + '%"></span>' +
+          '<span class="mx-proj-pct">' + lwin + '% &middot; ' + (100 - lwin) + '%</span>' +
+        '</div>' +
+        '<div class="mx-proj-side r"><span class="mx-proj-lab">Projected</span><b>' + f1(rp) + '</b></div>' +
+      '</div>' +
+      '<div class="mx-proj-note">' +
+        (settledPct === 0
+          ? 'Projection from season averages and games scheduled this week.'
+          : settledPct + '% of this matchup is already locked in.') +
+      '</div>';
+
     var board = '<div class="ss-vs-card' + (isMine ? '' : ' other') + '">' +
       '<div class="ss-vs-side' + (ls >= rs ? ' lead' : '') + '">' + avatarHTML(L.name, 44) + '<div><div class="ss-vs-name">' + esc(L.name) + '</div><div class="ss-vs-sub">' + recordOf(lId) + '</div></div><div class="ss-vs-pts">' + f1(ls) + '</div></div>' +
       '<div class="ss-vs-mid">VS</div>' +
       '<div class="ss-vs-side r' + (rs > ls ? ' lead' : '') + '"><div class="ss-vs-pts">' + f1(rs) + '</div><div><div class="ss-vs-name">' + esc(R.name) + '</div><div class="ss-vs-sub">' + recordOf(rId) + '</div></div>' + avatarHTML(R.name, 44) + '</div>' +
-    '</div>';
+    '</div>' + projRow;
     var kp = 'm' + cur;
     var pairs = a.map(function (s, i) {
       var slot = s.slot === 'UTIL' ? 'UTL' : s.slot;
@@ -4278,7 +4474,10 @@
     try { var s = JSON.parse(localStorage.getItem('mmfantasy-session') || 'null'); return (s && s.email) || ''; } catch (e) { return ''; }
   }
   function countdownText(at) {
-    var ms = at - Date.now();
+    //  Counts down to a shared draft time, so it has to run on the
+    //  shared clock — otherwise two managers watching the same draft
+    //  see two different countdowns.
+    var ms = at - nowSynced();
     if (ms <= 0) return 'now';
     var m = Math.floor(ms / 60000), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60, ss = Math.floor(ms / 1000) % 60;
     if (d) return d + 'd ' + h + 'h';
@@ -5360,7 +5559,7 @@
         tx.set(ref, {
           rev: nextRev,
           state: encodeState(st),
-          updatedAt: Date.now(),
+          updatedAt: nowSynced(),   // same shared clock scale as pushState
           updatedBy: uid
         }, { merge: true });
 
