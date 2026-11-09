@@ -1579,3 +1579,67 @@ button.ss-lab-chip[aria-expanded="true"] { box-shadow: 0 0 0 2px rgba(246, 197, 
   .mx-proj-pct { font-size: 10.5px; }
   .mx-proj-note { padding: 0 12px 12px; font-size: 11px; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   OTHER PEOPLE'S PICKS — dropdown feed
+   Your own pick still gets the full-screen card (.pick-announce).
+   Everyone else's arrives here: drops from the top, stacks up to
+   three, clears itself, and never swallows a tap on the board
+   underneath while somebody's clock is running.
+══════════════════════════════════════════════════════════ */
+.ss-pickfeed {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(360px, calc(100vw - 24px));
+  pointer-events: none;
+}
+.ss-pt {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 13px;
+  border-radius: 13px;
+  background: var(--panel-solid, #111b2e);
+  border: 1px solid var(--border-2, rgba(255, 255, 255, .1));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  opacity: 0;
+  transform: translateY(-12px) scale(.97);
+  transition: opacity .22s ease, transform .22s cubic-bezier(.22, .9, .3, 1);
+}
+.ss-pt.in { opacity: 1; transform: none; }
+.ss-pt-logo { display: flex; flex: 0 0 auto; }
+.ss-pt-txt { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; line-height: 1.25; }
+.ss-pt-txt b {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text, #e8edf6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ss-pt-txt span {
+  font-size: 11.5px;
+  color: var(--muted, #90a0b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ss-pt-pos {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: .05em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  color: var(--muted, #90a0b8);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ss-pt { transition: opacity .18s ease; transform: none; }
+}

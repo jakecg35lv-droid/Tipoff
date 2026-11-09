@@ -1120,14 +1120,20 @@
   function livePick(teamId, pid, how) {
     var p = P(pid);
     var q = draftCfg().queue, at = q.indexOf(pid); if (at >= 0) q.splice(at, 1);
-    var gap = Date.now() - (livePick._last || 0);
-    livePick._last = Date.now();
     makePick(teamId, pid, how);
-    // Full-screen card for your picks and for picks made at a human pace.
-    // Rapid-fire bot picks just slide into Recent Picks so the room
-    // isn't blacked out every few seconds.
-    if (team(teamId).isUser || gap > 8000) announce(p, team(teamId), how);
-    if (!team(teamId).isUser) deviceNotify('pickMade', 'Pick made', team(teamId).name + ' drafted ' + p.name + '.');
+    //  ── Whose pick gets the full screen ───────────────────
+    //  The old rule was "mine, OR anyone's if it arrived at a human
+    //  pace", which in a live room full of people meant the screen was
+    //  blacked out by somebody else's card every few seconds — usually
+    //  while you were reading the board on your own clock.
+    //
+    //  Your own pick is an event worth stopping for. Everyone else's
+    //  is news, and news belongs in a notification you can ignore.
+    if (team(teamId).isUser) announce(p, team(teamId), how);
+    else {
+      pickToast(p, team(teamId), how);
+      deviceNotify('pickMade', 'Pick made', team(teamId).name + ' drafted ' + p.name + '.');
+    }
     if (state.phase === 'draft') restartClock();
   }
   // ── Commissioner settings actions ───────────────────────
@@ -3669,6 +3675,43 @@
     '</div></div>';
   }
   // Pick announcement (same card as the tournament draft).
+  /*  A pick by somebody else. Drops in from the top, stacks, and
+      clears itself. Deliberately pointer-events:none in CSS — during a
+      draft the thing under this toast is the player board, and nothing
+      should ever swallow a tap while a clock is running.
+
+      Capped at three on screen: a bot run can fire picks faster than
+      they expire, and an unbounded stack would cover the board it is
+      supposed to be reporting on.  */
+  function pickToast(p, t, how) {
+    var feed = document.getElementById('ssPickFeed');
+    if (!feed) {
+      feed = document.createElement('div');
+      feed.id = 'ssPickFeed';
+      feed.className = 'ss-pickfeed';
+      feed.setAttribute('aria-live', 'polite');
+      document.body.appendChild(feed);
+    }
+    while (feed.children.length >= 3) feed.removeChild(feed.firstChild);
+
+    var item = document.createElement('div');
+    item.className = 'ss-pt';
+    item.innerHTML =
+      '<span class="ss-pt-logo">' + logoHTML(p.college, 30) + '</span>' +
+      '<span class="ss-pt-txt">' +
+        '<b>' + esc(shortName(p.name)) + '</b>' +
+        '<span>' + esc(t.name) + (how === 'auto' ? ' · autopick' : '') + '</span>' +
+      '</span>' +
+      '<span class="ss-pt-pos">' + p.pos + '</span>';
+    feed.appendChild(item);
+    requestAnimationFrame(function () { item.classList.add('in'); });
+
+    setTimeout(function () {
+      item.classList.remove('in');
+      setTimeout(function () { if (item.parentNode) item.parentNode.removeChild(item); }, 260);
+    }, 2600);
+  }
+
   function announce(p, t, how) {
     var el = document.getElementById('ssPickAnnounce');
     if (!el) { el = document.createElement('div'); el.id = 'ssPickAnnounce'; el.className = 'pick-announce ss-pa'; document.body.appendChild(el); }
@@ -5312,6 +5355,9 @@
     // remote state to a module nobody is looking at.
     unsubscribeSeason();
     var pa = document.getElementById('ssPickAnnounce'); if (pa) pa.style.display = 'none';
+    //  Clear any in-flight pick toasts too, or they linger over the
+    //  splash screen after you have already left the league.
+    var pf = document.getElementById('ssPickFeed'); if (pf) pf.innerHTML = '';
     if (root) { root.style.display = 'none'; root.innerHTML = ''; }
     document.body.classList.remove('ss-open');
     var splash = document.getElementById('splashScreen');
