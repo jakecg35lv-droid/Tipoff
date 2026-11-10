@@ -67,6 +67,9 @@ exports.stripeWebhook = onRequest(
           const sub = event.data.object;
           const link = await db.collection('stripeCustomers').doc(String(sub.customer)).get();
           if (!link.exists) { console.warn('[stripe] unknown customer', sub.customer); break; }
+          const ent = await db.collection('entitlements').doc(link.data().uid).get();
+          // Lifetime (one-time) unlocks are never revoked by subscription changes.
+          if (ent.exists && ent.data().lifetime === true) { console.log(`[stripe] ${link.data().uid} is lifetime; ignoring ${event.type}`); break; }
           const active = event.type !== 'customer.subscription.deleted' && ['active', 'trialing', 'past_due'].includes(sub.status);
           await db.collection('entitlements').doc(link.data().uid).set({
             triviaUnlimited: active,
@@ -94,6 +97,7 @@ async function grant(db, s) {
   batch.set(db.collection('entitlements').doc(uid), {
     triviaUnlimited: true,
     mode: s.mode,                                   // 'payment' (one-time) or 'subscription'
+    ...(s.mode === 'payment' ? { lifetime: true } : {}),
     stripeCustomer: s.customer || null,
     stripeSession: s.id,
     email: (s.customer_details && s.customer_details.email) || null,
