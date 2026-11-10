@@ -3323,7 +3323,12 @@ const TOURNAMENTS = {
       dates: 'Nov 23–25, 2026',
       startMs: new Date('2026-11-23').getTime(),
       bracketFormat: 'single8',
-      roundNames: ['Quarterfinals', 'Semifinals', 'Championship'],
+      //  An 8-team field over three days gives First Round / Semifinals /
+      //  Championship. It read "Quarterfinals" for the opening round,
+      //  which is the label an 8-team bracket gets when it is the back
+      //  half of a 16-team draw. RealGM and the Maui bracket release both
+      //  call Monday the first round.
+      roundNames: ['First Round', 'Semifinals', 'Championship'],
       canSelect: true,
       // Must match the `region` field on this event's entries in players.js.
       // Without it, teams that also appear in the NCAA field (e.g. Clemson)
@@ -3348,7 +3353,40 @@ const TOURNAMENTS = {
         ['Arizona', 'Colorado State'],
         ['Clemson', 'Ole Miss'],
         ['BYU', 'Washington']
-      ]
+      ],
+      //  ── The half of Maui a knockout bracket cannot draw ──────
+      //  Maui is not single-elimination. Losing on Monday does not end
+      //  your tournament: the four first-round losers play again Tuesday
+      //  and everybody plays a placement game Wednesday. All eight teams
+      //  play three games, twelve games in total, not the seven a
+      //  knockout bracket implies.
+      //
+      //  This matters to a manager, not to the scoreboard. Fantasy points
+      //  come from tournamentStats/{id}/games, which the sync fills from
+      //  ESPN for EVERY game played at the event — so consolation games
+      //  always scored. What was wrong was the picture: the bracket said
+      //  four rosters were finished after Monday when they had two games
+      //  left each. Drawing them as "eliminated" told managers to stop
+      //  watching players who were still scoring.
+      placement: {
+        label: 'Placement games',
+        note: 'Every team plays all three days. First-round losers continue in the placement bracket, and those games score exactly like the championship side.',
+        days: [
+          { day: 'Tuesday, Nov 24', games: [
+            { home: 'First-round loser', away: 'First-round loser', time: 'Placement semifinal' },
+            { home: 'First-round loser', away: 'First-round loser', time: 'Placement semifinal' }
+          ] },
+          { day: 'Wednesday, Nov 25', games: [
+            { home: 'Semifinal loser', away: 'Semifinal loser', time: 'Third place' },
+            { home: 'Placement winner', away: 'Placement winner', time: 'Fifth place' },
+            { home: 'Placement loser', away: 'Placement loser', time: 'Seventh place' }
+          ] }
+        ]
+      },
+      //  First-round tip times from the bracket release, converted from
+      //  HST. The last of them cross-checks exactly against ESPN's own
+      //  start time for Colorado State vs Arizona (2026-11-24T04:30Z).
+      scheduleNote: 'Mon Nov 23 (ET): Clemson–Ole Miss 2:30p, BYU–Washington 5:00p, VCU–Providence 9:00p, Arizona–Colorado State 11:30p. Tue Nov 24 semifinals and placement games; Wed Nov 25 championship plus third, fifth and seventh place.'
     },
     {
       //  SOURCE: Xavier Athletics bracket release (31 Aug 2026),
@@ -3368,48 +3406,65 @@ const TOURNAMENTS = {
       //  and contradicts the schools' own releases.
       id: 'b4a-2026',
       name: 'Battle 4 Atlantis',
-      subtitle: 'Two pods of four · every team plays twice',
+      subtitle: 'Two groups of four · every team plays twice',
       location: 'Imperial Arena, Paradise Island, Bahamas',
-      dates: 'Nov 25 & 27, 2026',
+      //  ESPN files games from this event under TWO headlines:
+      //  "Battle 4 Atlantis - Signature Series" and "Battle 4 Atlantis -
+      //  Championship Bracket". Those are the event's own names for the
+      //  two groups, so they replace the invented "Pod 1 / Pod 2".
+      //
+      //  Dates read "Nov 25 & 27", which skipped a day the event
+      //  actually plays. ESPN has Wake Forest vs Mississippi State on
+      //  Nov 26 (confirmed on Mississippi State's schedule, headline
+      //  "Battle 4 Atlantis - Championship Bracket"), so the window is
+      //  Nov 25-27.
+      dates: 'Nov 25–27, 2026',
       startMs: new Date('2026-11-25').getTime(),
       bracketFormat: 'pod',
       roundNames: [],
       canSelect: true,
       playerRegion: 'Atlantis',
       seeded: false,
+      //  Stated explicitly because the two groups do NOT work the same
+      //  way, so no single derived sentence is true of both.
+      formatLabel: 'Two groups of four, every team playing twice. The Signature Series crowns no champion; in the Championship Bracket the second game depends on the first result.',
       teams: ['Marquette', 'Texas A&M', 'Virginia', 'Xavier',
               'Memphis', 'Mississippi State', 'Penn State', 'Wake Forest'],
       seededTeams: [],
       pods: [
-        { name: 'Pod 1', teams: ['Virginia', 'Marquette', 'Texas A&M', 'Xavier'] },
-        { name: 'Pod 2', teams: ['Wake Forest', 'Mississippi State', 'Memphis', 'Penn State'] }
+        { name: 'Signature Series', teams: ['Virginia', 'Marquette', 'Texas A&M', 'Xavier'] },
+        { name: 'Championship Bracket', teams: ['Memphis', 'Penn State', 'Wake Forest', 'Mississippi State'] }
       ],
-      //  Pod 1 times and networks are published. Pod 2's pairings are
-      //  confirmed but its tip times are not, so they are left blank
-      //  rather than invented.
+      //  Signature Series times and networks are published (Xavier's
+      //  bracket release). The Championship Bracket's two opening games
+      //  are on different days per ESPN and their tip times are not
+      //  published, so they are left blank rather than invented.
       fixtures: [
         { day: 'Wednesday, Nov 25', games: [
           { home: 'Virginia', away: 'Marquette', time: '12:00 PM ET', tv: 'ESPN' },
           { home: 'Xavier', away: 'Texas A&M', time: '2:30 PM ET', tv: 'ESPN2' },
-          { home: 'Wake Forest', away: 'Mississippi State' },
           { home: 'Memphis', away: 'Penn State' }
+        ] },
+        { day: 'Thursday, Nov 26', games: [
+          { home: 'Wake Forest', away: 'Mississippi State' }
         ] },
         { day: 'Friday, Nov 27', games: [
           { home: 'Xavier', away: 'Virginia', time: '11:00 AM ET', tv: 'ESPN2' },
           { home: 'Texas A&M', away: 'Marquette', time: '5:00 PM ET', tv: 'SEC Network' }
         ] }
       ],
-      //  Pod 2's second-round pairings have not been published. Pod 1
-      //  crosses over (A-B, C-D on Wednesday becomes C-A, D-B on
-      //  Friday), so Pod 2 almost certainly does the same — but
-      //  "almost certainly" is exactly the reasoning that produced
-      //  every wrong fixture in this file. Left out until sourced.
-      scheduleNote: 'Pod 2 plays its second game on Nov 27. Pairings and tip times are not published yet.',
+      //  The Championship Bracket's second games are not published, and
+      //  unlike the Signature Series they are not a fixed crossover —
+      //  the group's name implies the second game depends on the first
+      //  one's result. Inferring the pairing is exactly the reasoning
+      //  that produced every wrong fixture this file has ever had, so it
+      //  is left out until the event posts it.
+      scheduleNote: 'Signature Series: Virginia, Marquette, Texas A&M and Xavier each play twice, Nov 25 and Nov 27, and no champion is crowned. Championship Bracket: Memphis–Penn State opens Nov 25 and Wake Forest–Mississippi State Nov 26; each team plays a second game, which is not posted yet.',
       matchups: [
         ['Virginia', 'Marquette'],
         ['Xavier', 'Texas A&M'],
-        ['Wake Forest', 'Mississippi State'],
-        ['Memphis', 'Penn State']
+        ['Memphis', 'Penn State'],
+        ['Wake Forest', 'Mississippi State']
       ]
     },
     {
@@ -3425,7 +3480,9 @@ const TOURNAMENTS = {
       //  FORMAT: group play. Nobody is eliminated, there is no bracket.
       id: 'etsc-adventure-2026',
       name: 'ESPN Events Invitational',
-      subtitle: 'Adventure Group · six teams, three games each',
+      //  ESPN's own headline for these games is "Adventure Bracket",
+      //  not "Adventure Group".
+      subtitle: 'Adventure Bracket · six teams, three games each',
       location: 'State Farm Field House, Kissimmee, FL',
       dates: 'Nov 23–25, 2026',
       startMs: new Date('2026-11-23').getTime(),
@@ -3434,14 +3491,29 @@ const TOURNAMENTS = {
       seeded: false,
       canSelect: true,
       playerRegion: 'Adventure',
+      formatLabel: 'Group play: every team plays three games across the three days and nobody is eliminated.',
       teams: ['Akron', 'App State', 'Belmont', 'St. Bonaventure', 'Wright State', 'Yale'],
       seededTeams: [],
+      //  All three of St. Bonaventure's games are now on ESPN under the
+      //  headline "ESPN Events Invitational - Adventure Bracket", which
+      //  is what confirms the three-games-each format from inside the
+      //  feed rather than from a preview article. The other teams'
+      //  remaining pairings are not posted, so only the games with a
+      //  source are listed — the renderer's own guard then declines to
+      //  claim a per-team game count, which is correct while the
+      //  schedule is partial.
       fixtures: [
         { day: 'Monday, Nov 23', games: [
           { home: 'St. Bonaventure', away: 'App State', time: '11:00 AM ET' }
+        ] },
+        { day: 'Tuesday, Nov 24', games: [
+          { home: 'Wright State', away: 'St. Bonaventure', time: '10:00 AM ET' }
+        ] },
+        { day: 'Wednesday, Nov 25', games: [
+          { home: 'St. Bonaventure', away: 'Belmont', time: '10:00 AM ET' }
         ] }
       ],
-      scheduleNote: 'Each team plays three games across Nov 23-25. Only the opening pairing is published; the rest are not announced yet.'
+      scheduleNote: 'Each team plays three games across Nov 23-25. Only St. Bonaventure has a full published schedule; the other pairings are not announced yet.'
     },
     {
       //  SOURCE: as above. The half of the event with power-conference
@@ -3452,7 +3524,7 @@ const TOURNAMENTS = {
       //  then the same four switch opponents the next day.
       id: 'etsc-magic-2026',
       name: 'ESPN Events Invitational',
-      subtitle: 'Magic Group · four teams, two games each',
+      subtitle: 'Magic Bracket · four teams, two games each',
       location: 'State Farm Field House, Kissimmee, FL',
       dates: 'Nov 26–27, 2026',
       startMs: new Date('2026-11-26').getTime(),
@@ -3461,15 +3533,23 @@ const TOURNAMENTS = {
       seeded: false,
       canSelect: true,
       playerRegion: 'Magic',
+      formatLabel: 'Group play: all four teams play twice and nobody is eliminated.',
       teams: ['Boston College', 'UCF', 'Cincinnati', 'Georgia'],
       seededTeams: [],
-      //  The four teams are confirmed; who plays whom on each day is
-      //  not. This group is described the same way as Atlantis Pod 1,
-      //  which crosses over — but "described the same way" is the
-      //  reasoning that produced every wrong fixture in this file, so
-      //  nothing is inferred here.
-      fixtures: [],
-      scheduleNote: 'Two games on Thu Nov 26, the same four teams switching opponents on Fri Nov 27. Exact pairings and tip times are not published yet.'
+      //  Two of the four games are now published on ESPN under the
+      //  headline "ESPN Events Invitational - Magic Bracket", both found
+      //  on Cincinnati's schedule: Nov 26 at 16:00Z and Nov 27 at
+      //  21:30Z. UCF's two games are not posted, so they are not listed.
+      //  Nothing here is inferred from the Signature Series crossover.
+      fixtures: [
+        { day: 'Thursday, Nov 26', games: [
+          { home: 'Georgia', away: 'Cincinnati', time: '11:00 AM ET' }
+        ] },
+        { day: 'Friday, Nov 27', games: [
+          { home: 'Cincinnati', away: 'Boston College', time: '4:30 PM ET' }
+        ] }
+      ],
+      scheduleNote: 'Two games on Thu Nov 26 and two on Fri Nov 27, every team playing twice. Cincinnati’s pair is published; the UCF games are not announced yet.'
     },
     {
       //  SOURCE: ESPN Events, Jimmy V Classic page (checked 4 Nov 2026).
@@ -3487,6 +3567,7 @@ const TOURNAMENTS = {
       roundNames: [],
       seeded: false,
       canSelect: false, comingSoon: true,
+      formatLabel: 'Two standalone games on one night. There is no second round and no champion.',
       teams: ['Houston', 'Alabama', 'Georgia', 'Duke'],
       matchups: [['Houston', 'Alabama'], ['Georgia', 'Duke']],
       seededTeams: []
@@ -3502,10 +3583,22 @@ const TOURNAMENTS = {
       location: 'Destin, FL',
       dates: 'Nov 23–24, 2026',
       startMs: new Date('2026-11-23').getTime(),
-      bracketFormat: 'single8',
+      //  This declared single8 with two round names, which contradicts
+      //  itself: eight teams over Semifinals + Championship is four
+      //  teams' worth of rounds. The Emerald Coast Classic's Division I
+      //  bracket is four teams — two semifinals, then a final and a
+      //  third-place game — so the format string now matches the rounds.
+      //  renderRegionSimple is generic on roundNames.length, so a
+      //  two-round bracket draws correctly once the field is published.
+      //
+      //  NOTE: this event did not appear in ESPN's Nov 23-27 feed at
+      //  all. It stays comingSoon with an empty field, which is the
+      //  honest state, and it should be re-checked (or removed, the way
+      //  Las Vegas Classic was) before it is ever made selectable.
+      bracketFormat: 'single4',
       roundNames: ['Semifinals', 'Championship'],
       canSelect: false, comingSoon: true,
-      teams: [], seededTeams: []
+      teams: [], seededTeams: [], matchups: []
     }
     //  REMOVED: "Las Vegas Classic".
     //
@@ -4517,7 +4610,44 @@ function renderBracket() {
     if (!regData) { content.innerHTML = '<p style="color:var(--muted);padding:20px">No bracket data.</p>'; return; }
     const customRoundNames = state.selectedTournament.roundNames || null;
     renderRegionSimple(content, regData, bracketData, regData.name, customRoundNames);
+    //  Events like Maui are a knockout bracket PLUS a placement bracket:
+    //  losing on day one does not end your tournament. The bracket above
+    //  can only draw the championship side, so the placement path is
+    //  appended rather than left implied. Without it the page tells a
+    //  manager four of their players are done when those players have
+    //  two more scoring games each.
+    try { renderPlacementGames(content, state.selectedTournament); } catch (e) { console.warn('renderPlacementGames', e); }
   }
+}
+
+//  Appends the placement/consolation schedule under a knockout bracket.
+//  Deliberately generic: any event with a `placement` block gets it.
+//  Slot names here are descriptive ("First-round loser"), not team
+//  names, because who plays these games is not known until the bracket
+//  resolves — and inventing names is how this file got wrong before.
+function renderPlacementGames(content, t) {
+  const p = t && t.placement;
+  if (!content || !p || !Array.isArray(p.days) || !p.days.length) return;
+
+  const html =
+    '<div class="br-placement">' +
+      '<h4 class="br-placement-h">' + esc(p.label || 'Placement games') + '</h4>' +
+      (p.note ? '<p class="br-placement-note">' + esc(p.note) + '</p>' : '') +
+      p.days.map(function (d) {
+        return '<div class="fx-day"><h5 class="fx-day-h">' + esc(d.day || '') + '</h5>' +
+          (d.games || []).map(function (g) {
+            return '<div class="fx-game br-placement-game">' +
+              '<span class="fx-team">' + esc(g.home) + '</span>' +
+              '<span class="fx-vs">vs</span>' +
+              '<span class="fx-team">' + esc(g.away) + '</span>' +
+              '<span class="fx-meta">' + esc(g.time || '') + '</span>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      }).join('') +
+    '</div>';
+
+  content.insertAdjacentHTML('beforeend', html);
 }
 
 //  ── Schedule view for non-elimination events ──────────────
@@ -4549,9 +4679,15 @@ function renderFixtureList(content, t) {
   const per = [...new Set(Object.values(counts))];
   //  Only state a game count when every team genuinely has the same
   //  number listed. A partial schedule must not read as a fact.
-  const perLabel = per.length === 1
-    ? 'Every team plays ' + per[0] + ' game' + (per[0] === 1 ? '' : 's') + '. Nobody is eliminated.'
-    : 'Nobody is eliminated in this format.';
+  //
+  //  "Nobody is eliminated" was asserted unconditionally, which is now
+  //  wrong for Battle 4 Atlantis: ESPN labels one of its two groups the
+  //  Championship Bracket, so a team there may well be playing to
+  //  advance. An event can override the claim with `formatLabel`, and
+  //  the fallback no longer promises anything it cannot know.
+  const perLabel = t.formatLabel || (per.length === 1
+    ? 'Every team plays ' + per[0] + ' game' + (per[0] === 1 ? '' : 's') + '.'
+    : 'Games are grouped by day below.');
 
   const live = (window._liveGames && typeof _liveGames === 'object') ? _liveGames : {};
   function scoreFor(home, away) {

@@ -12575,6 +12575,48 @@ select:focus {
   .fx-final, .fx-live { display: inline; margin-left: 8px; }
 }
 
+/* ── Placement bracket, appended under a knockout bracket ────
+   Maui and events like it are not single-elimination: the first-round
+   losers keep playing, and those games score. The bracket above can
+   only draw the championship side, so this panel carries the rest.
+   It is visually quieter than the bracket on purpose — the slots are
+   descriptive placeholders, not teams, until the draw resolves. */
+.br-placement {
+  margin-top: 26px;
+  padding: 18px 16px 4px;
+  border-radius: 14px;
+  /*  Flat var, not color-mix: this has to render on iOS Safari builds
+      older than 16.2, where color-mix is unsupported and the whole
+      declaration would be dropped, leaving the panel transparent. */
+  background: var(--panel-solid);
+  border: 1px dashed var(--border);
+}
+.br-placement-h {
+  margin: 0 0 6px;
+  font: 700 12px var(--font-display, var(--font-ui));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2, #b3c4d6);
+}
+.br-placement-note {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.br-placement .fx-day { margin-bottom: 16px; }
+/* Placeholder slots are not clickable teams, so they do not get the
+   full-weight treatment a real school name gets. */
+.br-placement-game .fx-team {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2, #b3c4d6);
+}
+.br-placement-game .fx-meta {
+  font-weight: 700;
+  color: var(--text-2, #b3c4d6);
+}
+
 /* ── Team card: who is actually sitting in this seat ─────────
    Three states, not two. The card used to read "You" or "Bot", so a
    real manager who had joined was labelled a bot on everyone else's
