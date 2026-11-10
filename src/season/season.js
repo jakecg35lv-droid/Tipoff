@@ -2120,8 +2120,15 @@
           s.eligible.push(rec); changed = true;
         }
         //  `pending` is the decision in front of the manager. Don't
-        //  resurrect one he has already passed on today.
-        if (s.passedDay !== d) s.pending = rec;
+        //  resurrect one he has already passed on.
+        //
+        //  This was `s.passedDay !== d`, which was fine while applyDay
+        //  only ever ran for TODAY. Now that refreshLiveDay backfills
+        //  earlier days, that test would hand back a day the manager
+        //  had already moved past: pass on Wednesday, and Monday's game
+        //  would reappear as the live decision. Only days AFTER the
+        //  last pass are open.
+        if (s.passedDay == null || d > s.passedDay) s.pending = rec;
       });
     });
     return changed;
@@ -2129,10 +2136,29 @@
 
   //  Called from the stats tick while today's games are being played.
   //  Does NOT advance the day — that stays the clock's job.
+  //
+  //  ── Why this sweeps every day, not just today ─────────────
+  //  It used to run applyDay(state.day) alone, and that was the bug
+  //  managers hit: a pending record is written the moment a game tips,
+  //  carrying final:false. If the league clock rolled to the next day
+  //  before a refresh caught the game going final, nothing ever looked
+  //  at that day again — applyDay(today) finds no game for a player who
+  //  does not play today and returns at `if (!g) return`. The stale
+  //  final:false survived forever, the UI kept saying "Still playing"
+  //  about a game that ended hours ago, and it rendered NO Lock button,
+  //  so the manager could not even tap through to a warning. The slot
+  //  was locked out for the rest of the week.
+  //
+  //  Sweeping 0..day costs nothing extra on the network (the games are
+  //  already in state.games) and keeps every unresolved day honest.
   function refreshLiveDay() {
     if (!state || state.phase !== 'season') return false;
-    if (state.day > 6) return false;
-    var changed = applyDay(state.day);
+    var last = Math.min(state.day, 6);
+    if (last < 0) return false;
+    var changed = false;
+    for (var d = 0; d <= last; d++) {
+      if (applyDay(d)) changed = true;
+    }
     if (changed) save();
     return changed;
   }
@@ -2166,18 +2192,49 @@
   //
   //  Enforced here rather than only in the UI, because the UI is a
   //  suggestion and this is a rule.
+  //  ── ONE source of truth for "that game is over" ───────────
+  //  Every caller used to read s.pending.final directly, which is a
+  //  SNAPSHOT taken whenever applyDay last ran for that day. The game
+  //  record in state.games is the live truth. When the two disagree the
+  //  record wins, because the only way they can disagree is the cached
+  //  copy being older.
+  //
+  //  Checking both is what makes the lock button appear the moment the
+  //  feed says final, instead of waiting for a sweep to repair the
+  //  cache first.
+  function pendingIsFinal(s) {
+    if (!s || !s.pending) return false;
+    if (s.pending.final) return true;
+    var g = gameOn(s.pending.playerId, s.pending.day);
+    return !!g && gameIsFinal(g);
+  }
+
   function canLock(s) {
-    return !!(s && !s.locked && s.pending && s.pending.final);
+    return !!(s && !s.locked && s.pending && pendingIsFinal(s));
   }
 
   function lockSlot(teamId, idx) {
     var s = slotsOf(teamId)[idx];
     if (!s || s.locked || !s.pending) return;
-    if (!s.pending.final) {
+    if (!pendingIsFinal(s)) {
       try { notify('You can lock this once the game is final.', 'info'); } catch (e) { }
       return;
     }
-    s.locked = s.pending; s.pending = null;
+
+    //  Re-read the day before banking it. If we got here through the
+    //  stale-cache path, s.pending.fpts is a MID-GAME number — locking
+    //  it as-is would bank 8 points for a player who finished with 19.
+    //  applyDay rewrites the record from the game data first.
+    var day = s.pending.day;
+    applyDay(day);
+    s = slotsOf(teamId)[idx];
+    if (!s || s.locked || !s.pending) return;
+
+    s.locked = s.pending;
+    //  The game is final whatever the cached flag said, and `locked` is
+    //  read back later as a settled result.
+    s.locked.final = true;
+    s.pending = null;
     save();
   }
   function passSlot(teamId, idx) {
@@ -2199,7 +2256,13 @@
       //  Same rule as a human: a bot cannot lock a game in progress.
       //  Without this the bots would quietly get an advantage no
       //  manager in the league is allowed to use.
-      if (!s.pending.final) return;
+      //
+      //  Via pendingIsFinal, so the bots are held to the same test the
+      //  humans now get — not a stricter one. Reading pending.final
+      //  alone would make a bot PASS on a finished game whose cached
+      //  flag had gone stale, throwing away a score it should have
+      //  banked.
+      if (!pendingIsFinal(s)) return;
       var p = P(s.pending.playerId);
       var left = remainingGames(s.playerId, state.day + 1);
       if (left === 0 || s.pending.fpts >= p.proj * 1.15) lockSlot(t.id, i);
@@ -3646,7 +3709,11 @@
       (dec.length ? '<div class="g-list">' + dec.slice(0, 3).map(function (s) {
         var i = slots.indexOf(s);
         return '<div class="g-row"><span>' + esc(shortName(P(s.pending.playerId).name)) + ' <em>' + f1(s.pending.fpts) + '</em></span>' +
-          (s.pending.final
+          //  Third gate that read the cached flag. Same fix: ask the
+          //  game record, so the home-screen Lock-In card agrees with
+          //  the lineup page instead of showing "Live" next to a
+          //  finished game.
+          (pendingIsFinal(s)
             ? '<button class="g-chip-btn" data-act="lock" data-i="' + i + '">Lock</button>'
             : '<span class="g-chip-live"><span class="ss-livedot"></span>Live</span>') + '</div>';
       }).join('') + '</div>' : '<p class="g-note">' + (locked === 5 ? 'Every starter is locked in.' : 'Nothing waiting. Scores appear after games.') + '</p>'));
@@ -4395,7 +4462,13 @@
     if (s.pending) {
       //  Live game: show the points climbing, but no Lock button. The
       //  decision only exists once the game is over.
-      var liveNow = !s.pending.final;
+      //
+      //  This read s.pending.final directly, so a stale cached flag
+      //  rendered "Still playing" with NO Lock button for a game that
+      //  had finished — the exact dead end managers reported. It now
+      //  goes through pendingIsFinal, which falls back to the game
+      //  record.
+      var liveNow = !pendingIsFinal(s);
       return '<div class="ss-st pending' + (liveNow ? ' ss-st-live' : '') + '">' +
         '<span class="ss-st-label">' + (liveNow ? '<span class="ss-livedot"></span>Live &middot; ' : '') + DAYS_FULL[s.pending.day] + (s.pending.dnp ? ', DNP' : '') + '</span>' +
         '<span class="ss-st-pts">' + f1(s.pending.fpts) + '</span>' +
@@ -4560,7 +4633,9 @@
       var left = remainingGames(s.playerId, state.day);
       //  No Lock while the ball is still in the air. The points shown
       //  are live and will keep moving.
-      actions = s.pending.final
+      //  Same stale-cache trap as slotStatus: read the live game record,
+      //  not only the snapshot on the pending record.
+      actions = pendingIsFinal(s)
         ? '<div class="mx-actions"><button class="ss-lock-btn" data-act="lock" data-i="' + idx + '">' + ICON.lock + 'Lock ' + f1(s.pending.fpts) + '</button>' +
           (left ? '<button class="btn-sm btn-ghost" data-act="pass" data-i="' + idx + '">Pass</button>' : '<span class="mx-note">Last game counts</span>') + '</div>'
         : '<div class="mx-actions"><span class="mx-note mx-note-live"><span class="ss-livedot"></span>In progress &middot; lock when final</span></div>';
