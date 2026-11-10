@@ -2526,6 +2526,36 @@
     return t.week === state.week && state.day < t.days;
   }
 
+  //  Is every game on this day of the week finished?
+  //
+  //  "No games at all" counts as complete — a day nobody plays must
+  //  not stall the league. So does a day far enough in the past that
+  //  waiting is worse than losing it: a postponed game that never
+  //  turns final would otherwise freeze the season forever, so after
+  //  STALE_DAY_MS the clock moves on regardless.
+  var STALE_DAY_MS = 36 * 3600e3;   // a day and a half past its 6am boundary
+  function dayIsComplete(d) {
+    if (d > 6) return true;
+    var games = [];
+    rosteredPlayers().forEach(function (pid) {
+      (gamesFor(pid) || []).forEach(function (g) { if (g && g.day === d) games.push(g); });
+    });
+    if (!games.length) return true;                       // nobody plays
+    if (games.every(gameIsFinal)) return true;            // all done
+
+    //  Escape hatch: how long ago did this day end (6am the next day)?
+    try {
+      var r = weekRange(state.week);
+      var dayEnd = r.start.getTime() + (d + 1) * 864e5 + 6 * 3600e3;
+      if (nowSynced() - dayEnd > STALE_DAY_MS) {
+        console.warn('[Season] day ' + d + ' still has unfinished games but is ' +
+          'well past; advancing so the season cannot stall.');
+        return true;
+      }
+    } catch (e) { }
+    return false;
+  }
+
   function runClock() {
     if (!state || state.phase !== 'season') return Promise.resolve(false);
     if (!isHost()) return Promise.resolve(false);
@@ -2600,6 +2630,28 @@
       .catch(function () { })
       .then(function () {
         if (!state || state.phase !== 'season') return false;
+
+        /*  ── Never step over a day whose games are unfinished ──
+            The calendar alone is not enough to say a day is done.
+            Two things break it:
+
+            1. isHost() identifies an ACCOUNT, not a device. The same
+               person signed in on a laptop and a phone is "host"
+               twice, and each device runs this loop independently.
+               Both play a day, and the league jumps two.
+            2. A device with a fast clock reaches tomorrow early.
+
+            Either way the day is consumed before its games are
+            played, and simDay never revisits a day it has passed —
+            so every game that night scores zero, permanently. That
+            happened in a live league: day advanced to 2 on the
+            Tuesday morning, hours before 30 games tipped.
+
+            Asking the DATA instead of the calendar makes this
+            idempotent. However many devices run the loop, none of
+            them can move past a day that still has a game to play. */
+        if (!dayIsComplete(state.day)) return false;
+
         var before = state.day;
         simDay(true);
         //  simDay refuses past day 6; if nothing moved, stop rather
