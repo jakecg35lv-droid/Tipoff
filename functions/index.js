@@ -1692,6 +1692,41 @@ function groupByTournament(players) {
    double-count. An in-progress game is overwritten in `live` on each
    poll, so a stat ESPN revises downward revises here too.
 ══════════════════════════════════════════════════════════ */
+//  ── Did yesterday finish writing itself? ─────────────────────
+//  runSeasonSyncESPN syncs ONE ET date: whatever today is. ESPN files a
+//  game under the date it TIPPED, so a 9pm or 11:30pm ET tip is still
+//  in progress when the ET date rolls over. By the time it goes final
+//  the sync has moved to the new date, and nothing ever looks at the
+//  old one again — so that game keeps completed:false forever, and its
+//  player docs keep the last LIVE box score rather than the final one.
+//
+//  That is why a manager could not lock a game that had plainly ended:
+//  the client was right to refuse, because the data really did say the
+//  game was unfinished. Measured on Nov 9 2026: 23 of 23 relevant games
+//  final at ESPN, 22 stored as final here. The missing one was a late
+//  tip, and every slot pointing at it was locked out for the week.
+//
+//  This asks, for one Firestore read, whether the previous date still
+//  has unfinished business. On a clean day the answer is no and the
+//  catch-up costs zero API calls.
+async function dateHasUnfinished(espnDate) {
+  try {
+    const snap = await db.collection('seasonStats').doc(SEASON_ID)
+      .collection('games')
+      .where('date', '==', isoFromEspnDate(espnDate))
+      .where('completed', '==', false)
+      .limit(1)
+      .get();
+    return !snap.empty;
+  } catch (e) {
+    //  Same (date ==, completed ==) shape the alreadyFinal lookup uses,
+    //  so the index exists. If it somehow fails, do NOT sweep: a broken
+    //  query must not turn into an API call every ten minutes.
+    console.warn('[Tipoff season] unfinished lookup failed:', e.message);
+    return false;
+  }
+}
+
 async function runSeasonSyncESPN(opts) {
   const options = opts || {};
   const report = {
@@ -2093,6 +2128,29 @@ exports.syncSeasonStats = onSchedule(
     if (!withinActiveHours(now)) {
       console.log(`[Tipoff season] outside active hours (${etParts(now).h}:00 ET). No API calls.`);
       return;
+    }
+
+    //  ── Catch up on yesterday's late tips ───────────────────
+    //  See dateHasUnfinished. A game that tipped at 9pm or 11:30pm ET
+    //  is still live when the ET date flips, and this sync only ever
+    //  looks at today — so the game stayed completed:false and its
+    //  roster kept a mid-game box score. Managers could not lock it and
+    //  the client was right to refuse, because the data said unfinished.
+    //
+    //  Bounded on purpose. It runs only in the overnight hours when a
+    //  late game would have ended, plus the first hour of the next
+    //  slate as a safety net for anything that finished while the sync
+    //  was asleep. Without that bound, a game ESPN never marks complete
+    //  (a postponement) would cost an API call every ten minutes for
+    //  the rest of the day, forever.
+    const hourET = etParts(now).h;
+    const sweepHour = hourET <= ACTIVE_HOUR_END || hourET === ACTIVE_HOUR_START;
+    if (sweepHour) {
+      const yest = espnDateParam(new Date(now.getTime() - 864e5));
+      if (await dateHasUnfinished(yest)) {
+        const catchUp = await runSeasonSyncESPN({ dateOverride: yest });
+        console.log('[Tipoff season] catch-up', yest, JSON.stringify(catchUp));
+      }
     }
 
     const report = await runSeasonSyncESPN({});
