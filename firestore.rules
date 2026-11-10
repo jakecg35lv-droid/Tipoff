@@ -125,6 +125,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── Tipoff Trivia: paid entitlements ─────────────────────
+    //  Written ONLY by the stripeWebhook Cloud Function (admin SDK
+    //  bypasses rules). Owners can read their own; nobody can write.
+    //  Do NOT store this in users/{uid}: users can write that doc.
+    match /entitlements/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /stripeCustomers/{customerId} {
+      allow read, write: if false;
+    }
+
     // Anything not matched above is denied.
   }
 }

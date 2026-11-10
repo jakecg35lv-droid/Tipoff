@@ -2117,3 +2117,6 @@ exports.seasonSyncNow = onRequest(
     }
   }
 );
+
+// Tipoff Trivia: Stripe webhook → Unlimited entitlements (see stripe.js)
+Object.assign(exports, require('./stripe'));
