@@ -4407,7 +4407,10 @@
     var benchRows = bench.map(function (id) {
       var p = P(id);
       return '<div class="ss-bench-row">' + playerLine(p, f1(p.proj) + ' proj') + '<div class="ss-bench-r">' + gameChips(id, null) +
-        (state.phase === 'season' ? '<button class="ss-drop-link" data-act="dropone" data-id="' + id + '">Drop</button>' : '') + '</div></div>';
+        (state.phase === 'season'
+          ? '<button class="ss-drop-link' + (ui.confirmDrop === id ? ' confirm' : '') + '" data-act="dropone" data-id="' + id + '">' +
+              (ui.confirmDrop === id ? 'Tap to drop' : 'Drop') + '</button>'
+          : '') + '</div></div>';
     }).join('') || '<div class="rp-empty">Everyone on your roster is starting.</div>';
 
     var hurt = slots.filter(function (s) { var i = s.playerId && !s.locked && injuryOf(s.playerId); return i && i.status !== 'GTD'; });
@@ -4833,7 +4836,8 @@
     } else if (state.phase === 'season') {
       if (mine) {
         acts.push('<button class="g-btn" data-act="pcgo" data-page="lineup">Set Lineup</button>');
-        acts.push('<button class="g-btn danger" data-act="dropone" data-id="' + pid + '">Drop</button>');
+        acts.push('<button class="g-btn danger' + (ui.confirmDrop === pid ? ' confirm' : '') + '" data-act="dropone" data-id="' + pid + '">' +
+          (ui.confirmDrop === pid ? 'Tap to drop' : 'Drop') + '</button>');
       } else if (owner) {
         if (tradesOpen().ok) acts.push('<button class="g-btn solid" data-act="tropen" data-id="' + owner.id + '" data-get="' + pid + '">Propose Trade</button>');
       } else {
@@ -5159,12 +5163,12 @@
       '<div class="form-group"><label>League Code</label><div class="code-display-row"><span class="league-code-badge">' + esc(L.code || (L.code = code6())) + '</span>' +
         '<button class="btn-ghost btn-sm" data-act="copycode">Copy Code</button><button class="btn-ghost btn-sm" data-act="copyinvite">Invite Link</button></div></div>' +
       '<div class="set-divide"></div>' +
-      setRow('Restart League', 'Clears every pick and every week, and resets the draft to round one. Teams, settings and the league code stay the same.', '<button class="set-row-btn" data-act="restart">Restart</button>', ' set-row--stack') +
-      setRow('Delete League', 'Permanently deletes this league for every manager in it. This cannot be undone.', '<button class="set-row-btn set-row-btn--danger" data-act="reset">Delete</button>', ' set-row--stack') +
+      setRow('Restart League', 'Clears every pick and every week, and resets the draft to round one. Teams, settings and the league code stay the same.', '<button class="set-row-btn' + (ui.confirmAct === 'restart' ? ' confirm' : '') + '" data-act="restart">' + (ui.confirmAct === 'restart' ? 'Tap again' : 'Restart') + '</button>', ' set-row--stack') +
+      setRow('Delete League', 'Permanently deletes this league for every manager in it. This cannot be undone.', '<button class="set-row-btn set-row-btn--danger' + (ui.confirmAct === 'reset' ? ' confirm' : '') + '" data-act="reset">' + (ui.confirmAct === 'reset' ? 'Tap again to delete' : 'Delete') + '</button>', ' set-row--stack') +
     '</div>';
 
     html += '<div class="set-label set-label--danger">Danger Zone</div><div class="panel panel--danger">' +
-      setRow('Leave League', 'Removes you from this league. Your other leagues are untouched.', '<button class="set-row-btn set-row-btn--warn" data-act="leave">Leave</button>') +
+      setRow('Leave League', 'Removes you from this league. Your other leagues are untouched.', '<button class="set-row-btn set-row-btn--warn' + (ui.confirmAct === 'leave' ? ' confirm' : '') + '" data-act="leave">' + (ui.confirmAct === 'leave' ? 'Tap again' : 'Leave') + '</button>') +
     '</div>';
     return html;
   }
@@ -5181,7 +5185,7 @@
     var i = +el.getAttribute('data-i');
     switch (act) {
       case 'exit': close(); return;
-      case 'nav': ui.page = el.getAttribute('data-page'); ui.swapSlot = null; ui.sheet = false; ui.mview = null; break;
+      case 'nav': ui.page = el.getAttribute('data-page'); ui.swapSlot = null; ui.sheet = false; ui.mview = null; ui.confirmDrop = null; ui.confirmAct = null; break;
       case 'sheet': ui.sheet = !ui.sheet; break;
       case 'wizopen': ui.wiz = 0; break;
       case 'wiznext': if (el.disabled) return; ui.wiz = Math.min(wizSteps().length - 1, ui.wiz + 1); break;
@@ -5354,8 +5358,26 @@
       case 'ccancel': cancelClaim(i); break;
       case 'cmove': moveClaim(i, +el.getAttribute('data-dir')); break;
       case 'dropone':
-        if (!el.classList.contains('confirm')) { el.classList.add('confirm'); el.textContent = 'Tap to drop'; return; }
-        var dr = dropOnly(userTeam().id, el.getAttribute('data-id'));
+        //  ── The arm state must NOT live on the button ──────────
+        //  This used to set a CSS class on the element and wait for a
+        //  second tap. The button is regenerated on every render, and
+        //  in season phase renders fire on every Firestore snapshot
+        //  and every live-score refresh — so with games in progress
+        //  and other managers active, a render lands between the two
+        //  taps, wipes the class, and the second tap is treated as a
+        //  first tap. The player is never dropped and the manager
+        //  concludes the feature is broken. Reported by a real
+        //  manager who could not drop anyone.
+        //
+        //  Holding it in `ui` instead survives any number of renders.
+        var dropId = el.getAttribute('data-id');
+        if (ui.confirmDrop !== dropId) {
+          ui.confirmDrop = dropId;
+          ui.toastMsg = 'Tap Drop again to confirm.'; ui.toastType = 'info';
+          break;
+        }
+        ui.confirmDrop = null;
+        var dr = dropOnly(userTeam().id, dropId);
         if (!dr.ok) { notify(dr.reason, 'error'); return; }
         ui.toastMsg = 'Dropped. He’s on waivers until ' + (nextProcessing() || 'next week') + '.'; ui.toastType = 'info'; break;
       case 'savewaivers':
@@ -5446,7 +5468,12 @@
       case 'copycode': copyText(state.league.code, 'League code copied.'); return;
       case 'copyinvite': copyText(location.origin + location.pathname + '?join=' + state.league.code, 'Invite link copied.'); return;
       case 'restart':
-        if (!el.classList.contains('confirm')) { el.classList.add('confirm'); el.textContent = 'Tap again'; return; }
+        //  Same render-wipe hazard as dropone: the armed state cannot
+        //  live on a button that re-renders. These three are the
+        //  destructive ones, so a confirmation that silently disarms
+        //  is worse here than anywhere.
+        if (ui.confirmAct !== 'restart') { ui.confirmAct = 'restart'; ui.toastMsg = 'Tap Restart again to confirm.'; ui.toastType = 'info'; break; }
+        ui.confirmAct = null;
         restartLeague(); ui.page = 'home'; ui.toastMsg = 'League restarted. The draft is back to round one.'; ui.toastType = 'success'; break;
       //  Both of these dropped the local copy but left the Firestore
       //  snapshot listener running and the membership recorded, so a
@@ -5459,11 +5486,13 @@
       //  so the same account can rejoin with the code and find its
       //  own team rather than taking a second one.
       case 'leave':
-        if (!el.classList.contains('confirm')) { el.classList.add('confirm'); el.textContent = 'Tap again'; return; }
+        if (ui.confirmAct !== 'leave') { ui.confirmAct = 'leave'; ui.toastMsg = 'Tap Leave again to confirm.'; ui.toastType = 'info'; break; }
+        ui.confirmAct = null;
         leaveSeasonLocally();
         close(); return;
       case 'reset':
-        if (!el.classList.contains('confirm')) { el.classList.add('confirm'); el.textContent = 'Tap again to delete'; return; }
+        if (ui.confirmAct !== 'reset') { ui.confirmAct = 'reset'; ui.toastMsg = 'Tap Delete again to permanently delete this league.'; ui.toastType = 'error'; break; }
+        ui.confirmAct = null;
         leaveSeasonLocally();
         close(); return;
     }
@@ -5540,7 +5569,7 @@
     scheduleStatsTick();
     ui.setup = { name: 'Season League', team: sessionName() === 'You' ? 'My Team' : sessionName() + "'s Team", teams: 8, roster: 10, weeks: 12, timer: 90,
       format: 'conference', confMode: 'mix', conferences: MAJORS.slice() };
-    ui.page = 'home'; ui.wiz = state ? null : 0; ui.explain = state && !explainerSeen() ? 0 : null; ui.sheet = false; ui.swapSlot = null; ui.search = ''; ui.filterPos = ''; ui.filterConf = ''; ui.confirmId = null; ui.faId = null; ui.tr = null; ui.ptab = 'fa'; ui.fstatus = ''; ui.fsort = 'proj';
+    ui.page = 'home'; ui.wiz = state ? null : 0; ui.explain = state && !explainerSeen() ? 0 : null; ui.sheet = false; ui.swapSlot = null; ui.search = ''; ui.filterPos = ''; ui.filterConf = ''; ui.confirmId = null; ui.confirmDrop = null; ui.confirmAct = null; ui.faId = null; ui.tr = null; ui.ptab = 'fa'; ui.fstatus = ''; ui.fsort = 'proj';
     lastPage = '';
     var splash = document.getElementById('splashScreen');
     if (splash) { prevDisplay = splash.style.display; splash.style.display = 'none'; }
