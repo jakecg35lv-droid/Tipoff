@@ -5593,6 +5593,28 @@ select:focus {
   gap: 2px;
 }
 
+/* ── Tier heading ─────────────────────────────────────────────
+   Separates articles about the league's own tournament field from the
+   rest of the national feed. Without a divider the second tier would
+   read as more tournament news, which is the mislabelling this whole
+   section was built to avoid. */
+.news-section-h {
+  margin: 26px 0 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font: 700 11.5px var(--font-ui);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The inline variant sits above a populated second tier, so it must
+   not reserve 60px of empty height the way the full-page state does. */
+.news-empty--inline {
+  padding: 22px 16px;
+  text-align: left;
+}
+
 .news-card {
   background: transparent;
   border: none;

@@ -6411,16 +6411,136 @@ function getActiveTeamNames() {
   return t.teams.map(function (name) { return name.toLowerCase(); });
 }
 
+//  ── School aliases ───────────────────────────────────────────
+//  ESPN does not always call a school what this app calls it, and a
+//  plain name search therefore misses the article entirely. "Ole Miss"
+//  is tagged "Mississippi Rebels"; UCF is "Central Florida". Each alias
+//  maps an ESPN-side name to our canonical pool name.
+//
+//  I first assumed "Mississippi" overlapping "Mississippi State" was
+//  handled for free by longest-first matching. It was not, and a unit
+//  test caught it: longest-first can only protect names the index
+//  KNOWS, and Mississippi State is absent from SCHOOL_COLORS, so in a
+//  Maui league "Mississippi State Bulldogs" was credited to Ole Miss.
+//  The index is therefore built from EVERY event's team list plus the
+//  shadow names below, not just the selected event's.
+const NEWS_SCHOOL_ALIASES = {
+  'mississippi': 'Ole Miss',
+  'central florida': 'UCF',
+  'appalachian state': 'App State',
+  'virginia commonwealth': 'VCU',
+  'brigham young': 'BYU'
+};
+
+//  Schools that exist in the index ONLY to absorb a collision. None of
+//  them is draftable here; each one is a longer name that would
+//  otherwise be swallowed by a shorter school we do carry. Dropping any
+//  line reintroduces a false positive, so each says what it protects.
+const NEWS_SHADOW_SCHOOLS = [
+  'Washington State',     // vs Washington
+  'George Washington',    // vs Washington
+  'Miami (OH)',           // vs Miami
+  'Georgia Tech',         // vs Georgia
+  'Georgia State',        // vs Georgia
+  'Georgia Southern',     // vs Georgia
+  'Kansas State',         // vs Kansas
+  'Oklahoma State',       // vs Oklahoma
+  'Arkansas State',       // vs Arkansas
+  'Indiana State',        // vs Indiana
+  'Illinois State',       // vs Illinois
+  'Oregon State',         // vs Oregon
+  'Virginia Tech',        // vs Virginia
+  'Texas State',          // vs Texas
+  'Texas Tech',           // vs Texas
+  'Ohio State'            // vs Ohio
+  //  'Boston University' and 'Cincinnati Bearcats' were here and are
+  //  gone: neither protected anything ("Boston" alone is not a school
+  //  this app carries), and the Cincinnati entry made the matcher
+  //  report the same school twice.
+];
+
+//  Every name the matcher will look for, longest first.
+//
+//  Built from the colour table, the aliases, the shadow list, AND the
+//  team list of EVERY tournament — not just the selected one. Several
+//  pool schools (Ole Miss, Providence, Mississippi State, App State,
+//  St. Bonaventure, Wright State, Boston College, UCF) are not keys in
+//  SCHOOL_COLORS, so without the union they could neither be matched
+//  nor absorb a collision. Knowing MORE school names only ever makes
+//  this more precise: the result is intersected with the selected
+//  event's teams afterwards.
+var _newsNameIndex = null;
+function newsSchoolNames() {
+  if (_newsNameIndex) return _newsNameIndex;
+
+  const map = {};   // lowercase search term -> canonical school name
+  const add = function (n) { if (n) map[String(n).toLowerCase()] = n; };
+
+  Object.keys(SCHOOL_COLORS).forEach(add);
+  NEWS_SHADOW_SCHOOLS.forEach(add);
+  ['inSeason', 'conference', 'postseason'].forEach(function (grp) {
+    (TOURNAMENTS[grp] || []).forEach(function (ev) {
+      (ev.teams || []).forEach(add);
+      (ev.pods || []).forEach(function (p) { (p.teams || []).forEach(add); });
+    });
+  });
+  //  Aliases last so they win the key if a term collides.
+  Object.keys(NEWS_SCHOOL_ALIASES).forEach(function (a) { map[a] = NEWS_SCHOOL_ALIASES[a]; });
+
+  _newsNameIndex = Object.keys(map)
+    .sort(function (a, b) { return b.length - a.length; })
+    .map(function (term) { return { term: term, school: map[term] }; });
+  return _newsNameIndex;
+}
+
+//  Which schools does this article actually name?
+//
+//  This replaced a naive `haystack.includes(teamName)`, which was wrong
+//  in both directions at once. Too loose: a Maui league matched any
+//  article about ARIZONA STATE or COLORADO STATE, because "Arizona" and
+//  "Colorado" are substrings of them — and both collisions are live in
+//  the current Maui field. There are ten such prefix pairs in the
+//  school table (Michigan/Michigan State, Iowa/Iowa State,
+//  Texas/Texas A&M and so on).
+//
+//  Longest match wins and claimed spans are blanked out, so
+//  "Arizona State Sun Devils" resolves to Arizona State and Arizona is
+//  never credited for it. Word boundaries on both sides stop "Utah"
+//  matching inside a longer word.
+const _NEWS_WORD_CH = /[a-z0-9&'.]/;
+function articleSchools(article) {
+  const parts = [article.headline || '', article.description || ''];
+  (article.categories || []).forEach(function (c) {
+    if (c && c.description) parts.push(c.description);
+  });
+  //  Pipes between parts so a school name cannot straddle two fields.
+  let hay = ' ' + parts.join(' | ').toLowerCase() + ' ';
+  const found = [];
+
+  newsSchoolNames().forEach(function (entry) {
+    const n = entry.term;
+    let at = hay.indexOf(n);
+    let hit = false;
+    while (at !== -1) {
+      const before = hay.charAt(at - 1);
+      const after = hay.charAt(at + n.length);
+      if (!_NEWS_WORD_CH.test(before) && !_NEWS_WORD_CH.test(after)) {
+        hit = true;
+        //  Blank the span so a shorter, overlapping name cannot claim it.
+        hay = hay.slice(0, at) + new Array(n.length + 1).join('\u0001') + hay.slice(at + n.length);
+      }
+      at = hay.indexOf(n, at + 1);
+    }
+    if (hit && found.indexOf(entry.school) === -1) found.push(entry.school);
+  });
+
+  return found;
+}
+
 function articleMatchesTournament(article, teamNames) {
   if (!teamNames) return true;
-  // Build a haystack from headline, description, and category descriptions
-  const cats = (article.categories || []).map(function (c) { return c.description || ''; }).join(' ');
-  const haystack = [
-    article.headline || '',
-    article.description || '',
-    cats
-  ].join(' ').toLowerCase();
-  return teamNames.some(function (t) { return haystack.includes(t); });
+  const schools = articleSchools(article).map(function (s) { return s.toLowerCase(); });
+  return schools.some(function (s) { return teamNames.indexOf(s) !== -1; });
 }
 
 function articleTeamTag(article) {
@@ -6526,30 +6646,64 @@ function renderNews(forceRefresh) {
     });
 }
 
+//  ── Two tiers, because one tier left the page almost empty ───
+//  ESPN's men's college basketball news endpoint returns about EIGHT
+//  articles, not the fifty the URL asks for — the `limit` parameter is
+//  ignored. Filtering those eight down to the schools in one
+//  eight-team November event left, measured on 10 Nov 2026, exactly
+//  two: one became the Top Story and one became the entire list below
+//  it. The page looked broken when nothing was broken.
+//
+//  So: tournament-relevant articles first, then the rest of the
+//  national feed under its own heading. Nothing is hidden and nothing
+//  is mislabelled — a reader can always see which articles are about
+//  their teams and which are not.
 function displayNewsArticles(articles, feed) {
   var teamNames = getActiveTeamNames();
-  var filtered = articles.filter(function (a) {
-    return articleMatchesTournament(a, teamNames);
-  });
 
-  // Sort newest first
-  filtered.sort(function (a, b) {
+  var byDate = function (a, b) {
     return new Date(b.lastModified || b.published || 0) - new Date(a.lastModified || a.published || 0);
-  });
+  };
+  var all = (articles || []).slice().sort(byDate);
 
-  if (filtered.length === 0) {
-    var msg = teamNames
-      ? 'No news found for your tournament teams. Try refreshing or selecting a different tournament.'
-      : 'No news available right now.';
-    feed.innerHTML = '<div class="news-empty"><p>' + msg + '</p></div>';
+  if (!all.length) {
+    feed.innerHTML = '<div class="news-empty"><p>No college basketball news available right now.</p></div>';
     return;
   }
 
-  // First article is featured, the rest are compact rows
-  var html = renderFeaturedCard(filtered[0]);
-  if (filtered.length > 1) {
-    html += '<div class="news-list">' + filtered.slice(1).map(renderNewsCard).join('') + '</div>';
+  //  No tournament selected: the whole feed is the feed, untiered.
+  if (!teamNames) {
+    feed.innerHTML = renderFeaturedCard(all[0]) +
+      (all.length > 1 ? '<div class="news-list">' + all.slice(1).map(renderNewsCard).join('') + '</div>' : '');
+    return;
   }
+
+  var mine = [], rest = [];
+  all.forEach(function (a) {
+    (articleMatchesTournament(a, teamNames) ? mine : rest).push(a);
+  });
+
+  var html = '';
+  var eventName = (state.selectedTournament && state.selectedTournament.name) || 'your tournament';
+
+  if (mine.length) {
+    html += renderFeaturedCard(mine[0]);
+    if (mine.length > 1) {
+      html += '<div class="news-list">' + mine.slice(1).map(renderNewsCard).join('') + '</div>';
+    }
+  } else {
+    //  Honest, not alarming. There is no error here: ESPN simply has
+    //  not written about these schools lately, which in November is the
+    //  normal case for anything outside the top fifteen.
+    html += '<div class="news-empty news-empty--inline"><p>Nothing written about the ' +
+      esc(eventName) + ' field in the last few days.</p></div>';
+  }
+
+  if (rest.length) {
+    html += '<h4 class="news-section-h">Around college basketball</h4>' +
+      '<div class="news-list">' + rest.map(renderNewsCard).join('') + '</div>';
+  }
+
   feed.innerHTML = html;
 }
 
