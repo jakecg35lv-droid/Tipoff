@@ -5929,6 +5929,24 @@
       return state;
     });
   }
+  //  Put an error INSIDE the join dialog. Guards against the dialog
+  //  having been detached already — writing into a removed node is
+  //  how an error becomes invisible, which is the exact failure this
+  //  file is fixing.
+  function showJoinError(bd, text) {
+    if (!bd || !bd.isConnected) { try { notify(text, 'error'); } catch (e) { } return; }
+    var msg = bd.querySelector('.sj-error');
+    if (!msg) {
+      msg = document.createElement('p');
+      msg.className = 'sj-error';
+      msg.style.cssText = 'color:#f05252;font-size:13px;margin:10px 0 0;';
+      var card = bd.querySelector('.sj-card');
+      if (!card) { try { notify(text, 'error'); } catch (e) { } return; }
+      card.appendChild(msg);
+    }
+    msg.textContent = text;
+  }
+
   function showSeasonJoin(info, code) {
     var bd = document.createElement('div');
     bd.className = 'mode-backdrop ss-join';
@@ -5956,25 +5974,46 @@
         var nameEl = bd.querySelector('#sjTeam');
         var teamName = (nameEl && nameEl.value || '').trim();
 
+        /*  ── The join is committed; opening it is a separate risk ──
+            This used to be one then/catch, with bd.remove() BEFORE
+            open(). If open() threw, the catch ran against a modal
+            that no longer existed: it re-enabled a button nobody
+            could see and wrote the error into a detached node. From
+            the manager's side the dialog vanished, the league never
+            appeared, no error showed — and because the transaction
+            had already committed, refreshing put him straight in.
+            Reported as "when you press join it freezes so I just
+            refreshed and I was in".
+
+            Now the two failures are handled separately, and the
+            modal is only torn down once the league is actually on
+            screen.                                                 */
+        var joinWatchdog = setTimeout(function () {
+          if (b.disabled) b.textContent = 'Still working…';
+        }, 8000);
+
         joinSeasonLeague(code).then(function () {
+          clearTimeout(joinWatchdog);
           // Name the seat we just claimed, then let the league open.
           if (teamName && state && state.teams) {
             var mine = state.teams.filter(function (t) { return t && t.isUser; })[0];
             if (mine) { mine.name = teamName; save(); }
           }
-          bd.remove();
-          open();
-        }).catch(function (err) {
-          b.disabled = false; b.textContent = 'Join League';
-          var msg = bd.querySelector('.sj-error');
-          if (!msg) {
-            msg = document.createElement('p');
-            msg.className = 'sj-error';
-            msg.style.cssText = 'color:#f05252;font-size:13px;margin:10px 0 0;';
-            var card = bd.querySelector('.sj-card');
-            if (card) card.appendChild(msg);
+          try {
+            open();
+            bd.remove();                       // only once it rendered
+          } catch (e) {
+            //  Joined successfully but could not open. Say exactly
+            //  that, because the two have very different fixes and
+            //  "try again" would be wrong — he is already in.
+            console.error('[Season] joined but open() failed:', e);
+            b.disabled = false; b.textContent = 'Open League';
+            showJoinError(bd, 'You’re in the league, but it could not open. Reload the page and it will be there.');
           }
-          msg.textContent = (err && err.message) || 'Could not join. Try again.';
+        }).catch(function (err) {
+          clearTimeout(joinWatchdog);
+          b.disabled = false; b.textContent = 'Join League';
+          showJoinError(bd, (err && err.message) || 'Could not join. Try again.');
         });
         return;
       }
@@ -5996,23 +6035,35 @@
         //  member with nothing local, route through it.
         var local = load();
         var haveIt = !!(local && local.league && local.league.code === code);
-        if (haveIt) { bd.remove(); open(); return; }
+        //  Same split as the join path: open() failing must not be
+        //  reported into a dialog that has already been removed.
+        if (haveIt) {
+          try { open(); bd.remove(); }
+          catch (e) {
+            console.error('[Season] open() failed:', e);
+            showJoinError(bd, 'The league could not open. Reload the page and try again.');
+          }
+          return;
+        }
 
         if (b) { b.disabled = true; b.textContent = 'Opening…'; }
+        var openWatchdog = setTimeout(function () {
+          if (b && b.disabled) b.textContent = 'Still working…';
+        }, 8000);
         joinSeasonLeague(code).then(function () {
-          bd.remove();
-          open();
-        }).catch(function (err) {
-          if (b) { b.disabled = false; b.textContent = 'Open League'; }
-          var msg = bd.querySelector('.sj-error');
-          if (!msg) {
-            msg = document.createElement('p');
-            msg.className = 'sj-error';
-            msg.style.cssText = 'color:#f05252;font-size:13px;margin:10px 0 0;';
-            var card = bd.querySelector('.sj-card');
-            if (card) card.appendChild(msg);
+          clearTimeout(openWatchdog);
+          try {
+            open();
+            bd.remove();
+          } catch (e) {
+            console.error('[Season] pulled league but open() failed:', e);
+            if (b) { b.disabled = false; b.textContent = 'Open League'; }
+            showJoinError(bd, 'The league downloaded but could not open. Reload the page and it will be there.');
           }
-          msg.textContent = (err && err.message) || 'Could not open the league. Try again.';
+        }).catch(function (err) {
+          clearTimeout(openWatchdog);
+          if (b) { b.disabled = false; b.textContent = 'Open League'; }
+          showJoinError(bd, (err && err.message) || 'Could not open the league. Try again.');
         });
         return;
       }
