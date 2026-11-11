@@ -6369,55 +6369,67 @@
   //  is on the server and the account's own index names it, so find it
   //  and pull it down instead of making the user hunt for a code.
   //
-  //  Runs once per load, only when nothing is held locally, and only
-  //  for a league this account actually holds a seat in.
-  var RECOVERY_TRIED = false;
-  function recoverLeagueFromAccount() {
-    if (RECOVERY_TRIED) return;
+  //  ── The ACCOUNT decides which leagues you have ────────────
+  //  This used to run only when the device held nothing. That is
+  //  exactly why a league created on a laptop never reached a phone
+  //  that already had one: the phone held something, so it skipped the
+  //  check and never learned the new league existed. No amount of
+  //  refreshing helped, because nothing was asking the question.
+  //
+  //  It now reconciles on every paint: read users/{uid}.leagues and
+  //  download any season league this account is in that this device
+  //  does not hold. Two rules keep it safe:
+  //
+  //    1. Additive only. Removing a league still needs the positive
+  //       evidence in verifySeasonMembership — an index that has not
+  //       caught up must never delete somebody's league.
+  //    2. It never touches `state`. It writes the per-league key
+  //       directly, so pulling a league down cannot disturb the one
+  //       the manager is sitting in.
+  var RECOVERY_AT = 0;
+  function recoverLeagueFromAccount(force) {
     var db = syncDb(), uid = myUid();
     if (!db || !uid) return;                 // retried once auth lands
-    if (leagueCodes().length) return;        // already hold at least one
-    RECOVERY_TRIED = true;
+    var now = Date.now();
+    if (!force && now - RECOVERY_AT < 30000) return;   // one read per 30s
+    RECOVERY_AT = now;
 
     db.collection('users').doc(uid).get().then(function (snap) {
       var list = ((snap.exists && snap.data()) || {}).leagues || [];
-      //  ALL of them, newest first — not just [0]. On a new phone a
-      //  manager in three season leagues used to get exactly one back
-      //  and had to hunt for the other two codes. Capped so a corrupt
-      //  index cannot turn this into an unbounded read.
-      var seasons = list.filter(function (l) { return l && l.kind === 'season' && l.code; })
-        .sort(function (a, b) { return (b.lastOpened || 0) - (a.lastOpened || 0); })
-        .slice(0, 8);
-      if (!seasons.length) return;
-      var first = true;
-      return seasons.reduce(function (chain, season) {
+      var held = {};
+      leagueCodes().forEach(function (c) { held[c] = 1; });
+      var missing = list
+        .filter(function (l) { return l && l.kind === 'season' && l.code; })
+        .map(function (l) { return normCode(l.code); })
+        .filter(function (c) { return c && !held[c]; })
+        .slice(0, 8);                        // cap: a corrupt index must
+                                             // not become an unbounded read
+      if (!missing.length) return;
+
+      var pulled = 0;
+      return missing.reduce(function (chain, code) {
         return chain.then(function () {
-          return seasonDoc(season.code).get().then(function (doc) {
+          return seasonDoc(code).get().then(function (doc) {
             if (!doc.exists) return;
             var st = decodeState((doc.data() || {}).state);
             if (!st || !st.teams) return;
             if (!st.teams.some(function (t) { return t && t.uid === uid; })) return;  // not ours
-            SYNC.applying = true;
-            try {
-              state = st;
-              state.games = state.games || {};
-              markMine();
-              saveLocal();   // per-league key, not the old single uid slot
-              //  The newest is the one to land on; the rest are just
-              //  filed so they show up on the splash.
-              if (!first) setActiveCode(seasons[0].code);
-              first = false;
-            } finally { SYNC.applying = false; }
-          }).catch(function (e) { console.warn('[Season] recover ' + season.code + ' failed:', e && e.code); });
+            try { localStorage.setItem(leagueKey(code), JSON.stringify(st)); }
+            catch (e) { return; }            // quota: try again next paint
+            var idx = readIndex() || { active: null, codes: [] };
+            if (idx.codes.indexOf(code) === -1) idx.codes.push(code);
+            if (!idx.active) idx.active = code;
+            writeIndex(idx);
+            pulled++;
+            console.log('[Season] pulled ' + code + ' from the account');
+          }).catch(function (e) { console.warn('[Season] pull ' + code + ' failed:', e && e.code); });
         });
       }, Promise.resolve()).then(function () {
-        subscribeSeason(season.code);
-        console.log('[Season] recovered ' + season.code + ' from the account');
-        try { renderSplashCard(); } catch (e) { }
+        if (pulled) { try { renderSplashCard(); } catch (e) { } }
       });
     }).catch(function (e) {
-      RECOVERY_TRIED = false;
-      console.warn('[Season] account recovery failed:', e && e.code);
+      RECOVERY_AT = 0;                       // let the next paint retry
+      console.warn('[Season] account reconcile failed:', e && e.code);
     });
   }
 
@@ -6471,6 +6483,11 @@
     var slot = document.getElementById('seasonLeagueSlot');
     if (!slot) return;
     verifySeasonMembership();
+    //  Unconditionally, not just when the list is empty. A device that
+    //  already holds a league still has to learn about one created
+    //  somewhere else, which is the whole reason a laptop and a phone
+    //  on the same account could show different leagues.
+    recoverLeagueFromAccount();
 
     //  Every season league this account holds, not just one. This used
     //  to render a single card from load(), so a manager in two season
@@ -6484,21 +6501,19 @@
     });
 
     if (!rows.length) {
-      //  Nothing local. Before concluding the user has no league, ask
-      //  the account — this is the path that stops a reload looking
-      //  like "you were never in a league, enter the code again".
-      recoverLeagueFromAccount();
       slot.innerHTML = '';
       return;
     }
 
-    //  Most recently worked-in first, so the league you are actually
-    //  playing is the one under your thumb.
-    var act = activeCode();
+    //  ── Identical order on every device ──────────────────────
+    //  This sorted the ACTIVE league first, which is per-device state:
+    //  the laptop and the phone would list the same leagues in
+    //  different orders and look like they disagreed even when they
+    //  did not. Order now comes only from the league data itself, so
+    //  every screen on an account renders the same list.
     rows.sort(function (a, b) {
-      if (a.code === act) return -1;
-      if (b.code === act) return 1;
-      return String(a.s.league.name || '').localeCompare(String(b.s.league.name || ''));
+      var an = String(a.s.league.name || ''), bn = String(b.s.league.name || '');
+      return an.localeCompare(bn) || a.code.localeCompare(b.code);
     });
 
     slot.innerHTML = rows.map(function (r) {
@@ -6572,7 +6587,7 @@
     if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
     SYNC.warnedDenied = false;
     MEMBERSHIP_CHECKED = false;   // re-verify under the new account
-    RECOVERY_TRIED = false;       // and retry recovery with a real uid
+    RECOVERY_AT = 0;              // and reconcile again under the new uid
     state = null;
 
     migrateLegacyStore();

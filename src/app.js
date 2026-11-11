@@ -1375,7 +1375,16 @@ function renderSavedLeagues() {
     if (!leagues.length) {
       container.innerHTML = _hasSeasonCard() ? '' : '<p class="no-leagues">Loading your leagues…</p>';
     } else {
-      const sorted = leagues.slice().sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
+      //  Sorted by name+code, NOT by lastActive. lastActive is written
+      //  per device, so the same account listed the same leagues in a
+      //  different order on a laptop and a phone and looked like the
+      //  two disagreed. Order must come from the league, not from which
+      //  device you happen to be holding.
+      const sorted = leagues.slice().sort(function (a, b) {
+        const an = String((a && a.name) || ''), bn = String((b && b.name) || '');
+        return an.localeCompare(bn) ||
+          String((a && a.leagueCode) || '').localeCompare(String((b && b.leagueCode) || ''));
+      });
       container.innerHTML = sorted.map(_leagueCardHTML).join('');
       _attachLeagueCardListeners(container);
     }
@@ -1498,7 +1507,14 @@ async function reconcileSavedLeagues() {
       : '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
     return;
   }
-  const sorted = kept.slice().sort(function (a, b) { return (b.lastActive || 0) - (a.lastActive || 0); });
+  //  Same device-independent order as the first paint above. This one
+  //  mattered more: it is the render that WINS, after the account read
+  //  lands, and it mixed account timestamps with per-device ones.
+  const sorted = kept.slice().sort(function (a, b) {
+    const an = String((a && a.name) || ''), bn = String((b && b.name) || '');
+    return an.localeCompare(bn) ||
+      String((a && a.leagueCode) || '').localeCompare(String((b && b.leagueCode) || ''));
+  });
   container.innerHTML = sorted.map(_leagueCardHTML).join('');
   _attachLeagueCardListeners(container);
 }
