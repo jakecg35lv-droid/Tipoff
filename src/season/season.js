@@ -48,9 +48,131 @@
   var STORE_KEY_BASE = 'tipoff-season-v1';
   var LEGACY_STORE_KEY = 'tipoff-season-v1';
 
-  function storeKey(uid) {
+  /*  ── MANY LEAGUES PER ACCOUNT ──────────────────────────────
+      This bucket used to hold ONE league object, keyed by uid alone.
+      That was not a missing feature guarded off somewhere; it was the
+      only thing the storage could express. Picking "Regular season"
+      from the New-league chooser called open(), open() did
+      `state = load()`, load() returned the one league you already had,
+      and `ui.wiz = state ? null : 0` then skipped the setup wizard —
+      so "create a league" silently became "open my league".
+
+      Layout now, all under the same `tipoff-season-v1` prefix so the
+      sign-out sweep in app.js still clears every one of them:
+
+        tipoff-season-v1:<uid>:idx      { active: 'CODE', codes: [...] }
+        tipoff-season-v1:<uid>:L:<CODE> one league's state
+        tipoff-season-v1:<uid>          legacy one-slot key, absorbed
+                                        on load and then removed
+
+      ':L:' separates the code so no league code can ever collide with
+      ':idx'. Codes are upper-cased everywhere, because the join dialog
+      accepts whatever case the user types.                          */
+  function bucketKey(uid) {
     var u = uid === undefined ? myUid() : uid;
     return STORE_KEY_BASE + ':' + (u || 'anon');
+  }
+  //  Kept as an alias: the legacy one-slot key is still read, and the
+  //  two older recovery paths below still deposit into it.
+  function storeKey(uid) { return bucketKey(uid); }
+
+  function normCode(c) { return c ? String(c).trim().toUpperCase() : ''; }
+  function idxKey(uid) { return bucketKey(uid) + ':idx'; }
+  function leagueKey(code, uid) { return bucketKey(uid) + ':L:' + normCode(code); }
+
+  function readIndex(uid) {
+    try {
+      var raw = localStorage.getItem(idxKey(uid));
+      var o = raw ? JSON.parse(raw) : null;
+      if (o && Array.isArray(o.codes)) return o;
+    } catch (e) { }
+    return null;
+  }
+  function writeIndex(o, uid) {
+    try { localStorage.setItem(idxKey(uid), JSON.stringify(o)); } catch (e) { /* quota */ }
+  }
+
+  //  Move whatever is sitting in the one-slot key into the per-league
+  //  layout. Runs on EVERY load, not once: migrateLegacyStore() and
+  //  adoptAnonStore() both still write into that slot, so gating this
+  //  on "no index yet" would let a league they recover afterwards fall
+  //  into a key nothing reads.
+  //
+  //  Order matters for safety. The slot is removed only after the copy
+  //  has been written AND the index updated, so an exception or a quota
+  //  failure anywhere leaves the original exactly where it was and the
+  //  next load tries again. A league is never in flight.
+  function absorbLegacySlot(uid) {
+    var u = uid === undefined ? myUid() : uid;
+    var raw;
+    try { raw = localStorage.getItem(bucketKey(u)); } catch (e) { return; }
+    if (!raw) return;
+
+    var blob;
+    try { blob = JSON.parse(raw); } catch (e) {
+      try { localStorage.removeItem(bucketKey(u)); } catch (_) { }
+      return;
+    }
+    var code = normCode(blob && blob.league && blob.league.code);
+    if (!code) {
+      //  No code means no league, so there is nothing to file and
+      //  nothing to lose.
+      try { localStorage.removeItem(bucketKey(u)); } catch (e) { }
+      return;
+    }
+
+    try {
+      //  Never clobber an existing per-league copy. save() writes
+      //  there now, so that copy is the newer one; the slot is a
+      //  leftover from the build that came before this one.
+      if (!localStorage.getItem(leagueKey(code, u))) {
+        localStorage.setItem(leagueKey(code, u), raw);
+      }
+    } catch (e) { return; }               // quota: retry on a later load
+
+    var idx = readIndex(u) || { active: null, codes: [] };
+    if (idx.codes.indexOf(code) === -1) idx.codes.push(code);
+    if (!idx.active) idx.active = code;
+    writeIndex(idx, u);
+    if (!readIndex(u)) return;            // index write failed; keep the slot
+
+    try { localStorage.removeItem(bucketKey(u)); } catch (e) { }
+    console.log('[Season] filed ' + code + ' into the multi-league store');
+  }
+
+  function leagueCodes(uid) {
+    absorbLegacySlot(uid);
+    var i = readIndex(uid);
+    return (i && i.codes.slice()) || [];
+  }
+  function activeCode(uid) {
+    var i = readIndex(uid);
+    return (i && i.active) || null;
+  }
+  function setActiveCode(code, uid) {
+    var c = normCode(code) || null;
+    var i = readIndex(uid) || { active: null, codes: [] };
+    if (c && i.codes.indexOf(c) === -1) i.codes.push(c);
+    i.active = c;
+    writeIndex(i, uid);
+  }
+  function forgetLeagueLocal(code, uid) {
+    var c = normCode(code);
+    if (!c) return;
+    try { localStorage.removeItem(leagueKey(c, uid)); } catch (e) { }
+    var i = readIndex(uid);
+    if (!i) return;
+    i.codes = i.codes.filter(function (x) { return x !== c; });
+    if (i.active === c) i.active = i.codes[0] || null;
+    writeIndex(i, uid);
+  }
+  function loadLeague(code, uid) {
+    var c = normCode(code);
+    if (!c) return null;
+    try {
+      var raw = localStorage.getItem(leagueKey(c, uid));
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
   }
 
   //  Whoever is signed in when the legacy blob is first seen inherits
@@ -349,7 +471,7 @@
         state = decodeState(d.state);
         state.games = games;
         markMine();
-        try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
+        saveLocal();   // per-league key, not the old single uid slot
         if (typeof render === 'function') { try { render(); } catch (e) { } }
       } finally {
         SYNC.applying = false;
@@ -474,8 +596,20 @@
     SYNC.rev = 0;
   }
 
+  //  Writes the in-memory league to its OWN key and leaves every other
+  //  league the account holds untouched. The old version wrote to the
+  //  single uid-scoped slot, which is why a second league could only
+  //  ever replace the first.
+  function saveLocal() {
+    if (!state || !state.league || !state.league.code) return;
+    var c = normCode(state.league.code);
+    try { localStorage.setItem(leagueKey(c), JSON.stringify(state)); } catch (e) { /* quota or private mode */ }
+    //  Whatever we just wrote is the league the manager is working in,
+    //  so it becomes the one a bare open() returns to.
+    setActiveCode(c);
+  }
   function save() {
-    try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { /* quota or private mode */ }
+    saveLocal();
     schedulePush();
   }
   //  Anyone who joined under the old myUid() wrote their league into
@@ -504,10 +638,18 @@
     } catch (e) { /* unparseable; leave it */ }
   }
 
-  function load() {
+  //  load()        → the active league, or null
+  //  load(code)    → that specific league, or null
+  //  Both run the three recovery/migration paths first, so a device
+  //  arriving from any older build ends up in the new layout before
+  //  anything reads it.
+  function load(code) {
     migrateLegacyStore();
     adoptAnonStore();
-    try { var raw = localStorage.getItem(storeKey()); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+    absorbLegacySlot();
+    var c = normCode(code) || activeCode();
+    if (!c) return null;
+    return loadLeague(c);
   }
   function sessionName() {
     try { var s = JSON.parse(localStorage.getItem('mmfantasy-session') || 'null'); return (s && s.name) || 'You'; } catch (e) { return 'You'; }
@@ -816,7 +958,7 @@
       if (code !== state.league.code) {
         unsubscribeSeason();
         state.league.code = code;
-        try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
+        saveLocal();   // per-league key, not the old single uid slot
         subscribeSeason(code);
       }
       return writeLeagueDoc(seasonDoc(state.league.code));
@@ -5666,10 +5808,31 @@
 
   // ── Open / close ────────────────────────────────────────
   var prevDisplay = null;
-  function open() {
+  //  open()             → the active league, or the setup wizard if the
+  //                       account holds none
+  //  open(code)         → that league
+  //  open(null, true)   → ALWAYS the setup wizard, however many leagues
+  //                       are already held. This is what "create a
+  //                       league" needs: the chooser used to call a
+  //                       bare open(), which loaded the league you had
+  //                       and skipped the wizard, so creating a second
+  //                       season league was impossible from the UI.
+  function open(code, fresh) {
     root = document.getElementById('seasonApp');
     if (!root) return;
-    state = load();
+
+    //  Switching leagues: drop the previous league's listener and its
+    //  debounced push BEFORE loading another one. Without this, the old
+    //  league's snapshot handler stays live and will happily apply its
+    //  state over the league you just opened.
+    unsubscribeSeason();
+    if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
+    SYNC.skew = 0;                 // clock offset is measured per league
+    clearInterval(open._tick);
+    clearTimeout(open._statsTick);
+
+    state = fresh ? null : load(code);
+    if (state && state.league && state.league.code) setActiveCode(state.league.code);
     markMine();
     // Reconnect to the shared league so other managers' picks and
     // lineups arrive while this device is open.
@@ -5770,7 +5933,11 @@
         if (btn) btn.click();
         bypass = false;
       } else if (mode === 'season') {
-        open();
+        //  This dialog is titled "New league". Force the setup wizard,
+        //  or a manager who already has one lands straight back in it
+        //  and concludes the button is broken — which is exactly what
+        //  was happening.
+        open(null, true);
       }
     }
     bd.addEventListener('click', function (e) {
@@ -5797,9 +5964,11 @@
     code = String(code || '').trim().toUpperCase();
     if (!code) return Promise.resolve(null);
 
-    // Already the league open on this device.
-    var s = load();
-    if (s && s.league && s.league.code === code) {
+    // Already a league this device holds — any of them, not just the
+    // active one. load(code) returns null when the account does not
+    // hold that code, so this no longer answers for the wrong league.
+    var s = load(code);
+    if (s && s.league && normCode(s.league.code) === code) {
       return Promise.resolve({ code: code, name: s.league.name, format: s.league.format, conferences: s.league.conferences,
         numTeams: s.league.numTeams, joined: 1, draftAt: s.draft && s.draft.scheduledAt, member: true });
     }
@@ -5885,7 +6054,10 @@
     if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
     SYNC.warnedDenied = false;
     state = null;
-    try { localStorage.removeItem(storeKey()); } catch (e) { /* ignore */ }
+    //  Only THIS league. The old line removed the whole uid bucket,
+    //  which under the multi-league layout would have taken every
+    //  other league the account holds down with it.
+    forgetLeagueLocal(code);
     if (code) forgetSeasonLeague(code);
     try { renderSplashCard(); } catch (e) { }
   }
@@ -5985,7 +6157,7 @@
         state = claimed.st;
         state.games = state.games || {};
         markMine();
-        try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
+        saveLocal();   // per-league key, not the old single uid slot
       } finally { SYNC.applying = false; }
       subscribeSeason(code);
       rememberSeasonLeague(code, (state.league && state.league.name) || 'Season League');
@@ -6075,7 +6247,9 @@
             if (mine) { mine.name = teamName; save(); }
           }
           try {
-            open();
+            //  Open the code we just joined, not whichever league
+            //  happened to be active before.
+            open(code);
             bd.remove();                       // only once it rendered
           } catch (e) {
             //  Joined successfully but could not open. Say exactly
@@ -6113,7 +6287,7 @@
         //  Same split as the join path: open() failing must not be
         //  reported into a dialog that has already been removed.
         if (haveIt) {
-          try { open(); bd.remove(); }
+          try { open(code); bd.remove(); }
           catch (e) {
             console.error('[Season] open() failed:', e);
             showJoinError(bd, 'The league could not open. Reload the page and try again.');
@@ -6202,26 +6376,41 @@
     if (RECOVERY_TRIED) return;
     var db = syncDb(), uid = myUid();
     if (!db || !uid) return;                 // retried once auth lands
-    if (load()) return;                      // already have one locally
+    if (leagueCodes().length) return;        // already hold at least one
     RECOVERY_TRIED = true;
 
     db.collection('users').doc(uid).get().then(function (snap) {
       var list = ((snap.exists && snap.data()) || {}).leagues || [];
-      var season = list.filter(function (l) { return l && l.kind === 'season' && l.code; })
-        .sort(function (a, b) { return (b.lastOpened || 0) - (a.lastOpened || 0); })[0];
-      if (!season) return;
-      return seasonDoc(season.code).get().then(function (doc) {
-        if (!doc.exists) return;
-        var st = decodeState((doc.data() || {}).state);
-        if (!st || !st.teams) return;
-        if (!st.teams.some(function (t) { return t && t.uid === uid; })) return;  // not ours
-        SYNC.applying = true;
-        try {
-          state = st;
-          state.games = state.games || {};
-          markMine();
-          try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) { }
-        } finally { SYNC.applying = false; }
+      //  ALL of them, newest first — not just [0]. On a new phone a
+      //  manager in three season leagues used to get exactly one back
+      //  and had to hunt for the other two codes. Capped so a corrupt
+      //  index cannot turn this into an unbounded read.
+      var seasons = list.filter(function (l) { return l && l.kind === 'season' && l.code; })
+        .sort(function (a, b) { return (b.lastOpened || 0) - (a.lastOpened || 0); })
+        .slice(0, 8);
+      if (!seasons.length) return;
+      var first = true;
+      return seasons.reduce(function (chain, season) {
+        return chain.then(function () {
+          return seasonDoc(season.code).get().then(function (doc) {
+            if (!doc.exists) return;
+            var st = decodeState((doc.data() || {}).state);
+            if (!st || !st.teams) return;
+            if (!st.teams.some(function (t) { return t && t.uid === uid; })) return;  // not ours
+            SYNC.applying = true;
+            try {
+              state = st;
+              state.games = state.games || {};
+              markMine();
+              saveLocal();   // per-league key, not the old single uid slot
+              //  The newest is the one to land on; the rest are just
+              //  filed so they show up on the splash.
+              if (!first) setActiveCode(seasons[0].code);
+              first = false;
+            } finally { SYNC.applying = false; }
+          }).catch(function (e) { console.warn('[Season] recover ' + season.code + ' failed:', e && e.code); });
+        });
+      }, Promise.resolve()).then(function () {
         subscribeSeason(season.code);
         console.log('[Season] recovered ' + season.code + ' from the account');
         try { renderSplashCard(); } catch (e) { }
@@ -6267,7 +6456,8 @@
       unsubscribeSeason();
       if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
       state = null;
-      try { localStorage.removeItem(storeKey()); } catch (e) { }
+      //  Drop only the league we just proved we hold no seat in.
+      forgetLeagueLocal(code);
       console.log('[Season] no seat held in ' + code + ' any more; cleared local copy');
       try { renderSplashCard(); } catch (e) { }
     }).catch(function (e) {
@@ -6281,8 +6471,19 @@
     var slot = document.getElementById('seasonLeagueSlot');
     if (!slot) return;
     verifySeasonMembership();
-    var s = load();
-    if (!s) {
+
+    //  Every season league this account holds, not just one. This used
+    //  to render a single card from load(), so a manager in two season
+    //  leagues could only ever see one of them from the splash.
+    var codes = leagueCodes();
+    var rows = [];
+    codes.forEach(function (c) {
+      var s = loadLeague(c);
+      if (!s || !s.league) return;
+      rows.push({ code: c, s: s });
+    });
+
+    if (!rows.length) {
       //  Nothing local. Before concluding the user has no league, ask
       //  the account — this is the path that stops a reload looking
       //  like "you were never in a league, enter the code again".
@@ -6290,11 +6491,30 @@
       slot.innerHTML = '';
       return;
     }
-    var sub = s.phase === 'draft' ? 'Drafting, pick ' + (s.draft.pick + 1) + ' of ' + s.draft.order.length :
-      s.phase === 'done' ? 'Season complete' : 'Week ' + s.week + ' of ' + s.league.weeks;
-    slot.innerHTML = '<button class="ss-splash-card" data-season-open="1"><span class="ss-splash-tag">Season</span>' +
-      '<span class="ss-splash-txt"><b>' + esc(s.league.name) + '</b><span>' + esc(sub) + ', ' + s.league.numTeams + ' teams</span></span>' +
-      '<span aria-hidden="true">&#8250;</span></button>';
+
+    //  Most recently worked-in first, so the league you are actually
+    //  playing is the one under your thumb.
+    var act = activeCode();
+    rows.sort(function (a, b) {
+      if (a.code === act) return -1;
+      if (b.code === act) return 1;
+      return String(a.s.league.name || '').localeCompare(String(b.s.league.name || ''));
+    });
+
+    slot.innerHTML = rows.map(function (r) {
+      var s = r.s;
+      var sub = s.phase === 'draft'
+        ? 'Drafting, pick ' + ((s.draft && s.draft.pick || 0) + 1) + ' of ' + ((s.draft && s.draft.order || []).length)
+        : s.phase === 'done' ? 'Season complete'
+        : 'Week ' + s.week + ' of ' + s.league.weeks;
+      return '<button class="ss-splash-card" data-season-open="1" data-code="' + esc(r.code) + '">' +
+        '<span class="ss-splash-tag">Season</span>' +
+        '<span class="ss-splash-txt"><b>' + esc(s.league.name) + '</b><span>' + esc(sub) + ', ' + s.league.numTeams + ' teams</span></span>' +
+        '<span aria-hidden="true">&#8250;</span></button>';
+    }).join('') +
+    //  A second season league has to be reachable from here, because
+    //  this screen is where a manager looks for one.
+    '<button class="ss-splash-add" data-season-new="1">+ New season league</button>';
   }
   function wireSplash() {
     document.addEventListener('click', function (e) {
@@ -6304,7 +6524,20 @@
         showModeChooser();
         return;
       }
-      if (e.target.closest && e.target.closest('[data-season-open]')) open();
+      var mk = e.target.closest && e.target.closest('[data-season-new]');
+      if (mk) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        open(null, true);                       // wizard, never the held league
+        return;
+      }
+      var card = e.target.closest && e.target.closest('[data-season-open]');
+      if (card) {
+        //  Open the league the card names. A bare open() would reopen
+        //  whichever one happened to be active, so tapping the second
+        //  card would hand you the first league.
+        open(card.getAttribute('data-code') || undefined);
+        return;
+      }
       interceptJoin(e);
     }, true);
     setTimeout(checkInviteLink, 1200);

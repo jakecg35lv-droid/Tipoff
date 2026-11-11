@@ -382,6 +382,20 @@ body.ss-open > *:not(#seasonApp):not(script):not(#toastContainer):not(.mode-back
 .ss-splash-txt b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ss-splash-txt span { font-size: 13px; color: #8399b1; }
 
+/* Add another season league, from the one screen a manager actually
+   looks for leagues on. Deliberately quieter than a league card: it is
+   an action, not one of your leagues, and it sits directly under them.
+   44px min-height keeps it a real touch target on a phone. */
+.ss-splash-add {
+  display: block; width: 100%; min-height: 44px; margin: 2px 0 8px;
+  padding: 11px 16px; cursor: pointer; text-align: left;
+  border-radius: 14px; border: 1px dashed rgba(173, 192, 212, .26);
+  background: transparent; color: #8399b1;
+  font: 600 13.5px 'Inter', system-ui, sans-serif;
+  transition: border-color .15s, color .15s;
+}
+.ss-splash-add:hover { border-color: #f26b21; color: #ff8a45; }
+
 
 @media (prefers-reduced-motion: reduce) {
   .ss-st.locked.stamp .ss-st-pts, .ss-st.locked.stamp .ss-st-label svg, .ss-swap, .mode-backdrop, .mode-card { animation: none !important; transition: none !important; }
