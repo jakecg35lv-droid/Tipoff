@@ -175,6 +175,46 @@
     } catch (e) { return null; }
   }
 
+  //  ── Clean up provisional duplicates already on a device ───
+  //  Builds before this one left a copy of every created league under
+  //  its throwaway code (see confirmLeagueSaved). Those copies are
+  //  indistinguishable by name, so match on `league.seed`, which is set
+  //  once from Date.now() when the league object is built: the two
+  //  copies came from the SAME object, so they carry the same seed, and
+  //  two genuinely separate leagues realistically never will.
+  //
+  //  Of a matching pair, keep whichever code the account lists — that
+  //  is the one the server and everybody else knows. If the account
+  //  lists neither (created offline, never published), keep one and
+  //  drop the rest rather than leaving both on screen.
+  function pruneProvisionalDuplicates(accountCodes) {
+    var known = {};
+    (accountCodes || []).forEach(function (c) { known[normCode(c)] = 1; });
+
+    var bySeed = {};
+    leagueCodes().forEach(function (c) {
+      var s = loadLeague(c);
+      var seed = s && s.league && s.league.seed;
+      if (seed == null) return;
+      (bySeed[seed] = bySeed[seed] || []).push(c);
+    });
+
+    Object.keys(bySeed).forEach(function (seed) {
+      var codes = bySeed[seed];
+      if (codes.length < 2) return;
+      var keep = codes.filter(function (c) { return known[c]; })[0] || codes[codes.length - 1];
+      codes.forEach(function (c) {
+        if (c === keep) return;
+        //  Never drop one the account lists — if somehow two are
+        //  listed, they are both real to the server and this is not
+        //  ours to resolve.
+        if (known[c]) return;
+        forgetLeagueLocal(c);
+        console.log('[Season] removed duplicate local copy ' + c + ' (kept ' + keep + ')');
+      });
+    });
+  }
+
   //  Whoever is signed in when the legacy blob is first seen inherits
   //  it ONLY if they are actually in that league. Anyone else leaves
   //  it untouched, so the rightful owner still gets it when they next
@@ -956,9 +996,23 @@
     //  one and both sets of managers would be in a hybrid league.
     return freshCode().then(function (code) {
       if (code !== state.league.code) {
+        //  ── Drop the provisional code's copy ─────────────────
+        //  createLeague() saves under a code6() guess, then this swaps
+        //  in a collision-checked one and saves again. The first copy
+        //  used to be harmless because storage was ONE slot per uid and
+        //  the second save overwrote it. With per-league keys it is a
+        //  whole extra league: same name, same teams, its own card.
+        //  That is where the duplicate "HomeFantasyLeague" came from,
+        //  and it was undeletable, because it only ever existed on this
+        //  device and so no account entry existed to remove.
+        //
+        //  Order matters: saveLocal() first so `active` points at the
+        //  real code, THEN forget the provisional one.
+        var provisional = state.league.code;
         unsubscribeSeason();
         state.league.code = code;
         saveLocal();   // per-league key, not the old single uid slot
+        forgetLeagueLocal(provisional);
         subscribeSeason(code);
       }
       return writeLeagueDoc(seasonDoc(state.league.code));
@@ -6509,6 +6563,20 @@
     //
     //  Local codes are unioned in so a league created offline, before
     //  its account write landed, still shows.
+    //  Clear any provisional leftovers before deciding what to draw,
+    //  or a device that created a league on an older build keeps
+    //  showing it twice forever.
+    //  ONLY once the account list is known. With an empty list the
+    //  prune cannot tell the real code from the provisional one, and
+    //  keeping the wrong one would leave the manager holding a league
+    //  that has no document on the server and that nobody can join.
+    //  null means "not read yet", which is different from "none".
+    if (ACCOUNT_SEASON !== null) {
+      try {
+        pruneProvisionalDuplicates(ACCOUNT_SEASON.map(function (l) { return l.code; }));
+      } catch (e) { console.warn('[Season] duplicate prune failed:', e); }
+    }
+
     var seen = {}, rows = [];
     function push(code, entry) {
       code = normCode(code);
