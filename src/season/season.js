@@ -6386,6 +6386,18 @@
   //    2. It never touches `state`. It writes the per-league key
   //       directly, so pulling a league down cannot disturb the one
   //       the manager is sitting in.
+  //  Season entries from the live users/{uid} listener in app.js. The
+  //  single source of truth for WHICH season leagues exist.
+  var ACCOUNT_SEASON = null;
+  function setAccountLeagues(list) {
+    ACCOUNT_SEASON = (Array.isArray(list) ? list : [])
+      .filter(function (l) { return l && l.kind === 'season' && l.code; })
+      .map(function (l) { return { code: normCode(l.code), name: l.name || 'Season League' }; });
+    try { renderSplashCard(); } catch (e) { }
+    //  Download anything we now know about but do not hold.
+    recoverLeagueFromAccount(true);
+  }
+
   var RECOVERY_AT = 0;
   function recoverLeagueFromAccount(force) {
     var db = syncDb(), uid = myUid();
@@ -6489,16 +6501,28 @@
     //  on the same account could show different leagues.
     recoverLeagueFromAccount();
 
-    //  Every season league this account holds, not just one. This used
-    //  to render a single card from load(), so a manager in two season
-    //  leagues could only ever see one of them from the splash.
-    var codes = leagueCodes();
-    var rows = [];
-    codes.forEach(function (c) {
-      var s = loadLeague(c);
-      if (!s || !s.league) return;
-      rows.push({ code: c, s: s });
-    });
+    //  ── The ACCOUNT decides which cards exist ────────────────
+    //  ACCOUNT_SEASON comes from the live users/{uid} listener in
+    //  app.js, so a league created on a laptop appears here without a
+    //  refresh. The local store only supplies the DETAIL (week, teams)
+    //  for leagues this device has already downloaded.
+    //
+    //  Local codes are unioned in so a league created offline, before
+    //  its account write landed, still shows.
+    var seen = {}, rows = [];
+    function push(code, entry) {
+      code = normCode(code);
+      if (!code || seen[code]) return;
+      seen[code] = 1;
+      var s = loadLeague(code);
+      if (s && s.league) { rows.push({ code: code, s: s, name: s.league.name }); return; }
+      //  Known from the account but not downloaded yet. Show it with
+      //  the name the account carries rather than hiding it until a
+      //  pull finishes — hiding it is what made two devices disagree.
+      if (entry) rows.push({ code: code, s: null, name: entry.name || 'Season League' });
+    }
+    (ACCOUNT_SEASON || []).forEach(function (l) { push(l.code, l); });
+    leagueCodes().forEach(function (c) { push(c, null); });
 
     if (!rows.length) {
       slot.innerHTML = '';
@@ -6512,19 +6536,21 @@
     //  did not. Order now comes only from the league data itself, so
     //  every screen on an account renders the same list.
     rows.sort(function (a, b) {
-      var an = String(a.s.league.name || ''), bn = String(b.s.league.name || '');
-      return an.localeCompare(bn) || a.code.localeCompare(b.code);
+      return String(a.name || '').localeCompare(String(b.name || '')) ||
+        a.code.localeCompare(b.code);
     });
 
     slot.innerHTML = rows.map(function (r) {
       var s = r.s;
-      var sub = s.phase === 'draft'
+      var sub = !s ? 'Tap to open'
+        : s.phase === 'draft'
         ? 'Drafting, pick ' + ((s.draft && s.draft.pick || 0) + 1) + ' of ' + ((s.draft && s.draft.order || []).length)
         : s.phase === 'done' ? 'Season complete'
         : 'Week ' + s.week + ' of ' + s.league.weeks;
+      if (s) sub += ', ' + s.league.numTeams + ' teams';
       return '<button class="ss-splash-card" data-season-open="1" data-code="' + esc(r.code) + '">' +
         '<span class="ss-splash-tag">Season</span>' +
-        '<span class="ss-splash-txt"><b>' + esc(s.league.name) + '</b><span>' + esc(sub) + ', ' + s.league.numTeams + ' teams</span></span>' +
+        '<span class="ss-splash-txt"><b>' + esc(r.name) + '</b><span>' + esc(sub) + '</span></span>' +
         '<span aria-hidden="true">&#8250;</span></button>';
     }).join('') +
     //  A second season league has to be reachable from here, because
@@ -6608,6 +6634,10 @@
   window.TipoffSeason = {
     open: open, close: close,
     onAuthChanged: onAuthChanged,
+    //  app.js owns the live users/{uid} listener and hands the list
+    //  here, so both league lists on the splash come from one source.
+    setAccountLeagues: setAccountLeagues,
+    refreshSplash: function () { try { renderSplashCard(); } catch (e) { } },
     // exposed for testing in the lab
     _debug: function () { return state; },
     //  Read-only snapshot of what the real-time clock thinks. Exists so

@@ -1052,6 +1052,7 @@ function handleLogin() {
         try { localStorage.setItem('mmfantasy-last-uid', uid || ''); } catch (e) { }
         setSession(name, email, uid);
         try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(uid); } catch (e) { }
+        try { subscribeAccountLeagues(); } catch (e) { }
         btn.textContent = 'Sign In'; btn.disabled = false;
         _afterLoginNav();
       })
@@ -1366,29 +1367,125 @@ function _hasSeasonCard() {
   return !!(slot && slot.innerHTML.trim().length);
 }
 
+/*  ── ONE source of truth for "which leagues exist" ──────────
+    users/{uid}.leagues is the account's membership list and is already
+    written on create, join and delete. Everything on screen is now
+    driven from it, live.
+
+    Before this, each surface read its own localStorage list and then
+    tried to repair itself against the account afterwards. That is why
+    a laptop and a phone on the same account kept showing different
+    leagues in different orders: the device was the authority and the
+    account was an afterthought, so every surface could be wrong in its
+    own way and nothing forced them to agree.
+
+    ACCOUNT_LEAGUES is the cached copy of that list; the snapshot below
+    keeps it current without a refresh.                              */
+let ACCOUNT_LEAGUES = null;      // null = not read yet, [] = genuinely none
+let _accountUnsub = null;
+
+function accountLeagues() { return ACCOUNT_LEAGUES || []; }
+
+//  Leagues held locally that the account does not list yet — created
+//  or joined while offline, or a write that failed. They must still
+//  appear, or creating a league with a flaky connection would look
+//  like it vanished. The account wins wherever both have a code.
+function _localOnlyLeagues() {
+  let local = [];
+  try { local = JSON.parse(localStorage.getItem('mmfantasy-leagues') || '[]') || []; } catch (e) { }
+  if (!Array.isArray(local)) local = [];
+  if (ACCOUNT_LEAGUES === null) return local;        // account unknown: show what we have
+  const known = {};
+  accountLeagues().forEach(l => { if (l && l.code) known[String(l.code).toUpperCase()] = 1; });
+  return local.filter(l => l && !known[String(l.leagueCode || l.code || '').toUpperCase()]);
+}
+
+//  Device-independent order. Never sort by anything written per device
+//  (lastActive, "active league first"), or two screens on one account
+//  disagree even when they hold identical data.
+function _leagueOrder(a, b) {
+  const an = String((a && (a.leagueName || a.name)) || '');
+  const bn = String((b && (b.leagueName || b.name)) || '');
+  return an.localeCompare(bn) ||
+    String((a && (a.leagueCode || a.code)) || '').localeCompare(String((b && (b.leagueCode || b.code)) || ''));
+}
+
+//  Live. A league created on one device shows up on every other one
+//  without anybody refreshing, and a league left anywhere disappears
+//  everywhere.
+function subscribeAccountLeagues() {
+  if (_accountUnsub) { try { _accountUnsub(); } catch (e) { } _accountUnsub = null; }
+  const ref = userDocRef();
+  if (!ref) { ACCOUNT_LEAGUES = null; return; }
+  _accountUnsub = ref.onSnapshot(function (snap) {
+    const data = (snap.exists && snap.data()) || {};
+    ACCOUNT_LEAGUES = Array.isArray(data.leagues) ? data.leagues : [];
+    try { renderSavedLeagues(); } catch (e) { }
+    //  The season module paints its own slot from the same list.
+    try {
+      window.TipoffSeason && window.TipoffSeason.setAccountLeagues &&
+        window.TipoffSeason.setAccountLeagues(ACCOUNT_LEAGUES);
+    } catch (e) { }
+  }, function (e) {
+    //  A failed listen is not evidence that anything was deleted.
+    console.warn('[Leagues] account listen failed:', e && e.code);
+  });
+}
+function unsubscribeAccountLeagues() {
+  if (_accountUnsub) { try { _accountUnsub(); } catch (e) { } _accountUnsub = null; }
+  ACCOUNT_LEAGUES = null;
+}
+
 function renderSavedLeagues() {
   const container = document.getElementById('savedLeaguesList');
   if (!container) return;
-  try {
-    const raw = localStorage.getItem('mmfantasy-leagues');
-    const leagues = raw ? JSON.parse(raw) : [];
-    if (!leagues.length) {
-      container.innerHTML = _hasSeasonCard() ? '' : '<p class="no-leagues">Loading your leagues…</p>';
-    } else {
-      //  Sorted by name+code, NOT by lastActive. lastActive is written
-      //  per device, so the same account listed the same leagues in a
-      //  different order on a laptop and a phone and looked like the
-      //  two disagreed. Order must come from the league, not from which
-      //  device you happen to be holding.
-      const sorted = leagues.slice().sort(function (a, b) {
-        const an = String((a && a.name) || ''), bn = String((b && b.name) || '');
-        return an.localeCompare(bn) ||
-          String((a && a.leagueCode) || '').localeCompare(String((b && b.leagueCode) || ''));
+  //  Built from the ACCOUNT, with the local cache supplying the detail
+  //  (manager count, draft %) for leagues this device has already
+  //  downloaded. localStorage no longer decides WHICH leagues exist —
+  //  that was the whole bug. It only decides how much we can say about
+  //  each one.
+  let local = [];
+  try { local = JSON.parse(localStorage.getItem('mmfantasy-leagues') || '[]') || []; } catch (e) { }
+  if (!Array.isArray(local)) local = [];
+  const byCode = {};
+  local.forEach(l => { if (l && l.leagueCode) byCode[String(l.leagueCode).toUpperCase()] = l; });
+
+  let rows;
+  if (ACCOUNT_LEAGUES === null) {
+    //  Account not read yet. Paint the cache so the screen is not
+    //  blank; the snapshot replaces this within a moment.
+    rows = local.slice();
+  } else {
+    rows = [];
+    accountLeagues().forEach(l => {
+      if (!l || !l.code) return;
+      //  Season leagues render in their own slot above. Sending one
+      //  down the tournament path would look up leagues/{code} and
+      //  find nothing.
+      if (l.kind === 'season') return;
+      const code = String(l.code).toUpperCase();
+      rows.push(byCode[code] || {
+        leagueCode: code,
+        leagueName: l.name || 'League',
+        commissioner: '', managers: [], draftPct: 0,
+        _remoteOnly: true
       });
-      container.innerHTML = sorted.map(_leagueCardHTML).join('');
-      _attachLeagueCardListeners(container);
-    }
-  } catch (e) { container.innerHTML = '<p class="no-leagues">Could not load leagues.</p>'; }
+    });
+    //  Anything local the account has not caught up with yet, so a
+    //  league created on a flaky connection does not look like it
+    //  vanished.
+    _localOnlyLeagues().forEach(l => rows.push(l));
+  }
+
+  if (!rows.length) {
+    container.innerHTML = _hasSeasonCard()
+      ? ''
+      : '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
+  } else {
+    rows.sort(_leagueOrder);
+    container.innerHTML = rows.map(_leagueCardHTML).join('');
+    _attachLeagueCardListeners(container);
+  }
 
   //  Paint from the local cache first (instant), then reconcile against
   //  the account. This list used to be localStorage and nothing else,
@@ -1403,120 +1500,50 @@ function renderSavedLeagues() {
 //  already maintained on create, join and delete. Treat it as the
 //  authority and prune anything local that it no longer contains.
 async function reconcileSavedLeagues() {
-  const container = document.getElementById('savedLeaguesList');
-  if (!container) return;
+  //  PRUNE ONLY. This used to paint as well, which meant two different
+  //  functions wrote the same list from two different sources and the
+  //  later one won by accident. renderSavedLeagues owns the pixels now;
+  //  this keeps the local cache from accumulating leagues that were
+  //  deleted on another device.
   const ref = userDocRef();
-  if (!ref) {
-    // Signed out or offline: the local cache is all we have. Leave it.
-    if (container.textContent.indexOf('Loading') >= 0) {
-      container.innerHTML = _hasSeasonCard() ? '' : '<p class="no-leagues">Create or join a league above.</p>';
-    }
-    return;
-  }
+  if (!ref) return;                     // signed out: cache is all we have
 
   let account = null;
   try {
     const snap = await ref.get();
     if (snap.exists && Array.isArray(snap.data().leagues)) account = snap.data().leagues;
   } catch (e) {
-    //  A failed read is not evidence a league is gone. Never prune on
-    //  a network error — that is how someone loses a league by walking
+    //  A failed read is not evidence a league is gone. Never prune on a
+    //  network error - that is how someone loses a league by walking
     //  into a lift.
     console.warn('[Leagues] account read failed, keeping local list:', e.message);
-    if (container.textContent.indexOf('Loading') >= 0) {
-      container.innerHTML = _hasSeasonCard() ? '' : '<p class="no-leagues">Create or join a league above.</p>';
-    }
     return;
   }
   if (!account) account = [];
 
   const live = {};
-  account.forEach(l => { if (l && l.code) live[String(l.code).toUpperCase()] = l; });
+  account.forEach(l => { if (l && l.code) live[String(l.code).toUpperCase()] = 1; });
 
   let local = [];
-  try { local = JSON.parse(localStorage.getItem('mmfantasy-leagues') || '[]'); } catch (e) { }
+  try { local = JSON.parse(localStorage.getItem('mmfantasy-leagues') || '[]') || []; } catch (e) { }
+  if (!Array.isArray(local)) local = [];
 
-  //  Absence from the account index is NOT evidence a league is gone:
-  //  the index is only written on a successful server write, so a
-  //  league that failed to save is missing from it as well. Deleting
-  //  on that basis destroyed a real league. A league is only dropped
-  //  when its own document is confirmed absent from the server.
-  const checked = await Promise.all(local.map(async l => {
-    if (!l || !l.leagueCode) return null;
-    const code = String(l.leagueCode).toUpperCase();
-    if (state && state.leagueCode && l.leagueCode === state.leagueCode) return l;  // we're in it
-    if (live[code]) return l;                                                       // account knows it
-    if (!window._db) return l;                                                      // offline: keep
-    try {
-      const doc = await window._db.collection('leagues').doc(code).get();
-      return doc.exists ? l : null;        // absent server-side = genuinely deleted
-    } catch (e) {
-      return l;                            // read failed: keep, never prune on error
-    }
-  }));
-  const kept = checked.filter(Boolean);
-
-  //  ── Show leagues this ACCOUNT has that this DEVICE does not ──
-  //  Until now this function only ever pruned: it filtered the local
-  //  cache and never added anything. So a league joined on your phone
-  //  was invisible on your laptop for ever, even though the account
-  //  index named it on both. "Your Leagues" was really "leagues this
-  //  browser happens to remember".
-  //
-  //  Account entries hold only {code, name, kind}, not the manager
-  //  list or draft progress, so these render as sparse cards. That is
-  //  fine: tapping one calls _loadAndEnterLeague(code), which fetches
-  //  the full league from Firestore by code — the same path a fresh
-  //  join uses.
-  const haveLocally = {};
-  kept.forEach(l => { if (l && l.leagueCode) haveLocally[String(l.leagueCode).toUpperCase()] = true; });
-
-  account.forEach(l => {
-    if (!l || !l.code) return;
-    const code = String(l.code).toUpperCase();
-    if (haveLocally[code]) return;
-    //  Season leagues live in their own store and render as the season
-    //  card above; sending one down the tournament path would look up
-    //  leagues/{code} and find nothing.
-    if (l.kind === 'season') return;
-    kept.push({
-      leagueCode: code,
-      leagueName: l.name || 'League',
-      commissioner: '',
-      managers: [],
-      draftPct: 0,
-      lastActive: l.lastOpened || l.joinedAt || 0,
-      _remoteOnly: true
-    });
+  //  Only drop a local entry the account positively does not list. A
+  //  league created seconds ago may not have been written yet, so keep
+  //  anything too new to judge.
+  const FRESH_MS = 120000;
+  const now = Date.now();
+  const kept = local.filter(l => {
+    if (!l || !l.leagueCode) return false;
+    if (live[String(l.leagueCode).toUpperCase()]) return true;
+    return (now - (l.lastActive || 0)) < FRESH_MS;
   });
 
-  const localKept = kept.filter(l => !l._remoteOnly);
-  if (localKept.length !== local.length) {
-    try { localStorage.setItem('mmfantasy-leagues', JSON.stringify(localKept)); } catch (e) { }
-    console.log('[Leagues] pruned ' + (local.length - localKept.length) + ' league(s) deleted on another device');
+  if (kept.length !== local.length) {
+    try { localStorage.setItem('mmfantasy-leagues', JSON.stringify(kept)); } catch (e) { }
+    console.log('[Leagues] pruned ' + (local.length - kept.length) + ' league(s) deleted on another device');
+    try { renderSavedLeagues(); } catch (e) { }
   }
-
-  if (!kept.length) {
-    //  "No leagues yet" was printed by the TOURNAMENT list, which knows
-    //  nothing about the season card rendered immediately above it. So
-    //  a user with a season league read "Season League, drafting, pick 1
-    //  of 96" and directly underneath "No leagues yet." Two statements,
-    //  one screen, one of them false.
-    container.innerHTML = _hasSeasonCard()
-      ? ''
-      : '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
-    return;
-  }
-  //  Same device-independent order as the first paint above. This one
-  //  mattered more: it is the render that WINS, after the account read
-  //  lands, and it mixed account timestamps with per-device ones.
-  const sorted = kept.slice().sort(function (a, b) {
-    const an = String((a && a.name) || ''), bn = String((b && b.name) || '');
-    return an.localeCompare(bn) ||
-      String((a && a.leagueCode) || '').localeCompare(String((b && b.leagueCode) || ''));
-  });
-  container.innerHTML = sorted.map(_leagueCardHTML).join('');
-  _attachLeagueCardListeners(container);
 }
 
 //  League codes get read aloud down a phone and typed by somebody
@@ -6809,6 +6836,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     clearSession();
     try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(null); } catch (e) { }
+    try { unsubscribeAccountLeagues(); } catch (e) { }
     state = freshState();
     state.players = poolForCurrentTournament();
     showLanding();
@@ -7277,11 +7305,13 @@ document.addEventListener('DOMContentLoaded', () => {
           setSession(name, user.email, user.uid);
         }
         try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(user.uid); } catch (e) { }
+        try { subscribeAccountLeagues(); } catch (e) { }
         if (!differentUser && loadState() && state.leagueId) { _subscribeLeague(state.leagueCode); enterLeague(); }
         else { showSplash(true); }
       } else {
         // Firebase says no user — check localStorage session (offline/testing fallback)
         try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(null); } catch (e) { }
+        try { unsubscribeAccountLeagues(); } catch (e) { }
         const session = getSession();
         if (session) {
           if (loadState() && state.leagueId) { enterLeague(); }
