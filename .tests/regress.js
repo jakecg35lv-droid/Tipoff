@@ -69,5 +69,13 @@ T('persistent denial points at the rules', /security rules need attention/.test(
 T('successful server contact is timestamped', (s.match(/SYNC\.lastServerSync = Date\.now\(\)/g)||[]).length===2);
 T('diag reports NEVER when no server contact', /lastServerSync: SYNC\.lastServerSync \? new Date/.test(s) && /'NEVER'/.test(s));
 
+// ---- v226: human-readable tip times ----
+T('gameWhen exists', /function gameWhen\(g, opts\)/.test(s));
+T('day name derived from the timestamp', /DAY_LONG\[d\.getDay\(\)\]/.test(s));
+T('matchup card uses it', /played \? statLine\(sg\) : \(gameWhen\(sg\)/.test(s));
+T('next-game line uses it', /return gameWhen\(g\) \|\| DAYS\[g\.day\]/.test(s));
+T('per-game row uses time only', /gameWhen\(g, \{ timeOnly: true \}\)/.test(s));
+T('no raw .time printed anywhere', !/esc\(g\.time \|\| ''\)/.test(s) && !/DAYS_FULL\[sg\.day\] \+ ' ' \+ \(sg\.time/.test(s));
+
 console.log((p===t?'ALL ':'')+p+'/'+t+' regression checks pass');
 process.exit(p===t?0:1);

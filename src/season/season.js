@@ -2474,6 +2474,35 @@
     return h + (m ? ':' + (m < 10 ? '0' : '') + m : '') + ap;
   }
 
+  /*  ── "Thursday, 6:30 PM" ────────────────────────────────────
+      The feed stores a UTC ISO timestamp, and three places were
+      printing it straight out: "Thursday 2026-11-12T23:30Z". Nobody
+      reads a Z-suffixed timestamp and knows when their player tips.
+
+      The day name is derived from the SAME timestamp as the time, not
+      from the separate `day` index that sat beside it. Those two can
+      disagree — a 23:30Z tip is Thursday in UTC but Thursday evening
+      in ET, and for a late West Coast game the UTC date is already
+      tomorrow. Reading both from one Date makes that impossible.
+
+      new Date() renders in the viewer's own zone, which is what a
+      manager wants: his player tips at a time on HIS clock.          */
+  var DAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  function gameWhen(g, opts) {
+    if (!g || !g.time) return '';
+    var t = Date.parse(g.time);
+    //  A simulated game carries a display string, not an ISO stamp.
+    //  Show it unchanged rather than printing "Invalid Date".
+    if (isNaN(t)) return String(g.time);
+    var d = new Date(t);
+    var h = d.getHours(), m = d.getMinutes();
+    var ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (!h) h = 12;
+    var clock = h + ':' + (m < 10 ? '0' : '') + m + ' ' + ap;
+    if (opts && opts.timeOnly) return clock;
+    return DAY_LONG[d.getDay()] + ', ' + clock;
+  }
+
   function applyDay(d) {
     var changed = false;
     (state.teams || []).forEach(function (t) {
@@ -4955,7 +4984,7 @@
   function vsText(p, g) { return g ? (g.home ? 'vs ' : '@ ') + abbr(g.opp) : '—'; }
   function resultText(g) {
     if (!g) return '';
-    if (g.day >= state.day) return DAYS[g.day] + ' ' + (g.time || '');
+    if (g.day >= state.day) return gameWhen(g) || DAYS[g.day];
     if (g.ts == null) return 'Final';
     var w = g.ts > g.os;
     return '<span class="' + (w ? 'mx-w' : 'mx-l') + '">' + (w ? 'W ' : 'L ') + Math.max(g.ts, g.os) + '-' + Math.min(g.ts, g.os) + '</span>';
@@ -5004,7 +5033,7 @@
       detail = '<div class="mx-detail">' +
         '<div class="mx-d-row"><span class="mx-d-teams">' + (sg.home ? opp + ' @ <em>' + mine + '</em>' : mine + ' @ <em>' + opp + '</em>') + '</span>' +
           '<span class="mx-d-when">' + (played ? resultText(sg) : 'Yet to play') + '</span></div>' +
-        '<div class="mx-d-row"><span class="mx-d-line">' + (played ? statLine(sg) : DAYS_FULL[sg.day] + ' ' + (sg.time || '')) + '</span>' +
+        '<div class="mx-d-row"><span class="mx-d-line">' + (played ? statLine(sg) : (gameWhen(sg) || DAYS_FULL[sg.day])) + '</span>' +
           '<span class="mx-d-pts"><b>' + (played ? f1(sg.fpts) : '-') + '</b><small>' + f1(p.proj) + '</small></span></div>' +
       '</div>';
     }
@@ -5324,7 +5353,7 @@
       week = '<div class="pc-sec"><h3>' + weekLabel() + ' <small>' + weekDates(state.week) + '</small></h3>' + (gs.length ? '<div class="pc-week">' + gs.map(function (g) {
         var played = g.day < state.day;
         return '<div class="pc-g' + (played ? ' done' : '') + '"><span class="d">' + DAYS[g.day] + '</span>' + logoHTML(g.opp, 24) + '<span class="o">' + (g.home ? 'vs ' : '@ ') + esc(abbr(g.opp)) + '</span>' +
-          '<span class="r">' + (played ? (g.preDraft ? '<em class="pc-void">Pre-draft</em>' : g.dnp ? 'DNP' : '<b>' + f1(g.fpts) + '</b>') : esc(g.time || '')) + '</span></div>';
+          '<span class="r">' + (played ? (g.preDraft ? '<em class="pc-void">Pre-draft</em>' : g.dnp ? 'DNP' : '<b>' + f1(g.fpts) + '</b>') : esc(gameWhen(g, { timeOnly: true }))) + '</span></div>';
       }).join('') + '</div>' : '<p class="pc-note">' + esc(emptyWeekText()) + '</p>') + '</div>';
     }
     var log = draft ? [] : gameLog(pid).slice(0, 8);
