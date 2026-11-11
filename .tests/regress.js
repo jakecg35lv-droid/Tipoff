@@ -77,5 +77,12 @@ T('next-game line uses it', /return gameWhen\(g\) \|\| DAYS\[g\.day\]/.test(s));
 T('per-game row uses time only', /gameWhen\(g, \{ timeOnly: true \}\)/.test(s));
 T('no raw .time printed anywhere', !/esc\(g\.time \|\| ''\)/.test(s) && !/DAYS_FULL\[sg\.day\] \+ ' ' \+ \(sg\.time/.test(s));
 
+// ---- v227: password reset ----
+T('reset sends a continue URL', /sendPasswordResetEmail\(email, cont\)/.test(a));
+T('continue URL points at the app', /url: 'https:\/\/app\.tipofffantasy\.com\/'/.test(a));
+T('unauthorized continue URL falls back to a plain send', /auth\/unauthorized-continue-uri[\s\S]{0,400}sendPasswordResetEmail\(email\)\.then\(succeed\)/.test(a));
+T('user enumeration still blocked', /if \(code === 'auth\/user-not-found'\) \{ succeed\(\); return; \}/.test(a));
+T('escape closes the reset modal', /if \(e\.key !== 'Escape'\) return;[\s\S]{0,200}closeResetModal\(\)/.test(a));
+
 console.log((p===t?'ALL ':'')+p+'/'+t+' regression checks pass');
 process.exit(p===t?0:1);

@@ -1001,17 +1001,48 @@ function handlePasswordReset() {
     if (btn) btn.style.display = 'none';
   };
 
-  window._auth.sendPasswordResetEmail(email)
+  /*  ── Send them back to the app afterwards ─────────────────
+      Without actionCodeSettings, Firebase's hosted reset page is a
+      dead end: you set a new password and then sit on a
+      <project>.firebaseapp.com screen with no way back. People assume
+      it half-worked and ask for another link.
+
+      `url` adds a Continue button that returns them here.
+      handleCodeInApp stays false because the reset form itself is
+      Firebase's — we are not rebuilding that, only the way out.
+
+      The domain MUST be listed in Firebase Console → Authentication →
+      Settings → Authorized domains, or the send is rejected outright
+      with auth/unauthorized-continue-uri. The retry below makes that
+      misconfiguration degrade into "plain link" rather than "nobody
+      can reset their password".                                      */
+  const cont = { url: 'https://app.tipofffantasy.com/', handleCodeInApp: false };
+
+  const onError = function (e) {
+    const code = e && e.code;
+    if (code === 'auth/user-not-found') { succeed(); return; }
+    if (code === 'auth/invalid-email') { fail('That email address is not valid.'); return; }
+    if (code === 'auth/too-many-requests') {
+      fail('Too many attempts. Wait a few minutes and try again.');
+      return;
+    }
+    fail(_fbErrorMsg(code));
+  };
+
+  window._auth.sendPasswordResetEmail(email, cont)
     .then(succeed)
     .catch(function (e) {
       const code = e && e.code;
-      if (code === 'auth/user-not-found') { succeed(); return; }
-      if (code === 'auth/invalid-email') { fail('That email address is not valid.'); return; }
-      if (code === 'auth/too-many-requests') {
-        fail('Too many attempts. Wait a few minutes and try again.');
+      //  Continue-URL not authorised: still send the reset, just
+      //  without the return link. A config gap must never be the
+      //  reason somebody is locked out of their account.
+      if (code === 'auth/unauthorized-continue-uri' || code === 'auth/invalid-continue-uri') {
+        console.warn('[Auth] continue URL rejected (' + code +
+          '); add app.tipofffantasy.com to Firebase Authorized domains. Sending without it.');
+        window._auth.sendPasswordResetEmail(email).then(succeed).catch(onError);
         return;
       }
-      fail(_fbErrorMsg(code));
+      onError(e);
     });
 }
 
@@ -6778,6 +6809,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('resetEmail')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') handlePasswordReset();
+  });
+  //  Escape closes it, like every other dialog in the app. Click,
+  //  backdrop and Enter were all wired; this was the one gap.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const m = document.getElementById('resetModal');
+    if (m && m.style.display === 'flex') closeResetModal();
   });
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
