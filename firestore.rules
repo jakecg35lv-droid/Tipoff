@@ -48,13 +48,17 @@ service cloud.firestore {
       //  document, which would otherwise approach the 1MB ceiling
       //  across a full season. Written by the stats job, read by
       //  clients — so clients must not be able to invent scores.
+      //
+      //  There used to be a `match /{sub=**}` wildcard below granting
+      //  read AND write on every subcollection. Firestore ORs all
+      //  matching rules together, so that wildcard silently cancelled
+      //  the `write: if false` here: any signed-in user could have
+      //  written their own box scores. The wildcard is gone — the
+      //  client only ever writes the parent league document, and the
+      //  stats job uses the Admin SDK, which bypasses these rules.
       match /weeks/{week} {
         allow read: if request.auth != null;
         allow write: if false;
-      }
-
-      match /{sub=**} {
-        allow read, write: if request.auth != null;
       }
     }
 
