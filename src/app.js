@@ -6896,7 +6896,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('signOutBtn')?.addEventListener('click', doSignOut);
   document.getElementById('navSignOutBtn')?.addEventListener('click', doSignOut);
   document.getElementById('splashBackBtn')?.addEventListener('click', showLanding);
-  document.getElementById('splashBackArrow')?.addEventListener('click', showLanding);
+  //  The splash back arrow is gone: Sign out at the bottom of the
+  //  same screen already does the only thing it did, and two ways out
+  //  of one screen is one too many.
 
   // All Leagues: leave the league view (it stays saved) and go back to
   // the splash list, where you can open another league or create/join one.
