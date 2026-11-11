@@ -314,7 +314,12 @@
   //  skew: milliseconds this device's clock is BEHIND the device that
   //  last wrote the league (positive = we are behind). Measured on
   //  every snapshot; see subscribeSeason.
-  var SYNC = { code: null, unsub: null, rev: 0, applying: false, timer: null, skew: 0 };
+  //  synced: has a SERVER snapshot come back for the current league?
+  //          Until it has, rev is 0 and any write would overwrite the
+  //          league with whatever this device happened to cache.
+  //  pendingPush: a save() that arrived while we were still waiting.
+  var SYNC = { code: null, unsub: null, rev: 0, applying: false, timer: null, skew: 0,
+               synced: false, pendingPush: false };
 
   //  The clock to use for anything compared against a timestamp that
   //  came from another device — which is every draft deadline.
@@ -418,6 +423,27 @@
   function pushState() {
     if (SYNC.applying) return;                 // echo of a snapshot we just applied
     if (!state || !state.league || !state.league.code) return;
+
+    /*  ── NEVER write before hearing from the server ───────────
+        SYNC.rev lives in memory and starts at 0. open() loads the
+        LOCAL copy and then immediately runs the clock and the stats
+        tick, both of which call save(). That is a 400ms debounce
+        racing a network round-trip, so the push usually won.
+
+        The result: a device holding a week-old copy wrote rev 1 with
+        DRAFT-phase state, and merge:true replaced the server's rev 412
+        season state with it. Every other device then ignored the new
+        document, because 1 <= their own rev — so they looked healthy
+        while the server quietly held last week's draft, and anybody
+        loading fresh got dropped into it.
+
+        So: queue the push until a snapshot has come back from the
+        SERVER (not Firestore's local cache, which can be just as
+        stale as the copy we are trying not to trust). Offline, the
+        write simply waits, which is right: there is nothing to safely
+        overwrite without knowing the server's revision first.        */
+    if (!SYNC.synced) { SYNC.pendingPush = true; return; }
+
     var ref = seasonDoc(state.league.code);
     if (!ref) return;
 
@@ -467,7 +493,18 @@
     var ref = seasonDoc(code);
     if (!ref) return;
     SYNC.code = code;
-    SYNC.unsub = ref.onSnapshot(function (doc) {
+    SYNC.unsub = ref.onSnapshot({ includeMetadataChanges: true }, function (doc) {
+      //  Only a SERVER answer unblocks writing. Firestore serves a
+      //  cached snapshot first, and on the device this bug bites that
+      //  cache holds the same stale copy we are refusing to trust.
+      var fromCache = !!(doc.metadata && doc.metadata.fromCache);
+      if (!fromCache && !SYNC.synced) {
+        SYNC.synced = true;
+        //  Anything save() queued while we were waiting can go now,
+        //  on top of the revision we just learned.
+        if (SYNC.pendingPush) { SYNC.pendingPush = false; schedulePush(); }
+      }
+
       if (!doc.exists) return;
       var d = doc.data() || {};
       if (typeof d.rev !== 'number' || d.rev <= SYNC.rev) return;   // stale or our own echo
@@ -634,6 +671,11 @@
     if (SYNC.unsub) { try { SYNC.unsub(); } catch (e) { } SYNC.unsub = null; }
     SYNC.code = null;
     SYNC.rev = 0;
+    //  Reset with the revision. Leaving these set would let the next
+    //  league be written against the previous league's revision, which
+    //  is the same overwrite in a different costume.
+    SYNC.synced = false;
+    SYNC.pendingPush = false;
   }
 
   //  Writes the in-memory league to its OWN key and leaves every other
