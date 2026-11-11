@@ -596,19 +596,26 @@
   }
 
   var RESYNC_TRIED = {};
-  function forceResync(code) {
+  function forceResync(code, why) {
     var c = normCode(code);
     if (!c || RESYNC_TRIED[c]) return Promise.resolve(false);
     RESYNC_TRIED[c] = true;
     var ref = seasonDoc(c);
     if (!ref) return Promise.resolve(false);
-    console.warn('[Season] ' + c + ': local copy says the draft is running but the board is full. Re-reading from the server.');
+    console.log('[Season] ' + c + ': reading the authoritative copy from the server (' + (why || 'open') + ')');
     //  source:'server' so Firestore's own cache — which may hold the
     //  same wrong copy — cannot answer this.
     return ref.get({ source: 'server' }).then(function (doc) {
       if (!doc.exists) return false;
       var d = doc.data() || {};
       if (!d.state) return false;
+      //  Do not discard work this device has not managed to send yet.
+      //  On a fresh open there is none; mid-session there can be, and
+      //  overwriting it would lose a pick.
+      if (SYNC.pendingPush) {
+        console.log('[Season] ' + c + ': local changes still unsent, leaving them alone');
+        return false;
+      }
       SYNC.applying = true;
       try {
         var games = (state && state.games) || {};
@@ -6010,11 +6017,29 @@
     state = fresh ? null : load(code);
     if (state && state.league && state.league.code) setActiveCode(state.league.code);
 
-    //  Before rendering anything: if this copy contradicts itself, go
-    //  and get the real one. Checked here because open() is the moment
-    //  the manager is actually looking at it.
-    if (state && state.league && localCopyIsImpossible(state)) {
-      forceResync(state.league.code);
+    /*  ── The server is read on EVERY open, not just when the local
+        copy looks wrong ─────────────────────────────────────────
+        The previous version only re-read when the copy contradicted
+        itself (all picks made, phase still 'draft'). That has a hole
+        big enough to drive a league through: a device holding a copy
+        from the MIDDLE of the draft — pick 40 of 96 — is perfectly
+        self-consistent and still completely wrong. Dylan's device is
+        most likely exactly that, which is why the narrower check
+        would not have saved him.
+
+        There are too many ways for a live snapshot to never arrive or
+        never apply — a refused listen, a throw inside the handler, a
+        service worker pinning an old build, a listener that was torn
+        down and not replaced — and every one of them ends with a
+        manager staring at a league that moved on without him.
+
+        So stop trying to enumerate them. One authoritative read per
+        open, from the server, bypassing Firestore's cache. The local
+        copy is a cache for first paint and offline, nothing more.
+        One extra document read per league open is nothing next to
+        somebody sitting out a week of their season.                 */
+    if (state && state.league && state.league.code) {
+      forceResync(state.league.code, localCopyIsImpossible(state) ? 'local copy impossible' : 'open');
     }
 
     markMine();

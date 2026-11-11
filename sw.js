@@ -13,12 +13,12 @@
     a fix without changing it and users keep running the old build with
     no error, no warning, and no way to tell. If you change any file in
     STATIC_ASSETS, change this line in the same commit.             */
-const CACHE_NAME = 'tipoff-v223';
+const CACHE_NAME = 'tipoff-v224';
 //  MUST match the ?v= on the <script> and <link> tags in index.html.
 //  The page requests the versioned URL, so precaching the bare one
 //  would store a file nothing ever asks for while the real request
 //  falls through to the network.
-const BUILD = '223';
+const BUILD = '224';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -121,6 +121,34 @@ self.addEventListener('fetch', event => {
         caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
         return res;
       }))
+    );
+    return;
+  }
+
+  /*  ── The page itself is NETWORK-FIRST ──────────────────────
+      index.html is cached under './' and './index.html' with no
+      version on it, and everything below is cache-first. So a reload
+      was served the OLD html, which asks for the OLD ?v= assets — and
+      only the separate sw.js update check, running in parallel, would
+      install the new build for NEXT time. Every release therefore took
+      two reloads to appear, and a user who never reloaded twice in a
+      row stayed on an old build indefinitely, quietly running
+      different code from everybody else in their league.
+
+      The html is small. Fetch it from the network, fall back to the
+      cache only when genuinely offline.                              */
+  if (event.request.mode === 'navigate' ||
+      (url.origin === self.location.origin && (url.pathname === '/' || url.pathname.endsWith('/index.html')))) {
+    event.respondWith(
+      fetch(event.request).then(res => {
+        if (res && res.status === 200) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+        }
+        return res;
+      }).catch(() =>
+        caches.match(event.request).then(c => c || caches.match('./index.html') || caches.match('./'))
+      )
     );
     return;
   }

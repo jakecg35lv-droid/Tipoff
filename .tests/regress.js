@@ -41,7 +41,7 @@ T('finalizeDraft clears draft.status', /state\.phase = 'season';[\s\S]{0,700}sta
 T('snapshot apply has a catch', /\} catch \(err\) \{[\s\S]{0,900}could not apply the league update/.test(s));
 T('snapshot errors surface to the user', /Not receiving live league updates/.test(s));
 T('forced re-read bypasses cache', /get\(\{ source: 'server' \}\)/.test(s));
-T('impossible copy triggers re-read on open', /localCopyIsImpossible\(state\)\) \{\n\s*forceResync/.test(s));
+T('impossible copy still flagged as the reason', /localCopyIsImpossible\(state\) \? 'local copy impossible' : 'open'/.test(s));
 T('open takes code + fresh', /function open\(code, fresh\)/.test(s));
 T('create forces the wizard', /mode === 'season'[\s\S]{0,400}open\(null, true\)/.test(s));
 T('provisional code dropped on swap', /forgetLeagueLocal\(provisional\)/.test(s));
@@ -50,6 +50,15 @@ T('account listener drives both lists', /onSnapshot[\s\S]{0,600}TipoffSeason\.se
 T('tournament list built from account', /accountLeagues\(\)\.forEach\(l => \{/.test(a));
 T('no device-local sort remains', !/\(b\.lastActive \|\| 0\) - \(a\.lastActive \|\| 0\)/.test(a));
 T('diag hook exists', /_diag: function/.test(s));
+
+
+// ---- v224: authoritative read on open + build freshness ----
+T('server read happens on EVERY open, not just impossible copies', /forceResync\(state\.league\.code, localCopyIsImpossible\(state\)/.test(s));
+T('forced read will not discard unsent local work', /if \(SYNC\.pendingPush\) \{[\s\S]{0,200}return false;/.test(s));
+const sw=fs.readFileSync('sw.js','utf8');
+T('navigation is network-first', /event\.request\.mode === 'navigate'/.test(sw) && /fetch\(event\.request\)\.then\(res => \{[\s\S]{0,300}caches\.open\(CACHE_NAME\)/.test(sw));
+T('navigation still falls back offline', /\.catch\(\(\) =>\s*\n\s*caches\.match\(event\.request\)/.test(sw));
+T('other assets stay cache-first', /\/\/ Same-origin assets: cache-first with network fallback/.test(sw));
 
 console.log((p===t?'ALL ':'')+p+'/'+t+' regression checks pass');
 process.exit(p===t?0:1);
