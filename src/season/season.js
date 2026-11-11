@@ -550,10 +550,83 @@
         markMine();
         saveLocal();   // per-league key, not the old single uid slot
         if (typeof render === 'function') { try { render(); } catch (e) { } }
+      } catch (err) {
+        //  There was no catch here, only a finally. So if decodeState
+        //  or markMine threw — on an old build meeting a newer payload,
+        //  say — the exception escaped the callback, state was never
+        //  replaced, and the device sat on its stale copy silently, on
+        //  every snapshot, for ever. Exactly the shape of "he is still
+        //  on the draft page". Say it out loud instead.
+        console.error('[Season] could not apply the league update:', err);
+        try {
+          notify('This device could not read the latest league update. Close and reopen the app; if it keeps happening, tell Jake.', 'error');
+        } catch (_) { }
       } finally {
         SYNC.applying = false;
       }
-    }, function (e) { console.warn('[Season] snapshot error:', e && e.message); });
+    }, function (e) {
+      //  A console.warn only. If the listen is refused, the user keeps
+      //  looking at a stale league with no indication anything is
+      //  wrong — which is indistinguishable from the app being broken.
+      console.warn('[Season] snapshot error:', e && e.code, e && e.message);
+      try {
+        notify('Not receiving live league updates' + ((e && e.code) ? ' (' + e.code + ')' : '') +
+               '. What you see may be out of date.', 'error');
+      } catch (_) { }
+    });
+  }
+
+  /*  ── A local copy that contradicts itself is wrong ──────────
+      A draft where every pick has been made is over. If a device is
+      holding phase:'draft' with the board full, that copy cannot be
+      right no matter where it came from, and no amount of waiting for
+      a snapshot will fix it if the snapshot path is what broke.
+
+      This is how a manager ends up staring at a finished draft while
+      everyone else is in week 1: his device never applied the update
+      and nothing ever re-checked. Rather than guess at the correct
+      state — half-finalising a draft on a non-host device would be its
+      own disaster — go and fetch the truth from the server, once, and
+      apply it regardless of the revision gate.                      */
+  function localCopyIsImpossible(st) {
+    if (!st || st.phase !== 'draft' || !st.draft) return false;
+    var total = (st.draft.order || []).length;
+    if (!total) return false;
+    return st.draft.completedAt > 0 || st.draft.pick >= total;
+  }
+
+  var RESYNC_TRIED = {};
+  function forceResync(code) {
+    var c = normCode(code);
+    if (!c || RESYNC_TRIED[c]) return Promise.resolve(false);
+    RESYNC_TRIED[c] = true;
+    var ref = seasonDoc(c);
+    if (!ref) return Promise.resolve(false);
+    console.warn('[Season] ' + c + ': local copy says the draft is running but the board is full. Re-reading from the server.');
+    //  source:'server' so Firestore's own cache — which may hold the
+    //  same wrong copy — cannot answer this.
+    return ref.get({ source: 'server' }).then(function (doc) {
+      if (!doc.exists) return false;
+      var d = doc.data() || {};
+      if (!d.state) return false;
+      SYNC.applying = true;
+      try {
+        var games = (state && state.games) || {};
+        state = decodeState(d.state);
+        state.games = games;
+        if (typeof d.rev === 'number') SYNC.rev = d.rev;
+        SYNC.synced = true;
+        markMine();
+        saveLocal();
+        if (typeof render === 'function') { try { render(); } catch (e) { } }
+        console.log('[Season] ' + c + ': repaired from the server (rev ' + d.rev + ', phase ' + state.phase + ')');
+      } finally { SYNC.applying = false; }
+      return true;
+    }).catch(function (e) {
+      RESYNC_TRIED[c] = false;            // offline: allow a later retry
+      console.warn('[Season] forced re-read failed:', e && e.code);
+      return false;
+    });
   }
 
   // ── Analytics ────────────────────────────────────────────
@@ -1563,6 +1636,13 @@
   function startSeason() {
     faCfg();
     state.phase = 'season';
+    //  Clear the running flag with the phase. This was left at 'live'
+    //  on every league that ever finished a draft — VVWXC6 still read
+    //  "live" two days after its draft ended. Nothing routes off it
+    //  alone today, because every view also checks the phase, but a
+    //  flag that permanently lies is one careless read away from
+    //  showing a live draft forever.
+    state.draft.status = 'done';
     //  When the draft actually finished. Everything that asks "was
     //  this game played before anyone had a roster?" keys off this.
     state.draft.completedAt = Date.now();
@@ -5929,6 +6009,14 @@
 
     state = fresh ? null : load(code);
     if (state && state.league && state.league.code) setActiveCode(state.league.code);
+
+    //  Before rendering anything: if this copy contradicts itself, go
+    //  and get the real one. Checked here because open() is the moment
+    //  the manager is actually looking at it.
+    if (state && state.league && localCopyIsImpossible(state)) {
+      forceResync(state.league.code);
+    }
+
     markMine();
     // Reconnect to the shared league so other managers' picks and
     // lineups arrive while this device is open.
@@ -6748,6 +6836,34 @@
     //  here, so both league lists on the splash come from one source.
     setAccountLeagues: setAccountLeagues,
     refreshSplash: function () { try { renderSplashCard(); } catch (e) { } },
+    //  One line that answers "why is this device showing something
+    //  different from everyone else". Read-only. Exists because
+    //  diagnosing this over text took a whole evening of guessing.
+    _diag: function () {
+      var out = { uid: myUid() || null, signedIn: !!myUid(), leagues: leagueCodes(), active: activeCode(),
+                  sync: { code: SYNC.code, rev: SYNC.rev, synced: SYNC.synced, pendingPush: SYNC.pendingPush } };
+      try { out.build = (document.querySelector('script[src*="season.js"]') || {}).src || ''; } catch (e) { }
+      out.local = (leagueCodes() || []).map(function (c) {
+        var s = loadLeague(c);
+        if (!s) return { code: c, payload: 'MISSING' };
+        return {
+          code: c, name: s.league && s.league.name, phase: s.phase, week: s.week, day: s.day,
+          draftStatus: s.draft && s.draft.status,
+          pick: (s.draft && s.draft.pick) + '/' + ((s.draft && s.draft.order || []).length),
+          completedAt: s.draft && s.draft.completedAt || null,
+          impossible: localCopyIsImpossible(s),
+          mySeat: ((s.teams || []).filter(function (t) { return t && t.uid === myUid(); })[0] || {}).name || null
+        };
+      });
+      return out;
+    },
+    //  Manual escape hatch: pull a league fresh from the server and
+    //  overwrite whatever this device thinks.
+    _resync: function (code) {
+      var c = normCode(code) || activeCode();
+      if (c) RESYNC_TRIED[c] = false;
+      return forceResync(c);
+    },
     // exposed for testing in the lab
     _debug: function () { return state; },
     //  Read-only snapshot of what the real-time clock thinks. Exists so
