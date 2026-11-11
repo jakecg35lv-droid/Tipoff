@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Tipoff Fantasy — Account</title>
+<link rel="icon" href="favicon.ico" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet" />
+
+<!--
+  ════════════════════════════════════════════════════════════
+  CUSTOM AUTH ACTION HANDLER
+
+  Firebase's own page lives on mmapp-6b7ab.firebaseapp.com. It cannot
+  be restyled — it is Google's page on Google's domain — and it shows
+  users the raw project id, which looks like a phishing page rather
+  than Tipoff Fantasy. Its expired-link state is a bare white card
+  that offers no way to request a new link.
+
+  This replaces it. Point Firebase Console → Authentication →
+  Templates → (any template) → "Customize action URL" at
+  https://app.tipofffantasy.com/auth.html and every reset, email
+  verification and email-change lands here instead.
+
+  Deliberately self-contained: no app.js, no styles.css, no service
+  worker. A person locked out of their account is the worst possible
+  time for a stale cache or an unrelated script error, so this page
+  depends on nothing but the Firebase auth SDK.
+
+  The apiKey is read from the URL Firebase itself generated. That
+  keeps the page project-agnostic and means there is no second copy
+  of the config to drift. Firebase web API keys are public by design
+  — they identify the project, they do not authorise anything.
+  ════════════════════════════════════════════════════════════
+-->
+
+<style>
+  :root {
+    --navy-0: #070f1c;
+    --navy-1: #0b1626;
+    --panel:  #11223a;
+    --border: rgba(173, 192, 212, .16);
+    --text:   #e8eff8;
+    --text-2: #b3c4d6;
+    --muted:  #8399b1;
+    --orange: #f26b21;
+    --orange-light: #ff8a45;
+    --green:  #4ecb96;
+    --red:    #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 620px at 50% -12%, rgba(242,107,33,.16), transparent 62%),
+      radial-gradient(760px 520px at 86% 108%, rgba(60,110,190,.14), transparent 60%),
+      var(--navy-0);
+    color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px 18px calc(24px + env(safe-area-inset-bottom));
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { width: 100%; max-width: 420px; }
+
+  .brand { display: flex; flex-direction: column; align-items: center; margin-bottom: 22px; }
+  .brand img { width: 74px; height: 74px; filter: drop-shadow(0 6px 22px rgba(242,107,33,.3)); }
+  .brand b {
+    margin-top: 10px; font-family: 'Barlow Condensed', Inter, sans-serif;
+    font-size: 25px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  }
+
+  .card {
+    background: linear-gradient(180deg, rgba(17,34,58,.96), rgba(12,24,42,.96));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 26px 22px;
+    box-shadow: 0 22px 60px rgba(0,0,0,.45);
+  }
+  h1 { margin: 0 0 8px; font-size: 21px; font-weight: 800; letter-spacing: -.01em; }
+  p  { margin: 0 0 18px; font-size: 14.5px; line-height: 1.55; color: var(--text-2); }
+  p.sub { color: var(--muted); font-size: 13.5px; }
+
+  label { display: block; font-size: 12.5px; font-weight: 700; color: var(--muted);
+          letter-spacing: .06em; text-transform: uppercase; margin: 0 0 7px; }
+  /* 16px minimum or iOS zooms the whole page on focus. */
+  input {
+    width: 100%; padding: 13px 14px; margin-bottom: 14px;
+    font-size: 16px; font-family: inherit; color: var(--text);
+    background: rgba(7,15,28,.7);
+    border: 1px solid var(--border); border-radius: 12px;
+    transition: border-color .15s;
+  }
+  input:focus { outline: none; border-color: var(--orange); }
+
+  button {
+    width: 100%; min-height: 48px; padding: 13px 16px;
+    font: 700 15px/1 'Inter', sans-serif; color: #140a03;
+    background: linear-gradient(180deg, var(--orange-light), var(--orange));
+    border: 0; border-radius: 12px; cursor: pointer;
+    transition: filter .15s, opacity .15s;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.07); }
+  button:disabled { opacity: .55; cursor: default; }
+  button.ghost {
+    margin-top: 10px; color: var(--text-2);
+    background: transparent; border: 1px solid var(--border);
+  }
+
+  .msg { padding: 12px 14px; border-radius: 11px; font-size: 13.5px; line-height: 1.5; margin-bottom: 16px; }
+  .msg.err  { background: rgba(255,107,107,.1); border: 1px solid rgba(255,107,107,.3); color: #ffc9c9; }
+  .msg.ok   { background: rgba(78,203,150,.1); border: 1px solid rgba(78,203,150,.3); color: #b8f0d8; }
+
+  .hint { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; }
+  .hint b { color: var(--text-2); font-weight: 600; }
+
+  .spin {
+    width: 30px; height: 30px; margin: 10px auto 18px;
+    border: 3px solid rgba(173,192,212,.2); border-top-color: var(--orange);
+    border-radius: 50%; animation: sp .8s linear infinite;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } }
+
+  .tick { display: block; margin: 0 auto 14px; width: 46px; height: 46px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <img src="logo-icon.png" alt="" />
+      <b>Tipoff Fantasy</b>
+    </div>
+    <div class="card" id="card">
+      <div class="spin"></div>
+      <p class="sub" style="text-align:center;margin:0">Checking your link…</p>
+    </div>
+  </div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script>
+(function () {
+  var APP_URL = 'https://app.tipofffantasy.com/';
+  var card = document.getElementById('card');
+  var q = new URLSearchParams(location.search);
+  var mode    = q.get('mode');
+  var oobCode = q.get('oobCode');
+  //  Firebase puts the key in the link it generated. Falling back to
+  //  the known project key keeps the page working if a link is ever
+  //  hand-built or the parameter is stripped by a mail client.
+  var apiKey  = q.get('apiKey') || 'AIzaSyDWLF8thu07J33Yzmda9Pu7AcEXLsYcq8s';
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+  function show(html) { card.innerHTML = html; }
+  function backBtn(label) {
+    return '<button class="ghost" onclick="location.href=\'' + APP_URL + '\'">' +
+           esc(label || 'Back to Tipoff Fantasy') + '</button>';
+  }
+  var TICK = '<svg class="tick" viewBox="0 0 48 48" fill="none" aria-hidden="true">' +
+    '<circle cx="24" cy="24" r="21" stroke="#4ecb96" stroke-width="3"/>' +
+    '<path d="M15 24.5l6.5 6.5L33 19" stroke="#4ecb96" stroke-width="3.4" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  //  Every dead end offers a way forward. Firebase's page just says
+  //  "expired" and stops, which is where people give up and message
+  //  the commissioner instead.
+  function deadEnd(title, body) {
+    show('<h1>' + esc(title) + '</h1><p>' + esc(body) + '</p>' +
+         '<button onclick="location.href=\'' + APP_URL + '?reset=1\'">Send a new link</button>' +
+         backBtn('Back to sign in'));
+  }
+
+  if (!mode || !oobCode) {
+    deadEnd('This link is incomplete',
+      'Open the link straight from your email rather than copying part of it.');
+    return;
+  }
+
+  try {
+    firebase.initializeApp({ apiKey: apiKey, authDomain: 'mmapp-6b7ab.firebaseapp.com' });
+  } catch (e) { /* already initialised */ }
+  var auth = firebase.auth();
+
+  function friendly(code) {
+    if (code === 'auth/expired-action-code')  return ['This link has expired', 'Reset links are only good for a short while. Request a fresh one and it will arrive in a moment.'];
+    if (code === 'auth/invalid-action-code')  return ['This link has already been used', 'Each link works once. If you still need to get in, request a new one.'];
+    if (code === 'auth/user-disabled')        return ['This account is disabled', 'Get in touch and we will sort it out.'];
+    if (code === 'auth/user-not-found')       return ['That account no longer exists', 'It may have been deleted. You can create a new one.'];
+    if (code === 'auth/weak-password')        return ['Password too short', 'Use at least 6 characters.'];
+    if (code === 'auth/network-request-failed') return ['No connection', 'Check your internet and try the link again.'];
+    return ['Something went wrong', 'Try the link again, or request a new one.'];
+  }
+
+  // ── Reset password ──────────────────────────────────────
+  if (mode === 'resetPassword') {
+    auth.verifyPasswordResetCode(oobCode).then(function (email) {
+      show(
+        '<h1>Choose a new password</h1>' +
+        '<p>For <b>' + esc(email) + '</b></p>' +
+        '<div id="m"></div>' +
+        '<label for="p1">New password</label>' +
+        '<input id="p1" type="password" autocomplete="new-password" placeholder="At least 6 characters" />' +
+        '<label for="p2">Confirm password</label>' +
+        '<input id="p2" type="password" autocomplete="new-password" placeholder="Type it again" />' +
+        '<button id="go">Set new password</button>'
+      );
+      var p1 = document.getElementById('p1'), p2 = document.getElementById('p2');
+      var go = document.getElementById('go'), m = document.getElementById('m');
+      var err = function (t) { m.innerHTML = '<div class="msg err">' + esc(t) + '</div>'; go.disabled = false; go.textContent = 'Set new password'; };
+
+      function submit() {
+        m.innerHTML = '';
+        if (p1.value.length < 6)   { err('Use at least 6 characters.'); return; }
+        if (p1.value !== p2.value) { err('Those two passwords do not match.'); return; }
+        go.disabled = true; go.textContent = 'Saving…';
+        auth.confirmPasswordReset(oobCode, p1.value).then(function () {
+          show(TICK + '<h1 style="text-align:center">Password changed</h1>' +
+               '<p style="text-align:center">You can sign in with your new password now.</p>' +
+               '<button onclick="location.href=\'' + APP_URL + '\'">Sign in</button>');
+        }).catch(function (e) {
+          var f = friendly(e && e.code);
+          err(f[0] + '. ' + f[1]);
+        });
+      }
+      go.addEventListener('click', submit);
+      [p1, p2].forEach(function (el) {
+        el.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
+      });
+      p1.focus();
+    }).catch(function (e) {
+      var f = friendly(e && e.code);
+      deadEnd(f[0], f[1]);
+    });
+    return;
+  }
+
+  // ── Verify email ────────────────────────────────────────
+  if (mode === 'verifyEmail') {
+    auth.applyActionCode(oobCode).then(function () {
+      show(TICK + '<h1 style="text-align:center">Email confirmed</h1>' +
+           '<p style="text-align:center">Your address is verified. You are all set.</p>' +
+           '<button onclick="location.href=\'' + APP_URL + '\'">Open Tipoff Fantasy</button>');
+    }).catch(function (e) {
+      var f = friendly(e && e.code);
+      deadEnd(f[0], f[1]);
+    });
+    return;
+  }
+
+  // ── Undo an email change ────────────────────────────────
+  if (mode === 'recoverEmail') {
+    auth.applyActionCode(oobCode).then(function () {
+      show(TICK + '<h1 style="text-align:center">Email change undone</h1>' +
+           '<p style="text-align:center">Your original address has been restored. ' +
+           'If you did not request the change, reset your password now.</p>' +
+           '<button onclick="location.href=\'' + APP_URL + '?reset=1\'">Reset my password</button>' +
+           backBtn('Back to sign in'));
+    }).catch(function (e) {
+      var f = friendly(e && e.code);
+      deadEnd(f[0], f[1]);
+    });
+    return;
+  }
+
+  deadEnd('Unrecognised link', 'This link does not look like one we sent.');
+})();
+</script>
+</body>
+</html>

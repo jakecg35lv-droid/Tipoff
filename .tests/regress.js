@@ -84,5 +84,12 @@ T('unauthorized continue URL falls back to a plain send', /auth\/unauthorized-co
 T('user enumeration still blocked', /if \(code === 'auth\/user-not-found'\) \{ succeed\(\); return; \}/.test(a));
 T('escape closes the reset modal', /if \(e\.key !== 'Escape'\) return;[\s\S]{0,200}closeResetModal\(\)/.test(a));
 
+// ---- v228: branded auth action page ----
+const ah = fs.readFileSync('auth.html','utf8');
+T('auth.html exists and handles all three modes', /resetPassword/.test(ah) && /verifyEmail/.test(ah) && /recoverEmail/.test(ah));
+T('auth.html is self-contained (no app.js/styles.css tags)', !/<script[^>]*src=["'][^"']*app\.js/.test(ah) && !/<link[^>]*href=["'][^"']*styles\.css/.test(ah));
+T('expired links offer a new one', /\?reset=1/.test(ah));
+T('app opens the reset dialog on ?reset=1', /_p\.get\('reset'\) === '1'/.test(a));
+
 console.log((p===t?'ALL ':'')+p+'/'+t+' regression checks pass');
 process.exit(p===t?0:1);

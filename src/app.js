@@ -6796,6 +6796,20 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('showSignupLink')?.addEventListener('click', e => { e.preventDefault(); showSignup(); });
 
   // ── Forgot password ──────────────────────────────────────
+  //  auth.html sends people here with ?reset=1 when their link has
+  //  expired or was already used. Opening the dialog for them means
+  //  "request a new one" is one tap, not a hunt for the link on a
+  //  sign-in screen they are already frustrated by.
+  try {
+    const _p = new URLSearchParams(location.search);
+    if (_p.get('reset') === '1') {
+      _p.delete('reset');
+      history.replaceState(null, '', location.pathname +
+        (_p.toString() ? '?' + _p : '') + location.hash);
+      setTimeout(() => openResetModal(''), 400);   // after the splash paints
+    }
+  } catch (e) { /* ignore */ }
+
   document.getElementById('forgotPwLink')?.addEventListener('click', e => {
     e.preventDefault();
     const typed = (document.getElementById('loginEmail') || {}).value || '';
