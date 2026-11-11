@@ -3593,6 +3593,15 @@
     //  into thousands of pageviews. Analytics.page() de-dupes too, as
     //  a second line of defence.
     if (changed) trackPage('season_' + ui.page);
+    //  Same `changed` gate, same reason: render() runs on every
+    //  snapshot and every 250ms draft tick, and this writes to
+    //  localStorage. Hanging it off render() itself would be a write
+    //  four times a second for the length of a draft.
+    if (changed && state && state.league && state.league.code) {
+      try {
+        window.TipoffView && window.TipoffView.remember('season', state.league.code, ui.page);
+      } catch (e) { }
+    }
 
     var glass = theme() === 'glass';
     root.classList.toggle('ss-glass', glass);
@@ -6085,7 +6094,7 @@
   //                       bare open(), which loaded the league you had
   //                       and skipped the wizard, so creating a second
   //                       season league was impossible from the UI.
-  function open(code, fresh) {
+  function open(code, fresh, page) {
     root = document.getElementById('seasonApp');
     if (!root) return;
 
@@ -6153,7 +6162,11 @@
     scheduleStatsTick();
     ui.setup = { name: 'Season League', team: sessionName() === 'You' ? 'My Team' : sessionName() + "'s Team", teams: 8, roster: 10, weeks: 12, timer: 90,
       format: 'conference', confMode: 'mix', conferences: MAJORS.slice() };
-    ui.page = 'home'; ui.wiz = state ? null : 0; ui.explain = state && !explainerSeen() ? 0 : null; ui.sheet = false; ui.swapSlot = null; ui.search = ''; ui.filterPos = ''; ui.filterConf = ''; ui.confirmId = null; ui.confirmDrop = null; ui.confirmAct = null; ui.faId = null; ui.tr = null; ui.ptab = 'fa'; ui.fstatus = ''; ui.fsort = 'proj';
+    //  Land on the requested page when it is a real one for this
+    //  league; render() falls back to home for anything that is not
+    //  valid in the current phase, so a stale name cannot strand us.
+    ui.page = (page && state) ? page : 'home';
+    ui.wiz = state ? null : 0; ui.explain = state && !explainerSeen() ? 0 : null; ui.sheet = false; ui.swapSlot = null; ui.search = ''; ui.filterPos = ''; ui.filterConf = ''; ui.confirmId = null; ui.confirmDrop = null; ui.confirmAct = null; ui.faId = null; ui.tr = null; ui.ptab = 'fa'; ui.fstatus = ''; ui.fsort = 'proj';
     lastPage = '';
     var splash = document.getElementById('splashScreen');
     if (splash) { prevDisplay = splash.style.display; splash.style.display = 'none'; }
@@ -6184,6 +6197,9 @@
     document.body.classList.remove('ss-open');
     var splash = document.getElementById('splashScreen');
     if (splash) { splash.style.display = prevDisplay && prevDisplay !== 'none' ? prevDisplay : 'flex'; splash.style.opacity = ''; }
+    //  Closing is deliberate. Leaving the pointer would reopen
+    //  this league on the next reload, with no way to stay out.
+    try { window.TipoffView && window.TipoffView.clear(); } catch (e) { }
     renderSplashCard();
   }
 
@@ -6352,6 +6368,8 @@
     //  which under the multi-league layout would have taken every
     //  other league the account holds down with it.
     forgetLeagueLocal(code);
+    //  Or the next reload tries to restore the league we just left.
+    try { window.TipoffView && window.TipoffView.clear(); } catch (e) { }
     if (code) forgetSeasonLeague(code);
     try { renderSplashCard(); } catch (e) { }
   }
@@ -6785,6 +6803,32 @@
     });
   }
 
+  /*  ── Reopen the league you reloaded inside ────────────────
+      app.js restores tournament pages in enterLeague(). Season has
+      no equivalent: boot shows the splash, so a reload inside a
+      season league dumped you on the league list — or, with two
+      modes in one app, somewhere else entirely.
+
+      Called from renderSplashCard because that is the first paint
+      after auth resolves and after the account reconcile has had a
+      chance to pull the league down. The one-shot flag is only taken
+      when we genuinely restore, so a tournament view left for
+      enterLeague() is not swallowed here.                           */
+  function maybeRestoreView() {
+    var V = window.TipoffView;
+    if (!V) return;
+    var lv = V.read();
+    if (!lv || lv.mode !== 'season' || !lv.code) return;
+    //  Already looking at the season app: nothing to restore, and
+    //  reopening would throw away whatever they navigated to.
+    if (document.body.classList.contains('ss-open')) return;
+    //  Not held locally yet. recoverLeagueFromAccount may still be
+    //  pulling it; renderSplashCard runs again when it lands.
+    if (!loadLeague(lv.code)) return;
+    if (V.taken()) return;              // consumed only on a real restore
+    open(lv.code, false, lv.page);
+  }
+
   function renderSplashCard() {
     var slot = document.getElementById('seasonLeagueSlot');
     if (!slot) return;
@@ -6864,6 +6908,8 @@
     //  A second season league has to be reachable from here, because
     //  this screen is where a manager looks for one.
     '<button class="ss-splash-add" data-season-new="1">+ New season league</button>';
+
+    try { maybeRestoreView(); } catch (e) { console.warn('[Season] restore view', e); }
   }
   function wireSplash() {
     document.addEventListener('click', function (e) {

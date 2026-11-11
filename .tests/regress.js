@@ -42,7 +42,7 @@ T('snapshot apply has a catch', /\} catch \(err\) \{[\s\S]{0,900}could not apply
 T('snapshot errors surface to the user', /Not receiving live league updates/.test(s));
 T('forced re-read bypasses cache', /get\(\{ source: 'server' \}\)/.test(s));
 T('impossible copy still flagged as the reason', /localCopyIsImpossible\(state\) \? 'local copy impossible' : 'open'/.test(s));
-T('open takes code + fresh', /function open\(code, fresh\)/.test(s));
+T('open takes code, fresh and page', /function open\(code, fresh, page\)/.test(s));
 T('create forces the wizard', /mode === 'season'[\s\S]{0,400}open\(null, true\)/.test(s));
 T('provisional code dropped on swap', /forgetLeagueLocal\(provisional\)/.test(s));
 T('season list from account union local', /\(ACCOUNT_SEASON \|\| \[\]\)\.forEach/.test(s));

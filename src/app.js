@@ -325,7 +325,13 @@ const USER_SCOPED_PREFIXES = [
   'mmfantasy-chat-hidden-',
   'mmfantasy-avatar-',
   'mmfantasy-accent',
-  'tipoff-season-v1'       // covers the ':<uid>' scoped buckets too
+  'tipoff-season-v1',      // covers the ':<uid>' scoped buckets too
+  //  Signing out must not leave a pointer into the league the
+  //  previous account was looking at. It is uid-scoped, so the next
+  //  person would not load it — but it would sit there forever, and
+  //  the same person signing back in should land on their list, not
+  //  mid-league.
+  'tipoff-last-view'
 ];
 
 function clearUserScopedStorage() {
@@ -572,6 +578,62 @@ function dismissToast(el) {
   setTimeout(() => el.remove(), 300);
 }
 
+/* ══════════════════════════════════════════════════════════
+   LAST VIEW — survive a reload
+
+   A refresh used to dump you on the tournament home page no matter
+   where you were. Worse, with two modes in one app, reloading inside
+   a SEASON league could land you in a completely different league,
+   because boot only ever considered the tournament state.
+
+   One record, scoped per user so two accounts on one machine cannot
+   restore into each other's league:
+
+     { mode: 'season' | 'tournament', code, page, at }
+
+   Written on every page change; read exactly once per page load.
+   Reading once matters — restoring on every splash render would trap
+   someone who deliberately left a league, reopening it under them
+   every time they tried to get out.
+══════════════════════════════════════════════════════════ */
+const LAST_VIEW_KEY = 'tipoff-last-view';
+let _viewRestored = false;          // one restore per page load, see above
+
+function _lastViewKey() {
+  let uid = '';
+  try { uid = _uid() || ''; } catch (e) { }
+  return LAST_VIEW_KEY + ':' + (uid || 'anon');
+}
+function rememberView(mode, code, page) {
+  if (!mode || !page) return;
+  try {
+    localStorage.setItem(_lastViewKey(), JSON.stringify({
+      mode: mode, code: code || null, page: page, at: Date.now()
+    }));
+  } catch (e) { /* private mode or quota */ }
+}
+function readLastView() {
+  try {
+    const raw = localStorage.getItem(_lastViewKey());
+    const v = raw ? JSON.parse(raw) : null;
+    if (!v || !v.mode || !v.page) return null;
+    //  A fortnight-old view is not where you "were", it is archaeology.
+    //  Falling back to home is kinder than reopening a finished league.
+    if (Date.now() - (v.at || 0) > 14 * 864e5) return null;
+    return v;
+  } catch (e) { return null; }
+}
+function clearLastView() {
+  try { localStorage.removeItem(_lastViewKey()); } catch (e) { }
+}
+//  season.js is its own IIFE and cannot see these directly.
+window.TipoffView = {
+  remember: rememberView,
+  read: readLastView,
+  clear: clearLastView,
+  taken: function () { const was = _viewRestored; _viewRestored = true; return was; }
+};
+
 // ── NAVIGATION ───────────────────────────────────────────
 function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => {
@@ -590,6 +652,8 @@ function navigateTo(page) {
   // Mobile: the sheet trigger is the only visible nav, so it has to
   // carry the current page name or there is no orientation at all.
   try { markNavSheetActive(page); } catch (e) { }
+  //  So a reload comes back here instead of the home page.
+  try { rememberView('tournament', state && state.leagueCode, page); } catch (e) { }
   if (page === 'players') {
     try { renderDraftGrid(); } catch (e) { console.error('renderDraftGrid', e); }
     try { renderDraftFeed(); } catch (e) { console.error('renderDraftFeed', e); }
@@ -889,7 +953,23 @@ function showMainApp() {
   document.getElementById('mainApp').style.display = 'flex';
 
   // Landing page is always Home - do this before anything that can throw.
-  try { navigateTo('home'); } catch (e) { console.error('navigateTo(home)', e); }
+  //  Land where they left off, not always on home. Only for THIS
+  //  league, only once per page load, and only for a page that still
+  //  exists — a stale name would show a blank screen.
+  let _start = 'home';
+  try {
+    const lv = readLastView();
+    if (lv && lv.mode === 'tournament' && !_viewRestored &&
+        (!lv.code || lv.code === state.leagueCode) &&
+        document.getElementById(lv.page + 'Page')) {
+      _start = lv.page;
+    }
+    _viewRestored = true;
+  } catch (e) { }
+  try { navigateTo(_start); } catch (e) {
+    console.error('navigateTo(' + _start + ')', e);
+    try { navigateTo('home'); } catch (_) { }
+  }
 
   try {
     if (state.selectedTournament) generateBracketData(state.selectedTournament);
