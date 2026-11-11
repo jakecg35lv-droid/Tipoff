@@ -60,5 +60,14 @@ T('navigation is network-first', /event\.request\.mode === 'navigate'/.test(sw) 
 T('navigation still falls back offline', /\.catch\(\(\) =>\s*\n\s*caches\.match\(event\.request\)/.test(sw));
 T('other assets stay cache-first', /\/\/ Same-origin assets: cache-first with network fallback/.test(sw));
 
+// ---- v225: permission-denied handling ----
+T('denied read is routed to one handler', /handleSyncDenied\(e, code\)/.test(s) && /handleSyncDenied\(e, c\)/.test(s));
+T('signed-out is named, not shown as live', /You are signed out, so this league cannot be updated/.test(s));
+T('a stale token is refreshed and retried', /user\.getIdToken\(true\)[\s\S]{0,300}subscribeSeason\(c\)/.test(s));
+T('only ONE automatic retry, no loop', /if \(TOKEN_REFRESHED\[c\]\) \{/.test(s) && /TOKEN_REFRESHED\[c\] = true;/.test(s));
+T('persistent denial points at the rules', /security rules need attention/.test(s));
+T('successful server contact is timestamped', (s.match(/SYNC\.lastServerSync = Date\.now\(\)/g)||[]).length===2);
+T('diag reports NEVER when no server contact', /lastServerSync: SYNC\.lastServerSync \? new Date/.test(s) && /'NEVER'/.test(s));
+
 console.log((p===t?'ALL ':'')+p+'/'+t+' regression checks pass');
 process.exit(p===t?0:1);

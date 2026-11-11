@@ -319,7 +319,7 @@
   //          league with whatever this device happened to cache.
   //  pendingPush: a save() that arrived while we were still waiting.
   var SYNC = { code: null, unsub: null, rev: 0, applying: false, timer: null, skew: 0,
-               synced: false, pendingPush: false };
+               synced: false, pendingPush: false, lastServerSync: 0 };
 
   //  The clock to use for anything compared against a timestamp that
   //  came from another device — which is every draft deadline.
@@ -498,6 +498,7 @@
       //  cached snapshot first, and on the device this bug bites that
       //  cache holds the same stale copy we are refusing to trust.
       var fromCache = !!(doc.metadata && doc.metadata.fromCache);
+      if (!fromCache) SYNC.lastServerSync = Date.now();
       if (!fromCache && !SYNC.synced) {
         SYNC.synced = true;
         //  Anything save() queued while we were waiting can go now,
@@ -569,10 +570,61 @@
       //  looking at a stale league with no indication anything is
       //  wrong — which is indistinguishable from the app being broken.
       console.warn('[Season] snapshot error:', e && e.code, e && e.message);
+      handleSyncDenied(e, code);
+    });
+  }
+
+  /*  ── permission-denied is usually a STALE TOKEN ─────────────
+      Firebase ID tokens last an hour. The SDK renews them on its own
+      while the app is awake, but a phone that has been asleep, or was
+      offline when a renewal came due, can resume with a token the
+      server will not accept. Every read then fails permission-denied
+      — which is precisely what happened to Dylan, and because the
+      league was already in localStorage the app carried on drawing a
+      week-old draft as though it were live.
+
+      Three outcomes, and the user is told which:
+        • genuinely signed out  → say so; stale data is not "live"
+        • token can be renewed  → renew and retry, silently
+        • still denied after a  → the rules themselves are refusing,
+          renewal                 which is for Jake to fix, not the user
+      Only one automatic retry, so a rules problem cannot turn into a
+      request loop.                                                   */
+  var TOKEN_REFRESHED = {};
+  function handleSyncDenied(e, code) {
+    var c = normCode(code);
+    var denied = e && e.code === 'permission-denied';
+    if (!denied) {
+      try { notify('Not receiving live league updates' + ((e && e.code) ? ' (' + e.code + ')' : '') +
+                   '. What you see may be out of date.', 'error'); } catch (_) { }
+      return;
+    }
+
+    var user = null;
+    try { user = window.firebase && firebase.auth && firebase.auth().currentUser; } catch (_) { }
+
+    if (!user) {
       try {
-        notify('Not receiving live league updates' + ((e && e.code) ? ' (' + e.code + ')' : '') +
-               '. What you see may be out of date.', 'error');
+        notify('You are signed out, so this league cannot be updated. Sign in again — what you are looking at is an old copy.', 'error');
       } catch (_) { }
+      return;
+    }
+
+    if (TOKEN_REFRESHED[c]) {
+      try {
+        notify('The league database refused this device even after signing in again. Send Jake a screenshot — the security rules need attention.', 'error');
+      } catch (_) { }
+      return;
+    }
+    TOKEN_REFRESHED[c] = true;
+    console.warn('[Season] permission denied; forcing a token refresh and retrying ' + c);
+    user.getIdToken(true).then(function () {
+      RESYNC_TRIED[c] = false;              // allow the authoritative read again
+      subscribeSeason(c);                   // fresh listener on a fresh token
+      return forceResync(c, 'after token refresh');
+    }).catch(function (err) {
+      console.warn('[Season] token refresh failed:', err && err.code);
+      try { notify('Could not refresh this session. Sign out and back in to load your league.', 'error'); } catch (_) { }
     });
   }
 
@@ -623,6 +675,7 @@
         state.games = games;
         if (typeof d.rev === 'number') SYNC.rev = d.rev;
         SYNC.synced = true;
+        SYNC.lastServerSync = Date.now();
         markMine();
         saveLocal();
         if (typeof render === 'function') { try { render(); } catch (e) { } }
@@ -632,6 +685,9 @@
     }).catch(function (e) {
       RESYNC_TRIED[c] = false;            // offline: allow a later retry
       console.warn('[Season] forced re-read failed:', e && e.code);
+      //  Same treatment as a refused listener: a denied read is the
+      //  one failure that silently rots into "my league is wrong".
+      handleSyncDenied(e, c);
       return false;
     });
   }
@@ -6866,7 +6922,8 @@
     //  diagnosing this over text took a whole evening of guessing.
     _diag: function () {
       var out = { uid: myUid() || null, signedIn: !!myUid(), leagues: leagueCodes(), active: activeCode(),
-                  sync: { code: SYNC.code, rev: SYNC.rev, synced: SYNC.synced, pendingPush: SYNC.pendingPush } };
+                  sync: { code: SYNC.code, rev: SYNC.rev, synced: SYNC.synced, pendingPush: SYNC.pendingPush,
+                          lastServerSync: SYNC.lastServerSync ? new Date(SYNC.lastServerSync).toLocaleString() : 'NEVER' } };
       try { out.build = (document.querySelector('script[src*="season.js"]') || {}).src || ''; } catch (e) { }
       out.local = (leagueCodes() || []).map(function (c) {
         var s = loadLeague(c);
