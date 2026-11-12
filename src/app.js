@@ -5692,16 +5692,47 @@ function sendRpChatMessage() {
 
 // ── TUTORIAL ──────────────────────────────────────────────
 const TUT_STEPS = [
-  { type: 'welcome', title: 'Welcome, Commissioner', body: "You're setting up a Tipoff Fantasy league. This takes about 60 seconds." },
+  //  checklist / scoreGrid / summary exist because these three
+  //  steps used to be a title and one sentence inside a card with
+  //  a 520px floor, which left a third of the screen empty navy.
+  { type: 'welcome', title: 'Welcome, Commissioner', body: "Nine quick questions and your league is live. About a minute.", checklist: true },
   { type: 'name', title: 'League Name', body: 'What do you want to call your league?', input: [{ id: 'tut-league-name', label: 'League Name', placeholder: 'e.g. The Office League', default: 'My League', key: 'leagueName' }] },
   { type: 'tournament', title: 'Choose Tournament', body: "Which tournament is this league drafting for? This sets your player pool and bracket format." },
   { type: 'size', title: 'League Size', body: 'How many managers will join? Once the league is full, no one else can join with the code.', size: true },
   { type: 'rounds', title: 'Draft Rounds', body: 'How many rounds in the snake draft? Each round, every manager picks one player.', input: [{ id: 'tut-rounds', label: 'Number of Rounds', placeholder: '8', default: 8, type: 'number', key: 'rounds' }] },
   { type: 'timer', title: 'Pick Timer', body: 'How long does each manager have to make their selection before auto-pick kicks in?', input: [{ id: 'tut-timer-min', label: 'Minutes', placeholder: '1', default: 1, type: 'number', key: 'timerMin' }, { id: 'tut-timer-sec', label: 'Seconds', placeholder: '30', default: 30, type: 'number', key: 'timerSec' }] },
   { type: 'code', title: 'Your League Code', body: 'Share this code with your managers. They join from the home screen. No account needed..', code: true },
-  { type: 'scoring', title: 'How Scoring Works', body: 'Points are earned from real tournament stats. Default weights: PTS 1× · REB 1.2× · AST 1.5× · STL 2× · BLK 2×. Adjust anytime in Settings.' },
-  { type: 'ready', title: "You're All Set", body: 'Your league is live. Share the code, wait for your managers to join, then choose a tournament and start the draft.' }
+  { type: 'scoring', title: 'How Scoring Works', body: 'Your players earn points from their real box scores, multiplied by these weights.', scoreGrid: true },
+  { type: 'ready', title: "You're All Set", body: 'Here is your league. Share the code, and start the draft once your managers are in.', summary: true }
 ];
+
+/*  How many teams are in this event.
+
+    The picker used to read:
+      t.seededTeams ? t.seededTeams.length : t.teams ? t.teams.length : 8
+    Every event in TOURNAMENTS carries `seededTeams: []` — seeds are
+    filled in later, once they are announced — and an empty array is
+    truthy, so the first branch always won and every card read
+    "0 teams". The 8-team fallback was unreachable.
+
+    Order matters: seeds first when they exist, then pods (which are
+    the authority for group-stage events), then the flat team list.
+    Returns 0 when nothing is known, and the caller omits the count
+    rather than printing a number it cannot stand behind.          */
+function tournamentTeamCount(t) {
+  if (!t) return 0;
+  if (t.seededTeams && t.seededTeams.length) return t.seededTeams.length;
+  if (t.pods && t.pods.length) {
+    const seen = {};
+    t.pods.forEach(function (p) {
+      (p.teams || []).forEach(function (name) { seen[name] = true; });
+    });
+    const n = Object.keys(seen).length;
+    if (n) return n;
+  }
+  if (t.teams && t.teams.length) return t.teams.length;
+  return 0;
+}
 
 let tutData = {};
 
@@ -5784,6 +5815,58 @@ function renderTutStep() {
   let html = '<h2 class="tut-title">' + step.title + '</h2>';
   html += '<p class="tut-body-text">' + step.body + '</p>';
 
+  //  What the next minute actually involves, so the first screen
+  //  sets an expectation instead of standing empty.
+  if (step.checklist) {
+    const items = [
+      ['Your league', 'Name, size and draft rules'],
+      ['Your tournament', 'Sets the player pool and the bracket'],
+      ['Your invite code', 'Share it and your managers join']
+    ];
+    html += '<div class="tut-list">' + items.map(function (it, i) {
+      return '<div class="tut-list-row"><span class="tut-list-n">' + (i + 1) + '</span>' +
+        '<span class="tut-list-t">' + it[0] + '<small>' + it[1] + '</small></span></div>';
+    }).join('') + '</div>';
+  }
+
+  if (step.scoreGrid) {
+    const w = [['PTS', '1×'], ['REB', '1.2×'], ['AST', '1.5×'], ['STL', '2×'], ['BLK', '2×']];
+    html += '<div class="tut-score-grid">' + w.map(function (s) {
+      return '<div class="tut-score-cell"><b>' + s[1] + '</b><span>' + s[0] + '</span></div>';
+    }).join('') + '</div>';
+    html += '<p class="tut-note">Defensive stats are weighted up because they are scarcer. You can change any of these in Settings before the draft.</p>';
+  }
+
+  //  The last step now reports back the choices just made, which
+  //  is both a confirmation and the content the step was missing.
+  if (step.summary) {
+    const secs = (function () {
+      const m = isNaN(parseInt(tutData.timerMin)) ? 1 : parseInt(tutData.timerMin);
+      const s = isNaN(parseInt(tutData.timerSec)) ? 30 : parseInt(tutData.timerSec);
+      const t = Math.max(10, m * 60 + s);
+      return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+    })();
+    let tName = '—';
+    if (tutData.tournamentId) {
+      Object.values(TOURNAMENTS).forEach(function (g) {
+        g.forEach(function (t) { if (t.id === tutData.tournamentId) tName = t.name; });
+      });
+    }
+    const rows = [
+      ['League', (tutData.leagueName || 'My League').trim()],
+      ['Tournament', tName],
+      ['Managers', String(parseInt(tutData.maxManagers) || state.maxManagers || 8)],
+      ['Draft rounds', String(parseInt(tutData.rounds) || 8)],
+      ['Pick timer', secs],
+      ['Join code', state.leagueCode || '--']
+    ];
+    html += '<div class="tut-list">' + rows.map(function (r) {
+      return '<div class="tut-list-row"><span class="tut-list-n">✓</span>' +
+        '<span class="tut-list-t">' + r[0] + '</span>' +
+        '<span class="tut-list-v">' + esc(String(r[1])) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
   if (step.input) {
     const isTimer = step.type === 'timer';
     html += '<div class="tut-inputs' + (isTimer ? ' tut-inputs--row' : '') + '">';
@@ -5817,9 +5900,20 @@ function renderTutStep() {
     html += '<div class="tut-tourn-list">';
     available.forEach(function (t) {
       const active = selId === t.id ? ' tut-tourn-card--active' : '';
+      const n = tournamentTeamCount(t);
+      //  Two of these events are both called "ESPN Events
+      //  Invitational" — they are the Adventure and Magic brackets
+      //  of the same tournament, and the picker showed the name
+      //  twice with only the dates to tell them apart. The tag is
+      //  shown ONLY for a duplicated name; on a unique name it is
+      //  noise (Maui's subtitle starts "Southwest Maui
+      //  Invitational", which says nothing the title did not).
+      const dupe = available.filter(function (o) { return o.name === t.name; }).length > 1;
+      const tag = dupe && t.subtitle ? String(t.subtitle).split('·')[0].trim() : '';
       html += '<button class="tut-tourn-card' + active + '" data-tid="' + esc(t.id) + '">' +
-        '<div class="ttc-name">' + esc(t.name) + '</div>' +
-        '<div class="ttc-meta">' + esc(t.dates) + ' · ' + (t.seededTeams ? t.seededTeams.length : t.teams ? t.teams.length : 8) + ' teams</div>' +
+        '<div class="ttc-name">' + esc(t.name) +
+          (tag ? '<span class="ttc-tag">' + esc(tag) + '</span>' : '') + '</div>' +
+        '<div class="ttc-meta">' + esc(t.dates) + (n ? ' · ' + n + ' teams' : '') + '</div>' +
         '</button>';
     });
     html += '</div>';
@@ -5866,7 +5960,10 @@ function renderTutStep() {
     });
   }
 
-  if (backBtn) backBtn.style.visibility = tutStep === 0 ? 'hidden' : 'visible';
+  //  display, not visibility: the footer is a flex row and a hidden
+  //  Back still reserved its box, so step 1 showed a short Continue
+  //  floating beside an empty gap.
+  if (backBtn) backBtn.style.display = tutStep === 0 ? 'none' : '';
   if (nextBtn) nextBtn.textContent = tutStep === TUT_STEPS.length - 1 ? "Let's Go!" : 'Continue';
 }
 

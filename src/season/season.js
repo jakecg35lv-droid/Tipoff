@@ -3739,7 +3739,10 @@
   function wizSteps() {
     var conf = ui.setup.format === 'conference';
     var steps = [
-      { id: 'welcome', title: 'Welcome, Commissioner', body: 'You’re setting up a season-long league. This takes about 60 seconds.' },
+      //  checklist fills what was an empty card: this step is a
+      //  title and one sentence, and the wizard shell used to hold
+      //  a 520px floor underneath it.
+      { id: 'welcome', title: 'Welcome, Commissioner', body: 'A few quick questions and your season league is live. About a minute.', checklist: true },
       { id: 'format', title: 'League Format', body: 'When does your league play? You can’t change this after the draft.' }
     ];
     if (conf) steps.push({ id: 'confs', title: 'Pick Your Conference', body: 'Draft from one conference, or mix the power conferences together.' });
@@ -3780,6 +3783,17 @@
     var html = '<h2 class="tut-title">' + step.title + '</h2>';
     if (step.body) html += '<p class="tut-body-text">' + step.body + '</p>';
     var blocked = false;
+    if (step.checklist) {
+      var items = [
+        ['Your format', 'Conference play or a full season'],
+        ['Your league', 'Name, size, roster and draft clock'],
+        ['Your invite code', 'Share it and your managers join']
+      ];
+      html += '<div class="tut-list">' + items.map(function (it, i) {
+        return '<div class="tut-list-row"><span class="tut-list-n">' + (i + 1) + '</span>' +
+          '<span class="tut-list-t">' + it[0] + '<small>' + it[1] + '</small></span></div>';
+      }).join('') + '</div>';
+    }
     if (step.id === 'format') {
       var c = CAL.conference, f = CAL.season;
       html += '<div class="tut-tourn-list">' +
