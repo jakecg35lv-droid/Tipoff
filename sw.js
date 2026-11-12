@@ -13,12 +13,12 @@
     a fix without changing it and users keep running the old build with
     no error, no warning, and no way to tell. If you change any file in
     STATIC_ASSETS, change this line in the same commit.             */
-const CACHE_NAME = 'tipoff-v241';
+const CACHE_NAME = 'tipoff-v242';
 //  MUST match the ?v= on the <script> and <link> tags in index.html.
 //  The page requests the versioned URL, so precaching the bare one
 //  would store a file nothing ever asks for while the real request
 //  falls through to the network.
-const BUILD = '241';
+const BUILD = '242';
 const STATIC_ASSETS = [
   './',
   './index.html',
