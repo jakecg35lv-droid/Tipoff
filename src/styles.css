@@ -12521,32 +12521,37 @@ select:focus {
   }
 }
 /* ══════════════════════════════════════════════════════════
-   NEWS WITHOUT IMAGES
-   Thumbnails were <img src> pointed at a.espncdn.com. Removed:
-   ESPN's photographs served off ESPN's bandwidth inside our UI is a
-   copyright and terms exposure with no upside. Headlines, tags and
-   links carry the value; the cards just need to not look gutted.
-══════════════════════════════════════════════════════════ */
-.news-card-img,
-.news-card-img--placeholder,
-.news-featured-img,
-.news-featured-img-wrap { display: none; }
+   NEWS THUMBNAILS — restored, hotlinked from a.espncdn.com
+   ──────────────────────────────────────────────────────────
+   These were switched off once over the hotlink and photo-rights
+   exposure, and switched back on deliberately. Two things make
+   that survivable rather than fragile:
 
-/* The row reclaims the 84px the thumbnail held. */
-.news-card { gap: 0; }
+     referrerpolicy="no-referrer" on every <img>, so a referrer
+     check on ESPN's side cannot single this app out; and
+
+     wireNewsImages() in app.js, which listens for `error` and
+     drops the hero's image wrapper or swaps a list thumbnail for
+     the placeholder gradient. A blocked or dead asset degrades
+     to the text layout instead of a broken-image icon.
+
+   The cards below are the WITH-image layout. Both the bare
+   fallbacks (.news-featured--bare, .news-featured-badge--bare)
+   stay defined, because an article with no images[] entry still
+   renders through them.
+══════════════════════════════════════════════════════════ */
+.news-card { gap: 12px; }
 .news-card-content { flex: 1; min-width: 0; }
 
-/* The badge was absolutely positioned over the image. With no image
-   to sit on it needs to be in normal flow. */
+/*  With an image behind it the badge floats over the artwork; with
+    none it has to sit in normal flow or it overlaps the headline. */
 .news-featured-badge--bare {
   position: static;
   display: inline-block;
   margin: 18px 20px 0;
   box-shadow: none;
 }
-.news-featured-content { padding: 10px 20px 20px; }
-
-/* Headline carries the card now, so give it room to. */
+.news-featured--bare .news-featured-content { padding: 10px 20px 20px; }
 .news-card-title { font-size: 14.5px; line-height: 1.4; }
 
 /* ══════════════════════════════════════════════════════════

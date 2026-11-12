@@ -7357,6 +7357,37 @@ function articleTeamTag(article) {
   return 'CBB';
 }
 
+/*  ESPN returns an images[] array on most articles. Pick the first
+    usable URL; plenty of articles have none, and an <img> with an
+    empty src is a broken-image icon, so absence must render nothing
+    rather than an empty frame.                                    */
+function newsImageUrl(article) {
+  var imgs = (article && article.images) || [];
+  for (var i = 0; i < imgs.length; i++) {
+    var u = imgs[i] && (imgs[i].url || imgs[i].href);
+    if (u && /^https?:\/\//i.test(u)) return u;
+  }
+  return '';
+}
+
+/*  Images are hotlinked from ESPN's CDN, which means they can stop
+    resolving at any time without warning — a referrer policy change
+    on their side, an ad blocker, or simply a dead asset. Wiring
+    onerror after the paint (rather than an inline attribute) turns
+    every one of those into a quiet fallback to the placeholder
+    gradient instead of a broken-image icon in the hero slot.     */
+function wireNewsImages(feed) {
+  if (!feed) return;
+  feed.querySelectorAll('img.news-featured-img, img.news-card-img').forEach(function (img) {
+    img.addEventListener('error', function () {
+      var wrap = img.closest('.news-featured-img-wrap');
+      if (wrap) { wrap.remove(); return; }
+      img.classList.add('news-card-img--placeholder');
+      img.removeAttribute('src');
+    }, { once: true });
+  });
+}
+
 function renderFeaturedCard(article) {
   const title = esc(article.headline || 'Untitled');
   const desc = article.description || '';
@@ -7365,13 +7396,23 @@ function renderFeaturedCard(article) {
   const time = relativeTime(article.lastModified || article.published);
   const url = (article.links && article.links.web && article.links.web.href) || '#';
 
-  // ── No images ────────────────────────────────────────────
-  //  These used to render <img src> straight off a.espncdn.com:
-  //  ESPN's photographs, served on ESPN's bandwidth, inside our
-  //  product UI. Headlines and links are the part worth having, and
-  //  they carry none of the copyright exposure.
-  return '<a class="news-featured" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' +
-    '<span class="news-featured-badge news-featured-badge--bare">Top Story</span>' +
+  /*  Hotlinked from a.espncdn.com, by decision. Worth knowing what
+      that buys and costs: ESPN serves the bytes on every page load,
+      the photos are generally AP or Getty licensed to them, and they
+      can hotlink-protect whenever they like. wireNewsImages() turns
+      that last one into a graceful fallback rather than a broken
+      hero image.                                                   */
+  const img = newsImageUrl(article);
+  const imgHtml = img
+    ? '<div class="news-featured-img-wrap">' +
+        '<img class="news-featured-img" src="' + esc(img) + '" alt="" loading="lazy" ' +
+        'referrerpolicy="no-referrer" decoding="async" />' +
+      '</div>'
+    : '';
+
+  return '<a class="news-featured' + (img ? '' : ' news-featured--bare') + '" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' +
+    imgHtml +
+    '<span class="news-featured-badge' + (img ? '' : ' news-featured-badge--bare') + '">Top Story</span>' +
     '<div class="news-featured-content">' +
     '<div class="news-card-meta">' +
     '<span class="news-card-tag">' + tag + '</span>' +
@@ -7389,7 +7430,12 @@ function renderNewsCard(article) {
   const time = relativeTime(article.lastModified || article.published);
   const url = (article.links && article.links.web && article.links.web.href) || '#';
 
+  const img = newsImageUrl(article);
   return '<a class="news-card" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' +
+    (img
+      ? '<img class="news-card-img" src="' + esc(img) + '" alt="" loading="lazy" ' +
+        'referrerpolicy="no-referrer" decoding="async" />'
+      : '<div class="news-card-img news-card-img--placeholder"></div>') +
     '<div class="news-card-content">' +
     '<div class="news-card-meta">' +
     '<span class="news-card-tag">' + tag + '</span>' +
@@ -7497,8 +7543,11 @@ function displayNewsArticles(articles, feed, teamsOverride) {
 
   //  No tournament selected: the whole feed is the feed, untiered.
   if (!teamNames) {
+    //  wireNewsImages runs after each paint; see the function for why
+    //  a hotlinked image needs an error path.
     feed.innerHTML = renderFeaturedCard(all[0]) +
       (all.length > 1 ? '<div class="news-list">' + all.slice(1).map(renderNewsCard).join('') + '</div>' : '');
+    wireNewsImages(feed);
     return;
   }
 
@@ -7529,6 +7578,8 @@ function displayNewsArticles(articles, feed, teamsOverride) {
   }
 
   feed.innerHTML = html;
+
+  wireNewsImages(feed);
 }
 
 // ── INIT ──────────────────────────────────────────────────

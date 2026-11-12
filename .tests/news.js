@@ -86,6 +86,47 @@ ok('the page explains the pre-draft state', /move to the top/.test(vn));
 ok('no undefined ICON is used for refresh', !/ICON\.refresh/.test(season));
 ok('the refresh control is styled', /\.ss-news-refresh \{/.test(scss));
 
+// ══ Top Story image, restored on purpose ═══════════════
+//  Removed once over hotlinking and photo rights; put back by
+//  decision. These checks guard the parts that make it survivable.
+ok('the hero renders an image', /news-featured-img-wrap/.test(app) && /class="news-featured-img"/.test(app));
+ok('list cards render a thumbnail', /class="news-card-img"/.test(app));
+ok('the image URL comes from the article', /function newsImageUrl/.test(app));
+//  An <img> with an empty src is a broken-image icon, so an article
+//  with no images[] must render no frame at all.
+ok('no image means no empty frame', /const imgHtml = img[\s\S]{0,260}: '';/.test(app));
+ok('list cards fall back to the placeholder',
+  /news-card-img news-card-img--placeholder/.test(app));
+ok('only absolute URLs are used', /\^https\?:\\\/\\\//.test(app));
+
+//  The two things that stop a third-party CDN breaking the page.
+ok('every image suppresses the referrer',
+  (app.match(/referrerpolicy="no-referrer"/g) || []).length >= 2);
+ok('a failed image degrades instead of breaking', /function wireNewsImages/.test(app));
+ok('the hero drops its frame on error', /wrap\.remove\(\); return;/.test(app));
+ok('a list thumb falls back to the gradient',
+  /classList\.add\('news-card-img--placeholder'\)[\s\S]{0,60}removeAttribute\('src'\)/.test(app));
+//  Listener, not an inline onerror attribute.
+ok('the handler is wired after paint, not inline',
+  /addEventListener\('error'/.test(app) && !/onerror=/.test(app));
+ok('it is wired once per image', /\{ once: true \}/.test(app));
+//  Every paint path must wire them, including the untiered one the
+//  season module hits before a draft.
+ok('both paint paths wire images',
+  (app.match(/wireNewsImages\(feed\);/g) || []).length === 2);
+
+//  Images are lazy and async so a slow CDN cannot block the page.
+ok('images are lazy', (app.match(/loading="lazy"/g) || []).length >= 2);
+ok('images decode async', (app.match(/decoding="async"/g) || []).length >= 2);
+
+// The old kill-switch must be gone, or none of the above renders.
+ok('the display:none override is removed',
+  !/\.news-featured-img-wrap \{ display: none/.test(css));
+ok('image styles still exist', /\.news-featured-img \{/.test(css) && /\.news-card-img \{/.test(css));
+//  The no-image layout still has to work — plenty of articles have
+//  no images[] entry at all.
+ok('the bare fallback layout is kept', /\.news-featured-badge--bare \{/.test(css));
+
 // ── Shipped ──────────────────────────────────────────────
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
