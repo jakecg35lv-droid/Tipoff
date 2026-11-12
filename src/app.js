@@ -668,6 +668,26 @@ window.TipoffView = {
   taken: function () { const was = _viewRestored; _viewRestored = true; return was; }
 };
 
+
+/*  ── Which mode was this person last in? ───────────────────
+    Boot used to enter the tournament league whenever one existed,
+    without ever asking. The moment Jake made a test tournament, every
+    reload inside a SEASON league jumped to the tournament instead.
+
+    The last view decides. Only honoured when the league is actually
+    held locally, so a stale pointer cannot strand someone on an empty
+    splash while a perfectly good tournament league sits unopened.   */
+function lastViewWantsSeason() {
+  try {
+    if (cameFromExternalLink()) return false;
+    const lv = readLastView();
+    if (!lv || lv.mode !== 'season' || !lv.code) return false;
+    const uid = (function () { try { return _uid() || 'anon'; } catch (e) { return 'anon'; } })();
+    const key = 'tipoff-season-v1:' + uid + ':L:' + String(lv.code).toUpperCase();
+    return !!localStorage.getItem(key);
+  } catch (e) { return false; }
+}
+
 // ── NAVIGATION ───────────────────────────────────────────
 function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => {
@@ -1048,7 +1068,7 @@ function _afterLoginNav() {
   loginScreen.style.opacity = '0';
   setTimeout(() => {
     loginScreen.style.opacity = ''; loginScreen.style.transition = ''; loginScreen.style.display = 'none';
-    if (loadState() && state.leagueId && !cameFromExternalLink()) { enterLeague(); } else { showSplash(true); }
+    if (loadState() && state.leagueId && !cameFromExternalLink() && !lastViewWantsSeason()) { enterLeague(); } else { showSplash(true); }
   }, 420);
 }
 
@@ -7474,7 +7494,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(user.uid); } catch (e) { }
         try { subscribeAccountLeagues(); } catch (e) { }
-        if (!differentUser && loadState() && state.leagueId && !cameFromExternalLink()) { _subscribeLeague(state.leagueCode); enterLeague(); }
+        if (!differentUser && loadState() && state.leagueId && !cameFromExternalLink() && !lastViewWantsSeason()) { _subscribeLeague(state.leagueCode); enterLeague(); }
         else { showSplash(true); }
       } else {
         // Firebase says no user — check localStorage session (offline/testing fallback)
@@ -7482,7 +7502,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try { unsubscribeAccountLeagues(); } catch (e) { }
         const session = getSession();
         if (session) {
-          if (loadState() && state.leagueId && !cameFromExternalLink()) { enterLeague(); }
+          if (loadState() && state.leagueId && !cameFromExternalLink() && !lastViewWantsSeason()) { enterLeague(); }
           else { showSplash(true); }
         } else { showLanding(); }
       }
@@ -7490,7 +7510,7 @@ document.addEventListener('DOMContentLoaded', () => {
   } else {
     const session = getSession();
     if (session) {
-      if (loadState() && state.leagueId && !cameFromExternalLink()) { enterLeague(); }
+      if (loadState() && state.leagueId && !cameFromExternalLink() && !lastViewWantsSeason()) { enterLeague(); }
       else { showSplash(true); }
     } else { showLanding(); }
   }

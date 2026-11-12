@@ -6976,12 +6976,19 @@
 
     migrateLegacyStore();
 
+    //  Read this BEFORE repainting the splash. renderSplashCard can
+    //  now restore a league and set ss-open itself, and checking
+    //  afterwards saw that freshly-set class and called open() a
+    //  SECOND time — tearing down the listeners, timers and markup the
+    //  first open had just built. That double-open is what emptied the
+    //  home page after a refresh.
+    var el = document.getElementById('seasonApp');
+    var onScreen = el && document.body.classList.contains('ss-open');
+
     // Repaint the splash entry for whoever is signed in now.
     try { renderSplashCard(); } catch (e) { }
 
-    // If the season app is on screen, re-open it under the new account.
-    var el = document.getElementById('seasonApp');
-    var onScreen = el && document.body.classList.contains('ss-open');
+    // If the season app was already on screen, re-open under the new account.
     if (onScreen) {
       var s = load();
       if (s) { open(); }
