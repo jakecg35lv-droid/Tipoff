@@ -3571,6 +3571,7 @@
     items.push(['standings', 'Standings', appIcon('standings')]);
     items.push(['teams', 'Teams', appIcon('teams')]);
     items.push(['chat', 'Chat' + (unreadChat() ? ' <span class="ss-badge">' + unreadChat() + '</span>' : ''), appIcon('chat')]);
+    items.push(['news', 'News', appIcon('news') || ICON.news || appIcon('chat')]);
     items.push(['settings', 'Settings', appIcon('settings')]);
     items.push(['account', 'Account', ICON.user || appIcon('teams')]);
     return items;
@@ -3614,6 +3615,7 @@
       ui.page === 'standings' ? viewStandings() :
       ui.page === 'teams' ? viewTeams() :
       ui.page === 'players' ? viewPlayers() :
+      ui.page === 'news' ? viewNews() :
       ui.page === 'account' ? viewAccount() :
       ui.page === 'settings' ? viewSettings() :
       ui.page === 'rules' ? viewRules() :
@@ -3690,6 +3692,15 @@
     if (tabOn && tabWrap && tabWrap.scrollWidth > tabWrap.clientWidth) {
       var tx = tabOn.getBoundingClientRect().left - tabWrap.getBoundingClientRect().left + tabWrap.scrollLeft;
       tabWrap.scrollLeft = Math.max(0, tx - tabWrap.clientWidth / 2 + tabOn.clientWidth / 2);
+    }
+    //  app.js owns the news renderer; this just hands it the node
+    //  and the roster's schools once the page exists in the DOM.
+    if (ui.page === 'news') {
+      var nf = document.getElementById('ssNewsFeed');
+      if (nf && window.TipoffNews) {
+        try { window.TipoffNews.render(nf, myNewsSchools(), ui.newsForce); } catch (e) { }
+        ui.newsForce = false;
+      }
     }
     if (focusSearch) { var si = document.getElementById('ssSearch'); if (si) { si.focus(); try { si.setSelectionRange(caret, caret); } catch (er) { /* ignore */ } } }
     if (ui.toastMsg) { notify(ui.toastMsg, ui.toastType || 'info'); ui.toastMsg = ''; }
@@ -5626,6 +5637,45 @@
 
       Account-level, like its twin: the numbers come from the
       account's league list, not from whichever league is open.   */
+  /*  ── News ─────────────────────────────────────────────────
+      The markup only; app.js fills the feed after render(), through
+      window.TipoffNews. Deliberately NOT a copy of the tournament
+      renderer — that one owns the school-alias index, the
+      span-blanking matcher and the two-tier split, and a second copy
+      would drift the first time either was corrected.
+
+      The one real difference is which schools count as yours. A
+      tournament league uses its event field; here it is the colleges
+      your own roster is built from, which is what a season manager
+      actually cares about.                                        */
+  function myNewsSchools() {
+    if (!state || !state.teams) return null;
+    var u = userTeam();
+    var seen = {}, out = [];
+    (u && u.roster ? u.roster : []).forEach(function (id) {
+      var p = P(id);
+      if (!p || !p.college) return;
+      var k = p.college.toLowerCase();
+      if (seen[k]) return;
+      seen[k] = 1;
+      out.push(k);
+    });
+    //  Null, not an empty array: before the draft there is no roster,
+    //  and an empty list would tier every article as "not yours".
+    return out.length ? out : null;
+  }
+
+  function viewNews() {
+    var mine = myNewsSchools();
+    return '<div class="page-header"><h2>News</h2>' +
+        '<button class="ss-news-refresh" data-act="newsrefresh" aria-label="Refresh">' + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>Refresh</button>' +
+      '</div>' +
+      (mine
+        ? ''
+        : '<p class="ss-hint">Once you have drafted, stories about your players\u2019 schools move to the top.</p>') +
+      '<div class="news-feed" id="ssNewsFeed"></div>';
+  }
+
   function viewAccount() {
     var name = sessionName(), email = sessionEmail();
     var all = ACCOUNT_ALL || [];
@@ -6038,6 +6088,10 @@
           tournament league has to leave this module entirely, which
           is what close() + the tournament loader does. Tapping the
           league you are already in does nothing.                  */
+      case 'newsrefresh':
+        ui.newsForce = true;
+        render();
+        return;
       case 'acctopen': {
         var acCode = el.getAttribute('data-code');
         if (!acCode || el.classList.contains('is-here')) return;

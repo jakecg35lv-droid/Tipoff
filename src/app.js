@@ -1624,6 +1624,17 @@ window.TipoffOpenTournamentLeague = function (code) {
   try { _loadAndEnterLeague(code); } catch (e) { console.warn('[Leagues] open tournament', e); }
 };
 
+/*  One news renderer, two mounts. The season module hands in its own
+    container and its own "your schools" list; everything else — the
+    fetch, the shared cache, the alias index, the two-tier split — is
+    this file's single implementation.                             */
+window.TipoffNews = {
+  render: function (feedEl, teamNames, force) {
+    try { renderNews(!!force, { feed: feedEl, teams: teamNames || null, refreshBtn: null }); }
+    catch (e) { console.warn('[News] season render', e); }
+  }
+};
+
 window.TipoffLeagues = { syncEmpty: _syncLeagueEmptyState };
 
 /*  ── ONE source of truth for "which leagues exist" ──────────
@@ -7392,16 +7403,30 @@ function renderNewsCard(article) {
 var _newsCache = null;
 var _newsFetching = false;
 
-function renderNews(forceRefresh) {
-  var feed = document.getElementById('newsFeed');
-  var refreshBtn = document.getElementById('newsRefreshBtn');
+/*  The feed and the "your schools" list are parameters now.
+
+    The season module shows the same news, and the honest way to do
+    that is one renderer with two mounts rather than a copy of this
+    function in season.js. A copy would mean two school-alias
+    indexes, two span-blanking matchers and two tier rules, and the
+    first fix to either would land in only one of them.
+
+    What legitimately DIFFERS between the modes is which schools
+    count as "yours": the tournament field here, the colleges on your
+    roster over there. So that is the argument.                    */
+function renderNews(forceRefresh, opts) {
+  opts = opts || {};
+  var feed = opts.feed || document.getElementById('newsFeed');
+  var teams = opts.teams !== undefined ? opts.teams : null;
+  var refreshBtn = opts.refreshBtn !== undefined
+    ? opts.refreshBtn : document.getElementById('newsRefreshBtn');
 
   if (!feed) return;
 
   // Wire refresh button (idempotent)
   if (refreshBtn && !refreshBtn._newsWired) {
     refreshBtn._newsWired = true;
-    refreshBtn.addEventListener('click', function () { renderNews(true); });
+    refreshBtn.addEventListener('click', function () { renderNews(true, opts); });
   }
 
   // No subtitle. The feed is league-wide college basketball, so
@@ -7410,8 +7435,10 @@ function renderNews(forceRefresh) {
   // header and DePaul coaching news underneath.
 
   // Use cache unless forced
+  //  One cache for both mounts: opening News in a season league
+  //  after reading it in a tournament league must not refetch.
   if (_newsCache && !forceRefresh) {
-    displayNewsArticles(_newsCache, feed);
+    displayNewsArticles(_newsCache, feed, teams);
     return;
   }
 
@@ -7430,7 +7457,7 @@ function renderNews(forceRefresh) {
       _newsFetching = false;
       var articles = data.articles || [];
       _newsCache = articles;
-      displayNewsArticles(articles, feed);
+      displayNewsArticles(articles, feed, teams);
     })
     .catch(function (err) {
       _newsFetching = false;
@@ -7450,8 +7477,13 @@ function renderNews(forceRefresh) {
 //  national feed under its own heading. Nothing is hidden and nothing
 //  is mislabelled — a reader can always see which articles are about
 //  their teams and which are not.
-function displayNewsArticles(articles, feed) {
-  var teamNames = getActiveTeamNames();
+function displayNewsArticles(articles, feed, teamsOverride) {
+  //  undefined means "work it out from the tournament". null is a
+  //  real answer meaning "no school list", which renders a single
+  //  untiered feed — correct for a season league before the draft.
+  var teamNames = teamsOverride !== undefined && teamsOverride !== null
+    ? teamsOverride
+    : (teamsOverride === null ? null : getActiveTeamNames());
 
   var byDate = function (a, b) {
     return new Date(b.lastModified || b.published || 0) - new Date(a.lastModified || a.published || 0);
