@@ -12953,3 +12953,73 @@ select:focus {
   align-items: center;
   gap: 4px;
 }
+
+/* ══════════════════════════════════════════════════════════
+   FEAST WEEK — combined-event bracket page
+   Two sub-events stacked, each drawn by its own renderer.
+══════════════════════════════════════════════════════════ */
+.cmb-head {
+  padding: 2px 0 16px;
+}
+
+.cmb-intro {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-2, rgba(255, 255, 255, .8));
+  max-width: 62ch;
+}
+
+/*  The cap is a rule the manager is held to, so it gets the accent
+    rather than sitting in the same grey as the description.      */
+.cmb-cap {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  border-radius: 10px;
+  color: var(--text);
+  background: rgba(242, 107, 33, 0.08);
+  border: 1px solid rgba(242, 107, 33, 0.28);
+}
+
+.cmb-cap b { color: var(--orange-light, #ff8a4c); }
+
+.cmb-event {
+  margin-bottom: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.cmb-event:first-of-type { border-top: 0; padding-top: 4px; }
+
+.cmb-ev-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.cmb-ev-head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.cmb-ev-head span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+@media (max-width: 560px) {
+  .cmb-event { margin-bottom: 20px; padding-top: 14px; }
+  .cmb-ev-head { gap: 2px; }
+  .cmb-ev-head h3 { font-size: 15.5px; }
+  .cmb-ev-head span { font-size: 11.5px; }
+  .cmb-intro { font-size: 13px; }
+  .cmb-cap { font-size: 12.5px; padding: 9px 12px; }
+}

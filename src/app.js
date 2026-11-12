@@ -2847,9 +2847,56 @@ function unmetRequirements(manager) {
  * Returns { ok, reason, forced }  where `forced` lists the positions they
  * are now obligated to take.
  */
+/*  Which sub-event a player belongs to in a combined tournament.
+    Returns null for any event that is not combined, so every caller
+    below short-circuits on a normal tournament.                   */
+function eventOfPlayer(p) {
+  const t = state.selectedTournament;
+  if (!t || t.bracketFormat !== 'combined' || !t.eventOf || !p) return null;
+  return t.eventOf[p.college] || null;
+}
+
+function eventCapCount(manager, eventId) {
+  return rosterPlayersFor(manager).filter(function (r) {
+    return eventOfPlayer(r) === eventId;
+  }).length;
+}
+
+//  Display name for a sub-event id, for messages the manager reads.
+function eventLabel(id) {
+  const sub = findTournamentById(id);
+  return sub ? sub.name : id;
+}
+
 function checkRosterRule(candidate, manager) {
   const rounds = state.rounds || 8;
   const roster = rosterPlayersFor(manager);
+
+  /*  ── Feast Week: no more than N from either tournament ──────
+      This is the rule that makes a combined draft worth drafting.
+      Unchecked, the winning strategy is to take eight Maui players,
+      build a lead across Nov 23-25 and have nothing left to watch on
+      Thanksgiving — which is the exact outcome combining the events
+      was meant to prevent.
+
+      Checked here rather than only in the draft board because the
+      board can be a pick or two stale when several managers act at
+      once, and this function is already the server-of-record for
+      roster legality.                                             */
+  const t = state.selectedTournament;
+  const cap = t && t.bracketFormat === 'combined' && t.eventCap
+    ? t.eventCap.maxPerEvent : 0;
+  if (cap > 0 && candidate) {
+    const ev = eventOfPlayer(candidate);
+    if (ev && eventCapCount(manager, ev) >= cap) {
+      return {
+        ok: false,
+        forced: [],
+        reason: 'You already have ' + cap + ' players from ' + eventLabel(ev) +
+                '. Take someone from the other tournament.'
+      };
+    }
+  }
 
   // Not enough rounds to satisfy the rule at all: disable it rather than
   // making the draft unwinnable (e.g. a 2-round test league).
@@ -3978,6 +4025,88 @@ const TOURNAMENTS = {
   ]
 };
 
+/* ══════════════════════════════════════════════════════════
+   FEAST WEEK — one draft across the Thanksgiving events
+   ──────────────────────────────────────────────────────────
+   Maui runs Nov 23-25 and Atlantis Nov 25-27, so a league drafted
+   into either one is over in three days and half the field never
+   overlaps. Drafted together they are a five-day event that peaks
+   on Thanksgiving, and the pool doubles from 96 players to 192 —
+   which matters, because 12 managers x 8 rounds is 96 picks, and
+   a single-event draft was picking the field clean.
+
+   SCOPE. Maui and Atlantis only. The two ESPN Events brackets are
+   deliberately out: the Magic bracket's four schools have no
+   players in data/players.js at all, and the Adventure bracket is
+   there as region 'Showcase' but is missing St. Bonaventure and
+   Yale and has only one team's schedule published.
+
+   Verified against the data rather than assumed: 192 players across
+   the 16 schools, 158 of them carrying a prior-season line (77 of
+   96 at Maui, 81 of 96 at Atlantis). The other 34 are freshmen and
+   transfers who project at zero until they play — which is honest,
+   not broken, and is exactly why the pool needed to be this deep.
+   A 12-manager, 8-round draft is 96 picks; against a single event's
+   96 players it was taking the field down to walk-ons.
+
+   DERIVED, NOT COPIED. teams, matchups and seeds are read off the
+   sub-events below at load time. Re-typing sixteen school names
+   here would be a second copy to keep in sync, and the first time
+   a pairing was corrected in one place and not the other the
+   bracket and the player pool would disagree silently.
+══════════════════════════════════════════════════════════ */
+const FEAST_SUB_EVENTS = ['maui-2026', 'b4a-2026'];
+
+TOURNAMENTS.inSeason.unshift({
+  id: 'feast-2026',
+  name: 'Feast Week',
+  subtitle: 'Maui + Atlantis · one draft, five days',
+  location: 'Lahaina, HI and Paradise Island, Bahamas',
+  dates: 'Nov 23–27, 2026',
+  startMs: new Date('2026-11-23').getTime(),
+  bracketFormat: 'combined',
+  subEvents: FEAST_SUB_EVENTS,
+  roundNames: [],
+  seeded: false,
+  canSelect: true,
+  //  No playerRegion: the pool spans both 'Maui' and 'Atlantis', and
+  //  playersForTournament filters on the team list anyway.
+  playerRegion: null,
+  formatLabel: 'Two tournaments, one roster. Maui plays Nov 23-25 and Atlantis Nov 25-27, so your team scores on all five days.',
+  /*  THE MECHANIC. Without a cap a manager drafts eight Maui players,
+      banks a lead through Wednesday and then watches Thanksgiving as
+      a spectator with nothing left to play for. The cap forces every
+      roster to have something running on both halves of the week,
+      which is the whole reason to combine them.                    */
+  eventCap: { maxPerEvent: 5, note: 'At most 5 of your picks may come from either single tournament.' },
+  scheduleNote: 'Maui: Nov 23-25. Atlantis: Nov 25-27. Both guarantee every team three games.',
+  teams: [],
+  seededTeams: []
+});
+
+/*  Fill the combined event from its parts. Runs once at load.      */
+(function buildFeastWeek() {
+  const feast = TOURNAMENTS.inSeason.find(function (t) { return t.id === 'feast-2026'; });
+  if (!feast) return;
+  const seen = {};
+  FEAST_SUB_EVENTS.forEach(function (id) {
+    let sub = null;
+    Object.values(TOURNAMENTS).forEach(function (g) {
+      g.forEach(function (t) { if (t.id === id) sub = t; });
+    });
+    if (!sub) { console.error('[Feast] missing sub-event ' + id); return; }
+    (sub.teams || []).forEach(function (name) {
+      if (seen[name]) return;
+      seen[name] = id;
+      feast.teams.push(name);
+    });
+  });
+  //  Which half of the week a school plays in. The draft board and the
+  //  roster cap both need this, and deriving it here means it can
+  //  never disagree with the team lists above.
+  feast.eventOf = seen;
+})();
+
 // ── TOURNAMENT SELECTION ENGINE ────────────────────────────
 
 function findTournamentById(id) {
@@ -3992,8 +4121,50 @@ function findTournamentById(id) {
 // Builds window.MM_BRACKET_DATA from a tournament object.
 // For ncaa64 the static bracket.js file is used as-is.
 // For single8/single16 we generate dynamically from seededTeams.
+//  Builds the published-pairings region for ONE event. Pulled out of
+//  generateBracketData so the combined event can call it per
+//  sub-event instead of duplicating the logic.
+function _regionFromMatchups(t) {
+  const byName = {};
+  (t.seededTeams || []).forEach(function (s) { byName[s.name] = s.seed; });
+  return {
+    name: t.name,
+    matchups: (t.matchups || []).map(function (pair) {
+      return {
+        top: { name: pair[0], seed: t.seeded ? byName[pair[0]] : undefined },
+        bot: { name: pair[1], seed: t.seeded ? byName[pair[1]] : undefined }
+      };
+    })
+  };
+}
+
 function generateBracketData(tournament) {
   if (!tournament) return;
+
+  /*  A combined event is two independent draws that happen to share
+      a roster. Emitting one region per sub-event keeps each one's
+      winners tracked under its own name — getBracketState() already
+      keys by region name — so Maui's results never leak into
+      Atlantis's.                                                   */
+  if (tournament.bracketFormat === 'combined') {
+    const regions = [];
+    let maxRounds = 0;
+    (tournament.subEvents || []).forEach(function (id) {
+      const sub = findTournamentById(id);
+      if (!sub) { console.error('[Bracket] Feast Week: missing sub-event ' + id); return; }
+      regions.push(_regionFromMatchups(sub));
+      maxRounds = Math.max(maxRounds, (sub.roundNames || []).length);
+    });
+    window.MM_BRACKET_DATA = {
+      format: 'combined',
+      numRounds: maxRounds,
+      roundNames: [],
+      regions: regions,
+      finalFour: null,
+      championship: null
+    };
+    return;
+  }
 
   if (tournament.bracketFormat === 'ncaa64') {
     // bracket.js already loaded as window.MM_BRACKET_DATA - keep it,
@@ -4895,6 +5066,14 @@ function renderBracket() {
     return;
   }
 
+  //  Feast Week is two independent draws under one roster. Draw each
+  //  with its own renderer rather than forcing two different formats
+  //  (a knockout and a pod) into a single bracket shape.
+  if (fmt === 'combined') {
+    renderCombinedEvents(content, state.selectedTournament, bracketData);
+    return;
+  }
+
   if (fmt === 'ncaa64') {
     const activeTab = document.querySelector('.bracket-tab.active');
     const region = activeTab ? activeTab.dataset.region : 'East';
@@ -4916,6 +5095,55 @@ function renderBracket() {
     //  two more scoring games each.
     try { renderPlacementGames(content, state.selectedTournament); } catch (e) { console.warn('renderPlacementGames', e); }
   }
+}
+
+/*  Draws every sub-event of a combined tournament, each with the
+    renderer its own format calls for, under its own heading.
+
+    Each sub-event gets a fresh child element because renderFixtureList
+    and renderRegionSimple both assign innerHTML on whatever node they
+    are handed — passing `content` twice would mean the second event
+    erased the first.                                                */
+function renderCombinedEvents(content, t, bracketData) {
+  content.innerHTML = '';
+
+  const head = document.createElement('div');
+  head.className = 'cmb-head';
+  head.innerHTML =
+    '<p class="cmb-intro">' + esc(t.formatLabel || '') + '</p>' +
+    (t.eventCap
+      ? '<p class="cmb-cap"><b>Roster rule:</b> ' + esc(t.eventCap.note || '') + '</p>'
+      : '');
+  content.appendChild(head);
+
+  (t.subEvents || []).forEach(function (id) {
+    const sub = findTournamentById(id);
+    if (!sub) return;
+
+    const wrap = document.createElement('section');
+    wrap.className = 'cmb-event';
+    wrap.innerHTML =
+      '<header class="cmb-ev-head"><h3>' + esc(sub.name) + '</h3>' +
+      '<span>' + esc(sub.dates) + ' · ' + esc(sub.location || '') + '</span></header>';
+    content.appendChild(wrap);
+
+    const body = document.createElement('div');
+    wrap.appendChild(body);
+
+    const f = sub.bracketFormat;
+    if (f === 'pod' || f === 'doubleheader' || f === 'group6') {
+      renderFixtureList(body, sub);
+      return;
+    }
+    const regData = (window.MM_BRACKET_DATA || { regions: [] })
+      .regions.find(function (r) { return r.name === sub.name; });
+    if (!regData) {
+      body.innerHTML = '<p style="color:var(--muted);padding:16px">No bracket data for ' + esc(sub.name) + '.</p>';
+      return;
+    }
+    renderRegionSimple(body, regData, bracketData, regData.name, sub.roundNames || null);
+    try { renderPlacementGames(body, sub); } catch (e) { console.warn('renderPlacementGames', e); }
+  });
 }
 
 //  Appends the placement/consolation schedule under a knockout bracket.
