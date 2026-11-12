@@ -4213,6 +4213,13 @@ TOURNAMENTS.inSeason.unshift({
   //  No playerRegion: the pool spans both 'Maui' and 'Atlantis', and
   //  playersForTournament filters on the team list anyway.
   playerRegion: null,
+  /*  featured + blurb drive the highlighted treatment in the setup
+      wizard and the tournament picker. Deliberately data on the
+      event rather than an `id === 'feast-2026'` check in two
+      renderers, so next year's flagship is a one-line change.    */
+  featured: true,
+  featuredTag: 'New',
+  blurb: 'Draft one roster across every Thanksgiving tournament. Six days of basketball, 56 teams, and a game that stays alive right through the holiday.',
   formatLabel: 'Every Thanksgiving tournament, one roster. Games run Nov 23 through Nov 28, so your team scores on all six days.',
   /*  THE MECHANIC. Without a cap a manager drafts eight Maui players,
       banks a lead through Wednesday and then watches Thanksgiving as
@@ -4884,10 +4891,13 @@ function openTournamentSelector() {
       const selectable = t.canSelect !== false;
       html += '<div class="tsm-item' +
         (selected ? ' tsm-item--selected' : '') +
+        (t.featured ? ' tsm-item--featured' : '') +
         (!selectable ? ' tsm-item--disabled' : '') + '">';
       html += '<div class="tsm-item-main">';
-      html += '<div class="tsm-item-name">' + esc(t.name) + '</div>';
+      html += '<div class="tsm-item-name">' + esc(t.name) +
+        (t.featured && t.featuredTag ? '<span class="tsm-star">' + esc(t.featuredTag) + '</span>' : '') + '</div>';
       html += '<div class="tsm-item-meta">' + esc(t.dates) + (t.subtitle ? ' · ' + esc(t.subtitle) : '') + '</div>';
+      if (t.blurb) html += '<div class="tsm-item-blurb">' + esc(t.blurb) + '</div>';
       html += '</div>';
       if (selected) {
         html += '<span class="tsm-check">&#10003; Selected</span>';
@@ -6301,10 +6311,13 @@ function renderTutStep() {
       //  Invitational", which says nothing the title did not).
       const dupe = available.filter(function (o) { return o.name === t.name; }).length > 1;
       const tag = dupe && t.subtitle ? String(t.subtitle).split('·')[0].trim() : '';
-      html += '<button class="tut-tourn-card' + active + '" data-tid="' + esc(t.id) + '">' +
+      html += '<button class="tut-tourn-card' + active + (t.featured ? ' tut-tourn-card--featured' : '') +
+        '" data-tid="' + esc(t.id) + '">' +
         '<div class="ttc-name">' + esc(t.name) +
+          (t.featured && t.featuredTag ? '<span class="ttc-star">' + esc(t.featuredTag) + '</span>' : '') +
           (tag ? '<span class="ttc-tag">' + esc(tag) + '</span>' : '') + '</div>' +
         '<div class="ttc-meta">' + esc(t.dates) + (n ? ' · ' + n + ' teams' : '') + '</div>' +
+        (t.blurb ? '<div class="ttc-blurb">' + esc(t.blurb) + '</div>' : '') +
         '</button>';
     });
     html += '</div>';

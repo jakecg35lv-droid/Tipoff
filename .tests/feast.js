@@ -190,6 +190,42 @@ ok('Players Era Eight is not included',
 ok('Feast Week now spans the ESPN events too',
   feast.subEvents.indexOf('etsc-magic-2026') >= 0);
 
+// ── Featured treatment in both choosers ─────────────────
+//  Driven by data on the event, not an id check in two renderers,
+//  so next year's flagship is a one-line change rather than a hunt.
+ok('Feast Week is flagged featured', feast.featured === true);
+ok('it carries a blurb', typeof feast.blurb === 'string' && feast.blurb.length > 40);
+ok('the blurb says what is different about it',
+  /one roster/i.test(feast.blurb) && /\d+ teams/i.test(feast.blurb));
+ok('it has a short pill label', (feast.featuredTag || '').length > 0 && feast.featuredTag.length <= 10,
+  feast.featuredTag);
+//  Exactly one featured event, or the highlight stops meaning anything.
+let featuredCount = 0;
+Object.values(TOURNAMENTS).forEach(g => g.forEach(t => { if (t.featured) featuredCount++; }));
+ok('exactly one event is featured', featuredCount === 1, String(featuredCount));
+
+//  Both choosers must render it, and neither may hardcode the id.
+const wiz = app.slice(app.indexOf("if (step.type === 'tournament')"), app.indexOf('if (step.code)'));
+ok('wizard renders the featured class', /tut-tourn-card--featured/.test(wiz));
+ok('wizard renders the pill', /ttc-star/.test(wiz));
+ok('wizard renders the blurb', /ttc-blurb/.test(wiz));
+const picker = app.slice(app.indexOf('function openTournamentSelector'), app.indexOf('function openTournamentSelector') + 2600);
+ok('picker renders the featured class', /tsm-item--featured/.test(picker));
+ok('picker renders the pill', /tsm-star/.test(picker));
+ok('picker renders the blurb', /tsm-item-blurb/.test(picker));
+ok('neither chooser hardcodes the id',
+  !/feast-2026/.test(wiz) && !/feast-2026/.test(picker));
+
+//  Blurbs are league-authored strings rendered into innerHTML.
+ok('blurb is escaped in the wizard', /esc\(t\.blurb\)/.test(wiz));
+ok('blurb is escaped in the picker', /esc\(t\.blurb\)/.test(picker));
+
+//  And the styles exist for all six classes.
+['tut-tourn-card--featured', 'ttc-star', 'ttc-blurb',
+ 'tsm-item--featured', 'tsm-star', 'tsm-item-blurb'].forEach(function (c) {
+  ok('.' + c + ' is styled', css.indexOf('.' + c) >= 0);
+});
+
 // ── Shipped ──────────────────────────────────────────────
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
