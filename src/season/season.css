@@ -1718,3 +1718,170 @@ button.ss-lab-chip[aria-expanded="true"] { box-shadow: 0 0 0 2px rgba(246, 197, 
 @media (prefers-reduced-motion: reduce) {
   .ss-livedot { animation: none; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   LINEUP: condensed so a full roster fits without scrolling
+   ──────────────────────────────────────────────────────────
+   A twelve-man roster is five starter rows plus seven bench
+   rows, and at the default sizing that was roughly double a
+   phone viewport. Everything below is scoped to .ss-lineup
+   (the wrapper viewLineup() emits) because .ss-slot and
+   .ss-bench-row are reused on pages where the roomier
+   spacing is still right.
+══════════════════════════════════════════════════════════ */
+.ss-lineup .ss-card { padding: 12px 16px; margin-bottom: 10px; }
+.ss-lineup .ss-card-head { margin-bottom: 0; }
+.ss-lineup .page-header { margin-bottom: 10px; }
+
+.ss-lineup .ss-slot { gap: 12px; padding: 6px 0; align-items: center; }
+.ss-lineup .ss-slot-k { padding-top: 5px; font-size: 10px; }
+
+/*  The swap link sat on its own line under the chips, costing a
+    row of height per slot for one short word. Put it beside the
+    chips instead.                                              */
+.ss-lineup .ss-slot-main { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px; align-items: center; }
+.ss-lineup .ss-slot-main .ss-pl { grid-column: 1 / -1; }
+.ss-lineup .ss-slot-main .ss-games { grid-column: 1; }
+.ss-lineup .ss-slot-main .ss-games-none { grid-column: 1; }
+.ss-lineup .ss-slot-main .ss-swap-link { grid-column: 2; grid-row: 2; align-self: center; justify-self: start; }
+.ss-lineup .ss-slot-main .rp-empty { grid-column: 1 / -1; }
+.ss-lineup .ss-pl { gap: 9px; }
+.ss-lineup .ss-pl-name { font-size: 14px; }
+.ss-lineup .ss-pl-meta { font-size: 11px; }
+.ss-lineup .ss-swap-link { font-size: 11px; }
+
+/*  The score column, not the player column, was what made these
+    rows tall: a label, a 28px number, a two-line note and the
+    Lock/Pass buttons, each on its own line — four stacked rows
+    against the player's two. Lay it out as a grid so the buttons
+    sit beside the number and the note stays on one line.      */
+.ss-lineup .ss-st {
+  display: grid; grid-template-columns: auto auto; justify-content: end;
+  align-items: center; column-gap: 10px; row-gap: 1px; min-width: 0; text-align: right;
+}
+/*  Two rows, not four: the label pairs with the note on top and
+    the number pairs with the buttons underneath. Stacked, this
+    column ran 100px against the player column's 63.            */
+.ss-lineup .ss-st-label { grid-column: 1; grid-row: 1; justify-self: end; font-size: 10px; }
+.ss-lineup .ss-st-note {
+  grid-column: 2; grid-row: 1; justify-self: end; font-size: 11px; max-width: 30ch;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ss-lineup .ss-st-pts { grid-column: 1; grid-row: 2; justify-self: end; font-size: 20px; }
+.ss-lineup .ss-lp { grid-column: 2; grid-row: 2; margin: 0; }
+.ss-lineup .ss-st.idle { padding-top: 0; }
+.ss-lineup .ss-lock-btn { padding: 6px 11px; font-size: 12px; }
+
+/*  Chips go from three stacked lines to one. Stacked, a chip was
+    44px tall — more than the player's name and school combined,
+    and the single biggest contributor to the page's height.   */
+.ss-lineup .ss-games { gap: 4px; }
+.ss-lineup .ss-game {
+  flex-direction: row; align-items: baseline; gap: 5px;
+  min-width: 0; padding: 3px 8px; border-radius: 7px;
+}
+.ss-lineup .ss-game b { font-size: 9.5px; }
+.ss-lineup .ss-game u { font-size: 11px; }
+.ss-lineup .ss-game i { font-size: 12px; }
+.ss-lineup .ss-game.up i { font-size: 11px; }
+
+/*  Bench: two columns. Seven single-file rows were nearly half
+    the page on their own, and a bench row is narrow content in a
+    wide card — the horizontal space was already there.         */
+.ss-lineup .ss-card:last-child { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px; }
+.ss-lineup .ss-card:last-child > .ss-card-head { grid-column: 1 / -1; }
+.ss-lineup .ss-card:last-child > .rp-empty { grid-column: 1 / -1; }
+/*  Head is child 1, so the first grid row of players is 2 and 3. */
+.ss-lineup .ss-card:last-child > .ss-bench-row:nth-child(-n+3) { border-top: 0; }
+.ss-lineup .ss-bench-row { padding: 6px 0; gap: 10px; flex-wrap: nowrap; }
+.ss-lineup .ss-bench-r { gap: 8px; flex: none; }
+/*  Bench games never score, so in a half-width column the chip
+    keeps its value and drops the weekday and opponent. The full
+    schedule is still on the matchup page.                      */
+.ss-lineup .ss-bench-row .ss-game { min-width: 0; padding: 2px 6px; border-radius: 7px; }
+.ss-lineup .ss-bench-row .ss-game b,
+.ss-lineup .ss-bench-row .ss-game u { display: none; }
+.ss-lineup .ss-bench-row .ss-game i { font-size: 11.5px; }
+.ss-lineup .ss-bench-row { min-width: 0; }
+.ss-lineup .ss-bench-row .ss-pl { min-width: 0; flex: 1; }
+.ss-lineup .ss-bench-row .logo-wrap, .ss-lineup .ss-bench-row .school-badge { flex: none; }
+.ss-bench-ct {
+  display: none; flex: none; font-size: 10.5px; font-weight: 700; color: var(--muted);
+  padding: 2px 6px; border-radius: 6px; background: rgba(255, 255, 255, .05); border: 1px solid var(--border);
+}
+.ss-lineup .ss-hint { font-size: 11.5px; margin-top: 6px; line-height: 1.4; }
+
+/*  Wide screens have room for a third bench column, which takes
+    seven players from four rows down to three.                */
+@media (min-width: 1100px) {
+  .ss-lineup .ss-card:last-child { grid-template-columns: repeat(3, 1fr); column-gap: 18px; }
+  .ss-lineup .ss-card:last-child > .ss-bench-row:nth-child(-n+4) { border-top: 0; }
+}
+
+@media (max-width: 768px) {
+  /*  The shared mobile rule drops the score under the player,
+      which makes every row TALLER — the opposite of what this
+      page needs. But a third grid column does not fit in 390px
+      either: it starved the player column until the name
+      truncated and the chips collided with the Swap link.
+
+      So the score is lifted out of the flow into the row's
+      top-right corner, and the player column reserves a gutter
+      for it. Absolute rather than a grid cell because the score
+      block is short and the chips below it can use the full
+      width once they clear it.                                */
+  .ss-lineup .ss-card { padding: 11px 13px; margin-bottom: 8px; }
+  .ss-lineup .page-header { margin-bottom: 8px; }
+  .ss-lineup .page-header h2 { font-size: 21px; }
+  /*  min-height holds the row open for the out-of-flow score
+      block (label + number + Lock/Pass ≈ 70px from its 8px top). */
+  .ss-lineup .ss-slot { position: relative; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; padding: 6px 0; min-height: 73px; }
+  .ss-lineup .ss-slot-k { grid-row: 1 / span 2; padding-top: 4px; }
+  /*  Swap keeps its width and the chips take the remainder (they
+      scroll). The other way round, the chip strip starved Swap
+      down to a single clipped letter.                          */
+  .ss-lineup .ss-slot-main { grid-column: 2; padding-right: 100px; grid-template-columns: minmax(0, 1fr) auto; }
+  .ss-lineup .ss-slot-main .ss-swap-link { justify-self: end; }
+  .ss-lineup .ss-st {
+    position: absolute; top: 8px; right: 0; width: 96px;
+    display: block; text-align: right;
+  }
+  .ss-lineup .ss-st-label { display: block; font-size: 9.5px; }
+  .ss-lineup .ss-st-pts { display: block; font-size: 18px; }
+  .ss-lineup .ss-st-note { display: none; }
+  .ss-lineup .ss-lp { display: flex; justify-content: flex-end; gap: 4px; margin-top: 3px; }
+  .ss-lineup .ss-lock-btn { padding: 5px 8px; font-size: 11px; box-shadow: none; }
+  .ss-lineup .ss-swap { grid-column: 1 / -1; }
+
+  /*  Chips scroll sideways rather than wrapping onto a second
+      line; a wrapped chip row doubled the height of any slot
+      whose player had three games that week.                 */
+  .ss-lineup .ss-games { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .ss-lineup .ss-games::-webkit-scrollbar { display: none; }
+  .ss-lineup .ss-game { flex: none; }
+
+  /*  The bench stays two-up on a phone; the rows are short enough
+      that one per line wastes more than it gains.             */
+  .ss-lineup .ss-card:last-child { column-gap: 12px; }
+  .ss-lineup .ss-bench-row { padding: 4px 0; gap: 7px; }
+  .ss-lineup .ss-bench-row .ss-pl { gap: 7px; }
+  .ss-lineup .ss-bench-row .ss-pl-name { font-size: 12.5px; }
+  /*  The school is already carried by the logo beside the name,
+      so the second line is the cheapest row of height here.   */
+  .ss-lineup .ss-bench-row .ss-pl-meta { display: none; }
+  .ss-lineup .ss-bench-row .ss-pl .logo, .ss-lineup .ss-bench-row .school-badge { width: 22px; height: 22px; }
+  .ss-lineup .ss-bench-row .ss-pl-name .pos-badge { display: none; }
+  /*  Chips out, count in: three chips plus a name do not fit a
+      half-width column at 390px without truncating the name to
+      nothing.                                                  */
+  .ss-lineup .ss-bench-row .ss-games { display: none; }
+  .ss-lineup .ss-bench-row .ss-bench-ct { display: inline-block; }
+  /*  Drop lives on the player card too (tap the name), so the
+      inline link is the one thing here that is pure duplication
+      — and it was eating the width the name needed.           */
+  .ss-lineup .ss-bench-row .ss-drop-link { display: none; }
+
+  /*  The starters hint is the one block of pure prose on the page
+      and it is the cheapest thing to give up on a phone.       */
+  .ss-lineup .ss-hint { display: none; }
+}

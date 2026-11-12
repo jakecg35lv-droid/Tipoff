@@ -4950,7 +4950,13 @@
 
     var benchRows = bench.map(function (id) {
       var p = P(id);
+      //  ss-bench-ct is the phone-width stand-in for the chips: a
+      //  half-width column cannot hold three of them plus a name.
+      //  Bench games do not score, so the count is enough there;
+      //  CSS swaps which of the two is shown.
+      var bg = gamesFor(id).length;
       return '<div class="ss-bench-row">' + playerLine(p, f1(p.proj) + ' proj') + '<div class="ss-bench-r">' + gameChips(id, null) +
+        '<span class="ss-bench-ct">' + bg + ' gm</span>' +
         (state.phase === 'season'
           ? '<button class="ss-drop-link' + (ui.confirmDrop === id ? ' confirm' : '') + '" data-act="dropone" data-id="' + id + '">' +
               (ui.confirmDrop === id ? 'Tap to drop' : 'Drop') + '</button>'
@@ -4958,13 +4964,18 @@
     }).join('') || '<div class="rp-empty">Everyone on your roster is starting.</div>';
 
     var hurt = slots.filter(function (s) { var i = s.playerId && !s.locked && injuryOf(s.playerId); return i && i.status !== 'GTD'; });
-    return '<div class="page-header"><h2>Lineup</h2><span class="muted-badge">Week ' + state.week + ' of ' + state.league.weeks + '</span></div>' +
+    //  ss-lineup scopes the condensed sizing to this page only. The
+    //  same .ss-slot / .ss-bench-row classes are styled generously
+    //  elsewhere, and a roster of twelve has to fit on one screen.
+    return '<div class="ss-lineup">' +
+      '<div class="page-header"><h2>Lineup</h2><span class="muted-badge">Week ' + state.week + ' of ' + state.league.weeks + '</span></div>' +
       (hurt.length ? '<div class="ss-inj-banner">' + hurt.length + ' of your starters ' + (hurt.length > 1 ? 'are' : 'is') + ' injured and won’t play: ' + hurt.map(function (s) { return esc(P(s.playerId).name); }).join(', ') + '. Swap in a healthy player.</div>' : '') +
       weekBar() +
       '<div class="ss-card"><div class="ss-card-head"><h3 class="section-title">Starters</h3>' +
         (dec ? '<span class="ss-decide">' + dec + ' to decide</span>' : '') + '</div>' + rows +
         '<p class="ss-hint">Lock a score to keep it. Pass to wait for his next game. If you never lock, the slot keeps its most recent game.</p></div>' +
-      '<div class="ss-card"><div class="ss-card-head"><h3 class="section-title">Bench</h3><span class="ss-hint-inline">Bench games don’t count</span></div>' + benchRows + '</div>';
+      '<div class="ss-card"><div class="ss-card-head"><h3 class="section-title">Bench</h3><span class="ss-hint-inline">Bench games don’t count</span></div>' + benchRows + '</div>' +
+    '</div>';
   }
 
   // ── Matchup (head-to-head, lock-in) ─────────────────────

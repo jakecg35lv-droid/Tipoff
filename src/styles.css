@@ -1670,49 +1670,78 @@ select:focus {
 /* mm-flash removed */
 
 /* ── MODAL ──────────────────────────────────────────────── */
+/*  ── Modals: one centring rule for all of them ─────────────
+    Every dialog in the app shares this backdrop, so centring belongs
+    here and nowhere else. The Delete League modal used to carry an
+    inline `align-items: flex-start`, which pinned it to the top of
+    the screen while every other dialog sat in the middle.
+
+    Safe-area padding lives here too, so an individual modal never
+    has to think about notches.                                     */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: rgba(7, 15, 28, .74);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: grid;
+  place-items: center;
   z-index: 200;
-  padding: 20px;
+  padding:
+    max(20px, env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-right))
+    max(20px, env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+  /*  A dialog taller than the screen must still be reachable rather
+      than having its buttons clipped off the bottom. */
+  overflow-y: auto;
   animation: fade-in 0.2s ease both;
 }
 
 .modal-card {
-  background: var(--panel-3);
+  background: linear-gradient(180deg, var(--panel-3), rgba(10, 20, 36, .99));
   border: 1px solid var(--border-2);
-  border-radius: var(--radius);
-  padding: 32px;
+  border-radius: 18px;
+  padding: 26px 24px 22px;
   width: 100%;
   max-width: 420px;
-  box-shadow: var(--shadow);
+  /*  Deeper than --shadow: against a blurred backdrop a flat card
+      reads as part of the page rather than on top of it. */
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .55), 0 2px 0 rgba(255, 255, 255, .04) inset;
   animation: slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .modal-card h3 {
   font-family: 'Inter', sans-serif;
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 800;
-  margin-bottom: 6px;
+  letter-spacing: -.01em;
+  margin: 0 0 8px;
 }
 
 .modal-sub {
-  color: var(--muted);
-  font-size: 13px;
-  margin-bottom: 0;
-  line-height: 1.4;
+  color: var(--text-2, #b3c4d6);
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.55;
 }
 
 .modal-actions {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
-  margin-top: 18px;
+  margin-top: 22px;
+}
+/*  44px floor: these are the buttons people tap to confirm something
+    destructive, and they were the smallest targets on the screen. */
+.modal-actions > button { min-height: 44px; padding-inline: 18px; }
+
+/*  On a phone, side-by-side buttons squeeze the labels and put the
+    destructive one under the thumb. Stack them, confirm on top. */
+@media (max-width: 420px) {
+  .modal-card { padding: 22px 18px 18px; }
+  .modal-actions { flex-direction: column-reverse; gap: 8px; }
+  .modal-actions > button { width: 100%; }
 }
 
 .modal-lg {

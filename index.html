@@ -26,8 +26,8 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
     rel="stylesheet" />
   <!-- ?v= must match the scripts below and CACHE_NAME in sw.js. -->
-  <link rel="stylesheet" href="src/styles.css?v=232" />
-  <link rel="stylesheet" href="src/season/season.css?v=232" />
+  <link rel="stylesheet" href="src/styles.css?v=234" />
+  <link rel="stylesheet" href="src/season/season.css?v=234" />
 </head>
 
 <body>
@@ -1571,7 +1571,12 @@
   </div>
 
   <!-- Dissolve Confirm Modal -->
-  <div id="dissolveModal" class="modal-backdrop" style="display:none; align-items: flex-start; padding-top: max(48px, env(safe-area-inset-top, 48px));">
+  <!-- No inline align-items here. It used to carry
+       `align-items: flex-start`, which overrode the backdrop's own
+       centering and pinned this dialog to the top of the screen while
+       every other modal sat in the middle. The backdrop handles
+       centring and safe-area padding for all of them. -->
+  <div id="dissolveModal" class="modal-backdrop" style="display:none;">
     <div class="modal-card modal-sm">
       <h3 style="color:var(--red);">Delete League</h3>
       <p class="modal-sub">This will permanently delete the league and all draft data. This cannot be undone.</p>
@@ -1737,7 +1742,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=232"></script>
+  <script src="firebase-config.js?v=234"></script>
 
   <!-- ══════════════════════════════════════════════════════════
        ?v= IS NOT DECORATION. BUMP IT ON EVERY RELEASE.
@@ -1760,14 +1765,14 @@
        its STATIC_ASSETS list, or the service worker precaches URLs
        the page never asks for.
   ══════════════════════════════════════════════════════════ -->
-  <script src="data/bracket.js?v=232"></script>
-  <script src="data/players.js?v=232"></script>
+  <script src="data/bracket.js?v=234"></script>
+  <script src="data/players.js?v=234"></script>
   <!-- Loaded before app.js so window.Analytics exists at first call.
        No-ops until a PostHog key is set in analytics.js. -->
-  <script src="src/analytics.js?v=232"></script>
-  <script src="src/app.js?v=232"></script>
-  <script src="data/conference-players.js?v=232"></script>
-  <script src="src/season/season.js?v=232"></script>
+  <script src="src/analytics.js?v=234"></script>
+  <script src="src/app.js?v=234"></script>
+  <script src="data/conference-players.js?v=234"></script>
+  <script src="src/season/season.js?v=234"></script>
 
   <!-- Service Worker Registration -->
   <script>
