@@ -2856,6 +2856,32 @@ function eventOfPlayer(p) {
   return t.eventOf[p.college] || null;
 }
 
+/*  The effective cap for this league.
+
+    A flat cap is a deadlock waiting to happen: the commissioner
+    chooses the number of rounds in the setup wizard, and if rounds
+    ever exceed cap x eventCount there is a pick with no legal player
+    on the board and the draft stalls. The configured number is
+    therefore a floor, raised just enough to keep a full roster
+    reachable. Checked against the events that actually have players,
+    not the nominal list, because an event whose rosters have not
+    been generated yet supplies nobody.                            */
+function eventCapFor(t) {
+  if (!t || t.bracketFormat !== 'combined' || !t.eventCap) return 0;
+  const base = t.eventCap.maxPerEvent || 0;
+  if (!base) return 0;
+  const rounds = state.rounds || 8;
+  const events = {};
+  (state.players || []).forEach(function (p) {
+    const e = t.eventOf && t.eventOf[p.college];
+    if (e) events[e] = 1;
+  });
+  const n = Object.keys(events).length || 1;
+  //  +1 of headroom so the very last pick is never the one that has
+  //  no legal option left.
+  return Math.max(base, Math.ceil(rounds / n) + 1);
+}
+
 function eventCapCount(manager, eventId) {
   return rosterPlayersFor(manager).filter(function (r) {
     return eventOfPlayer(r) === eventId;
@@ -2884,8 +2910,7 @@ function checkRosterRule(candidate, manager) {
       once, and this function is already the server-of-record for
       roster legality.                                             */
   const t = state.selectedTournament;
-  const cap = t && t.bracketFormat === 'combined' && t.eventCap
-    ? t.eventCap.maxPerEvent : 0;
+  const cap = eventCapFor(t);
   if (cap > 0 && candidate) {
     const ev = eventOfPlayer(candidate);
     if (ev && eventCapCount(manager, ev) >= cap) {
@@ -4055,14 +4080,130 @@ const TOURNAMENTS = {
    a pairing was corrected in one place and not the other the
    bracket and the player pool would disagree silently.
 ══════════════════════════════════════════════════════════ */
-const FEAST_SUB_EVENTS = ['maui-2026', 'b4a-2026'];
+/*  ── The rest of Thanksgiving week ──────────────────────────
+    Fields verified against each event's own announcement in Nov
+    2026. Where a full schedule is published it is listed; where it
+    is not, `fixtures` is omitted and the renderer says the schedule
+    is not announced rather than inventing pairings. That rule is
+    why Maui and Atlantis were wrong once before.              */
+TOURNAMENTS.inSeason.push(
+  {
+    //  SOURCE: ESPN and CBS Sports, 2026 expansion to 24 teams in
+    //  two tournaments. This is the SIXTEEN, Thanksgiving week. The
+    //  separate "Players Era Eight" runs the week of Nov 16 and is
+    //  not part of Feast Week.
+    //
+    //  Sources disagree on the start date (Nov 23 vs Nov 24), so the
+    //  range is given as published and no per-game times are claimed.
+    id: 'players-era-2026',
+    name: 'Players Era',
+    subtitle: 'Sixteen-team field, Las Vegas',
+    location: 'Las Vegas, NV',
+    dates: 'Nov 24–28, 2026',
+    startMs: new Date('2026-11-24').getTime(),
+    bracketFormat: 'group6',
+    roundNames: [],
+    seeded: false,
+    canSelect: true,
+    playerRegion: 'PlayersEra',
+    formatLabel: 'Sixteen teams in Las Vegas across Thanksgiving week.',
+    scheduleNote: 'Bracket and tip times not yet published. Scores appear here automatically as games go final.',
+    teams: ['Michigan', 'Alabama', 'Gonzaga', "St. John's", 'Louisville', 'Tennessee',
+            'Iowa State', 'Miami', 'Texas Tech', 'Baylor', 'Maryland', 'TCU',
+            'Oregon', 'Creighton', 'San Diego State', 'Kansas State'],
+    seededTeams: []
+  },
+  {
+    //  SOURCE: fortmyerstipoff.com Palms Division announcement,
+    //  19 Aug 2026. Full six-game schedule published, so it is here.
+    id: 'fmt-palms-2026',
+    name: 'Fort Myers Tip-Off',
+    subtitle: 'Palms Division · six teams',
+    location: 'Suncoast Credit Union Arena, Fort Myers, FL',
+    dates: 'Nov 23 & 25, 2026',
+    startMs: new Date('2026-11-23').getTime(),
+    bracketFormat: 'group6',
+    roundNames: [],
+    seeded: false,
+    canSelect: true,
+    playerRegion: 'FortMyersPalms',
+    formatLabel: 'Group play: six teams, two games each, nobody eliminated.',
+    teams: ['Charlotte', 'Davidson', 'Florida Gulf Coast', 'Georgia State', 'Northern Iowa', 'Tulane'],
+    seededTeams: [],
+    fixtures: [
+      { day: 'Monday, Nov 23', games: [
+        { home: 'Northern Iowa', away: 'Davidson', time: '11:00 AM ET' },
+        { home: 'Charlotte', away: 'Florida Gulf Coast', time: '1:30 PM ET' },
+        { home: 'Tulane', away: 'Georgia State', time: '4:00 PM ET' }
+      ] },
+      { day: 'Wednesday, Nov 25', games: [
+        { home: 'Northern Iowa', away: 'Charlotte', time: '11:00 AM ET' },
+        { home: 'Tulane', away: 'Davidson', time: '1:30 PM ET' },
+        { home: 'Florida Gulf Coast', away: 'Georgia State', time: '4:00 PM ET' }
+      ] }
+    ]
+  },
+  {
+    //  SOURCE: fortmyerstipoff.com announcement 21 May 2026 and the
+    //  event FAQ. Only Oklahoma's two games are published; the other
+    //  pairings are not, so only what is sourced is listed.
+    id: 'fmt-beach-2026',
+    name: 'Fort Myers Tip-Off',
+    subtitle: 'Beach Division · four teams',
+    location: 'Suncoast Credit Union Arena, Fort Myers, FL',
+    dates: 'Nov 24 & 26, 2026',
+    startMs: new Date('2026-11-24').getTime(),
+    bracketFormat: 'group6',
+    roundNames: [],
+    seeded: false,
+    canSelect: true,
+    playerRegion: 'FortMyersBeach',
+    formatLabel: 'Four teams, two games each.',
+    scheduleNote: 'Only Oklahoma\u2019s two games are published so far. The rest appear here as they are announced.',
+    teams: ['Purdue', 'Oklahoma', 'DePaul', 'Pittsburgh'],
+    seededTeams: [],
+    fixtures: [
+      { day: 'Tuesday, Nov 24', games: [{ home: 'Oklahoma', away: 'Pittsburgh', time: '' }] },
+      { day: 'Thursday, Nov 26', games: [{ home: 'Oklahoma', away: 'Purdue', time: '' }] }
+    ]
+  },
+  {
+    //  SOURCE: radychildrensinvitational.com field announcement and
+    //  UCLA athletics. Four teams, semifinals Nov 26 then a final and
+    //  a third-place game Nov 27 — a real four-team bracket.
+    id: 'rady-2026',
+    name: "Rady Children's Invitational",
+    subtitle: 'Four teams, San Diego',
+    location: 'Jenny Craig Pavilion, San Diego, CA',
+    dates: 'Nov 26–27, 2026',
+    startMs: new Date('2026-11-26').getTime(),
+    bracketFormat: 'single4',
+    roundNames: ['Semifinals', 'Championship'],
+    seeded: false,
+    canSelect: true,
+    playerRegion: 'Rady',
+    formatLabel: 'Semifinals Nov 26, then the final and a third-place game Nov 27.',
+    teams: ['UCLA', 'Georgetown', 'Texas', "Saint Mary's"],
+    seededTeams: [],
+    matchups: [['Georgetown', 'Texas'], ['UCLA', "Saint Mary's"]],
+    placement: {
+      label: 'Third-place game',
+      note: 'The two semifinal losers meet on Nov 27.',
+      days: [{ day: 'Friday, Nov 27', games: [{ home: 'Semifinal loser', away: 'Semifinal loser', time: '' }] }]
+    }
+  }
+);
+
+const FEAST_SUB_EVENTS = ['maui-2026', 'players-era-2026', 'b4a-2026',
+  'fmt-palms-2026', 'fmt-beach-2026', 'rady-2026',
+  'etsc-adventure-2026', 'etsc-magic-2026'];
 
 TOURNAMENTS.inSeason.unshift({
   id: 'feast-2026',
   name: 'Feast Week',
-  subtitle: 'Maui + Atlantis · one draft, five days',
-  location: 'Lahaina, HI and Paradise Island, Bahamas',
-  dates: 'Nov 23–27, 2026',
+  subtitle: 'Every Thanksgiving event · one draft',
+  location: 'Maui, Las Vegas, Atlantis, Fort Myers, San Diego and Orlando',
+  dates: 'Nov 23–28, 2026',
   startMs: new Date('2026-11-23').getTime(),
   bracketFormat: 'combined',
   subEvents: FEAST_SUB_EVENTS,
@@ -4072,14 +4213,22 @@ TOURNAMENTS.inSeason.unshift({
   //  No playerRegion: the pool spans both 'Maui' and 'Atlantis', and
   //  playersForTournament filters on the team list anyway.
   playerRegion: null,
-  formatLabel: 'Two tournaments, one roster. Maui plays Nov 23-25 and Atlantis Nov 25-27, so your team scores on all five days.',
+  formatLabel: 'Every Thanksgiving tournament, one roster. Games run Nov 23 through Nov 28, so your team scores on all six days.',
   /*  THE MECHANIC. Without a cap a manager drafts eight Maui players,
       banks a lead through Wednesday and then watches Thanksgiving as
       a spectator with nothing left to play for. The cap forces every
       roster to have something running on both halves of the week,
       which is the whole reason to combine them.                    */
-  eventCap: { maxPerEvent: 5, note: 'At most 5 of your picks may come from either single tournament.' },
-  scheduleNote: 'Maui: Nov 23-25. Atlantis: Nov 25-27. Both guarantee every team three games.',
+  /*  Cap is 3 now that there are eight sub-events, not two. At the
+      old 5 a manager could still take five from Players Era and
+      three from anywhere and never feel the rule. At 3 an eight-round
+      roster has to span at least three different tournaments.
+
+      maxPerEvent is a FLOOR, not a fixed number — see eventCapFor().
+      A commissioner can set any number of rounds, and a flat cap
+      that rounds outgrow deadlocks the draft with the clock running. */
+  eventCap: { maxPerEvent: 3, note: 'At most 3 of your picks may come from any one tournament.' },
+  scheduleNote: 'Maui Nov 23-25 · Fort Myers Nov 23-26 · Players Era Nov 24-28 · Atlantis Nov 25-27 · Rady Children\u2019s and ESPN Events Nov 26-27.',
   teams: [],
   seededTeams: []
 });

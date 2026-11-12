@@ -94,6 +94,50 @@ const FIELDS = [
       ['Cincinnati', null], ['Georgia', null],
     ],
   },
+  {
+    //  PLAYERS ERA SIXTEEN — Las Vegas, Thanksgiving week.
+    //  The 2026 event split into two tournaments: the "Eight" runs
+    //  the week of Nov 16 and is NOT Thanksgiving week, so it is
+    //  deliberately absent. This is the sixteen-team half.
+    //  SOURCE: ESPN / CBS Sports, Nov 2026 expansion reports.
+    region: 'PlayersEra',
+    seeded: false,
+    teams: [
+      ['Michigan', null], ['Alabama', null], ['Gonzaga', null], ["St. John's", null],
+      ['Louisville', null], ['Tennessee', null], ['Iowa State', null], ['Miami', null],
+      ['Texas Tech', null], ['Baylor', null], ['Maryland', null], ['TCU', null],
+      ['Oregon', null], ['Creighton', null], ['San Diego State', null], ['Kansas State', null],
+    ],
+  },
+  {
+    //  FORT MYERS TIP-OFF, Palms Division. Six teams, Nov 23 and 25.
+    //  SOURCE: fortmyerstipoff.com field announcement, 19 Aug 2026.
+    region: 'FortMyersPalms',
+    seeded: false,
+    teams: [
+      ['Charlotte', null], ['Davidson', null], ['Florida Gulf Coast', null],
+      ['Georgia State', null], ['Northern Iowa', null], ['Tulane', null],
+    ],
+  },
+  {
+    //  FORT MYERS TIP-OFF, Beach Division. Four teams, Nov 24 and 26.
+    //  SOURCE: fortmyerstipoff.com announcement, 21 May 2026.
+    region: 'FortMyersBeach',
+    seeded: false,
+    teams: [
+      ['Purdue', null], ['Oklahoma', null], ['DePaul', null], ['Pittsburgh', null],
+    ],
+  },
+  {
+    //  RADY CHILDREN'S INVITATIONAL — Jenny Craig Pavilion, San Diego.
+    //  Four teams, Nov 26-27. SOURCE: radychildrensinvitational.com
+    //  field announcement; UCLA athletics.
+    region: 'Rady',
+    seeded: false,
+    teams: [
+      ['UCLA', null], ['Georgetown', null], ['Texas', null], ["Saint Mary's", null],
+    ],
+  },
 ];
 
 const args = Object.fromEntries(
