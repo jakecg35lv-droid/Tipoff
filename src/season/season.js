@@ -3572,6 +3572,7 @@
     items.push(['teams', 'Teams', appIcon('teams')]);
     items.push(['chat', 'Chat' + (unreadChat() ? ' <span class="ss-badge">' + unreadChat() + '</span>' : ''), appIcon('chat')]);
     items.push(['settings', 'Settings', appIcon('settings')]);
+    items.push(['account', 'Account', ICON.user || appIcon('teams')]);
     return items;
   }
 
@@ -3613,6 +3614,7 @@
       ui.page === 'standings' ? viewStandings() :
       ui.page === 'teams' ? viewTeams() :
       ui.page === 'players' ? viewPlayers() :
+      ui.page === 'account' ? viewAccount() :
       ui.page === 'settings' ? viewSettings() :
       ui.page === 'rules' ? viewRules() :
       ui.page === 'chat' ? viewChat() : viewHome();
@@ -5615,6 +5617,99 @@
       '</div><div class="ru-again"><button class="g-btn" data-act="exshow">Replay the lock-in walkthrough</button></div>';
   }
 
+  /*  ── Account page ─────────────────────────────────────────
+      Deliberately built from the same .pf-* classes the tournament
+      profile uses (they live in styles.css, which both modes load),
+      so the two pages are the same page wearing the same clothes
+      rather than two lookalikes that drift apart on the next
+      restyle. Nothing new is added to season.css for it.
+
+      Account-level, like its twin: the numbers come from the
+      account's league list, not from whichever league is open.   */
+  function viewAccount() {
+    var name = sessionName(), email = sessionEmail();
+    var all = ACCOUNT_ALL || [];
+    var seasonN = all.filter(function (l) { return l && l.kind === 'season'; }).length;
+    var tournN = all.length - seasonN;
+
+    var since = '';
+    try {
+      var ct = window._auth && window._auth.currentUser &&
+        window._auth.currentUser.metadata && window._auth.currentUser.metadata.creationTime;
+      if (ct) {
+        var d = new Date(ct);
+        if (!isNaN(d)) since = d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+      }
+    } catch (e) { }
+
+    function tile(v, label) {
+      return '<div class="pf-tile"><b>' + esc(String(v)) + '</b><span>' + esc(label) + '</span></div>';
+    }
+
+    var html = '<div class="page-header"><h2>Account</h2></div>';
+
+    html += '<div class="settings-profile-row ss-static-row"><div class="spr-avatar">' + avatarHTML(name, 44) + '</div>' +
+      '<div class="spr-info"><span class="spr-name">' + esc(name) + '</span>' +
+      '<span class="spr-sub">' + esc(email || 'Not signed in') + '</span></div></div>';
+
+    html += '<div class="pf-sec"><h3 class="pf-sec-h">Career</h3><div class="pf-career">' +
+      tile(all.length, all.length === 1 ? 'League' : 'Leagues') +
+      tile(tournN, 'Tournament') +
+      tile(seasonN, 'Season') +
+      (since ? tile(since, 'Member since') : '') +
+      '</div></div>';
+
+    var here = state && state.league ? normCode(state.league.code) : '';
+    html += '<div class="pf-sec"><div class="pf-sec-head"><h3 class="pf-sec-h">Your leagues</h3>' +
+      (all.length ? '<span class="pf-sec-count">' + all.length + '</span>' : '') + '</div><div class="pf-leagues">';
+    if (!all.length) {
+      html += '<p class="pf-empty">No leagues yet. Create or join one from the league list.</p>';
+    } else {
+      html += all.slice().sort(function (a, b) {
+        return String((a && a.name) || '').localeCompare(String((b && b.name) || '')) ||
+          String((a && a.code) || '').localeCompare(String((b && b.code) || ''));
+      }).map(function (l) {
+        var code = normCode(l.code);
+        var isHere = code && code === here;
+        return '<button class="pf-league' + (isHere ? ' is-here' : '') + '"' +
+          ' data-act="acctopen" data-code="' + esc(code) + '" data-kind="' + esc(l.kind || 'tournament') + '">' +
+          '<span class="pf-lg-main"><b>' + esc(l.name || 'League') + '</b><span>' + esc(code) + '</span></span>' +
+          '<span class="pf-lg-kind' + (l.kind === 'season' ? ' season' : '') + '">' +
+            (l.kind === 'season' ? 'Season' : 'Tournament') + '</span>' +
+          (isHere ? '<span class="pf-lg-here">Here</span>' : '<span class="pf-lg-go">\u203A</span>') +
+          '</button>';
+      }).join('');
+    }
+    html += '</div></div>';
+
+    //  In THIS league, named — same separation as the tournament
+    //  profile, where unlabelled league-scoped numbers were being
+    //  read as a career record.
+    if (state && state.league) {
+      var u = userTeam();
+      //  w/l live on the computed standings row, NOT on the team
+      //  object — reading u.w here renders "undefined-undefined".
+      var mr = null;
+      try { mr = myRank(); } catch (e) { }
+      var row = mr && mr.row;
+      var rec = row ? (row.w + '\u2013' + row.l + (row.t ? '\u2013' + row.t : '')) : '\u2013';
+      html += '<div class="pf-sec"><h3 class="pf-sec-h">In <span>' + esc(state.league.name) + '</span></h3>' +
+        '<div class="pf-career">' +
+          tile(u.name, 'Your team') +
+          tile(rec, 'Record') +
+          tile(mr ? '#' + mr.rank : '\u2013', 'Rank') +
+          tile((u.roster || []).length, 'Roster') +
+        '</div></div>';
+    }
+
+    html += '<div class="pf-sec"><h3 class="pf-sec-h">Account</h3><div class="panel set-panel">' +
+      setRow('Email', esc(email || 'Not signed in')) +
+      setRow('Leagues', String(all.length) + ' on this account') +
+      '</div></div>';
+
+    return html;
+  }
+
   function viewSettings() {
     var L = state.league, d = draftCfg(), u = userTeam(), name = sessionName(), email = sessionEmail();
     var editable = editableDraft(), pr = notifPrefs();
@@ -5939,6 +6034,20 @@
         ui.toastType = 'success'; ui.faId = null; break;
       case 'ccancel': cancelClaim(i); break;
       case 'cmove': moveClaim(i, +el.getAttribute('data-dir')); break;
+      /*  Account page league row. A season league opens in place; a
+          tournament league has to leave this module entirely, which
+          is what close() + the tournament loader does. Tapping the
+          league you are already in does nothing.                  */
+      case 'acctopen': {
+        var acCode = el.getAttribute('data-code');
+        if (!acCode || el.classList.contains('is-here')) return;
+        if (el.getAttribute('data-kind') === 'season') { open(acCode); return; }
+        try {
+          close();
+          if (window.TipoffOpenTournamentLeague) window.TipoffOpenTournamentLeague(acCode);
+        } catch (e) { console.warn('[Season] open tournament league', e); }
+        return;
+      }
       case 'dropone':
         //  ── The arm state must NOT live on the button ──────────
         //  This used to set a CSS class on the element and wait for a
@@ -6737,7 +6846,14 @@
   //  Season entries from the live users/{uid} listener in app.js. The
   //  single source of truth for WHICH season leagues exist.
   var ACCOUNT_SEASON = null;
+  //  The unfiltered list. ACCOUNT_SEASON is deliberately season-only
+  //  because the splash card renders season leagues, but the account
+  //  page has to show every league on the account — the same thing
+  //  the tournament profile shows — or the two modes disagree about
+  //  how many leagues you are in.
+  var ACCOUNT_ALL = null;
   function setAccountLeagues(list) {
+    ACCOUNT_ALL = Array.isArray(list) ? list.slice() : [];
     ACCOUNT_SEASON = (Array.isArray(list) ? list : [])
       .filter(function (l) { return l && l.kind === 'season' && l.code; })
       .map(function (l) { return { code: normCode(l.code), name: l.name || 'Season League' }; });

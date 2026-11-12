@@ -1617,6 +1617,13 @@ function _syncLeagueEmptyState() {
 //  to be able to tell app.js it has finished. Without this the two
 //  renderers can only guess at each other through the DOM, which is
 //  the bug above.
+/*  The season module's account page lists tournament leagues too,
+    and opening one means leaving that module. Exposing the loader
+    is the whole bridge — season calls close() first, then this.  */
+window.TipoffOpenTournamentLeague = function (code) {
+  try { _loadAndEnterLeague(code); } catch (e) { console.warn('[Leagues] open tournament', e); }
+};
+
 window.TipoffLeagues = { syncEmpty: _syncLeagueEmptyState };
 
 /*  ── ONE source of truth for "which leagues exist" ──────────

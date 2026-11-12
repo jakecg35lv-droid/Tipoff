@@ -71,7 +71,11 @@ function makeDom() {
 function loadSync() {
   const a = app.indexOf('function _hasSeasonCard()');
   const b = app.indexOf('window.TipoffLeagues =');
-  const src = app.slice(a, b);
+  //  Drop any `window.*` export inside the slice. Bridges get added
+  //  between these two functions over time, and there is no `window`
+  //  in Node — one such line killed the whole suite before its first
+  //  assertion. The functions under test do not need them.
+  const src = app.slice(a, b).replace(/^window\.[\s\S]*?^\};$/gm, '');
   const dom = makeDom();
   const fn = new Function('document', src + '\nreturn { sync: _syncLeagueEmptyState, has: _hasSeasonCard };');
   const api = fn(dom);
