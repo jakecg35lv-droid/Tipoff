@@ -4999,7 +4999,7 @@
       '<div class="ss-card"><div class="ss-card-head"><h3 class="section-title">Starters</h3>' +
         (dec ? '<span class="ss-decide">' + dec + ' to decide</span>' : '') + '</div>' + rows +
         '<p class="ss-hint">Lock a score to keep it. Pass to wait for his next game. If you never lock, the slot keeps its most recent game.</p></div>' +
-      '<div class="ss-card"><div class="ss-card-head"><h3 class="section-title">Bench</h3><span class="ss-hint-inline">Bench games don’t count</span></div>' + benchRows + '</div>' +
+      '<div class="ss-card ss-bench-card"><div class="ss-card-head"><h3 class="section-title">Bench</h3><span class="ss-hint-inline">Bench games don’t count</span></div>' + benchRows + '</div>' +
     '</div>';
   }
 

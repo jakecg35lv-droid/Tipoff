@@ -67,25 +67,39 @@ for (const shared of ['.ss-slot', '.ss-bench-row', '.ss-game', '.ss-card', '.ss-
 // ── 3. Mobile keeps the score beside the player ──────────
 const mobile = block.slice(block.indexOf('@media (max-width: 768px)'));
 ok('mobile block present', mobile.length > 200);
-//  The score is lifted out of the flow on mobile. If it ever goes
-//  back into a grid cell the player column starves and the name
-//  truncates to one letter, which is what the first attempt did.
-ok('mobile lifts the score out of the flow',
-  /\.ss-lineup \.ss-st \{[^}]*position:\s*absolute/.test(mobile));
-ok('mobile reserves a gutter for it',
-  /\.ss-lineup \.ss-slot-main \{[^}]*padding-right:\s*\d+px/.test(mobile));
-const gutter = parseFloat((mobile.match(/\.ss-lineup \.ss-slot-main \{[^}]*padding-right:\s*([\d.]+)px/) || [])[1]);
-const stw = parseFloat((mobile.match(/\.ss-lineup \.ss-st \{[^}]*width:\s*([\d.]+)px/) || [])[1]);
-ok('gutter is wider than the score block', gutter > stw, gutter + ' vs ' + stw);
-ok('mobile row is held open for the score block',
-  /\.ss-lineup \.ss-slot \{[^}]*min-height:\s*7[0-9]px/.test(mobile));
+//  The score sits in its own full-width row on mobile. The earlier
+//  attempt lifted it out of the flow into a 96px corner, which the
+//  Lock/Pass pair was too wide for — it spilled back over the chips
+//  and covered the Swap link.
+ok('mobile keeps the score in the flow',
+  !/\.ss-lineup \.ss-st \{[^}]*position:\s*absolute/.test(mobile));
+ok('score gets its own full-width row',
+  /\.ss-lineup \.ss-st \{[^}]*grid-row:\s*2/.test(mobile) &&
+  /\.ss-lineup \.ss-st \{[^}]*width:\s*100%/.test(mobile));
+ok('status bar lays out left-to-right',
+  /\.ss-lineup \.ss-st \{[^}]*flex-direction:\s*row/.test(mobile) &&
+  /\.ss-lineup \.ss-st \{[^}]*justify-content:\s*space-between/.test(mobile));
+ok('no reserved gutter left behind',
+  /\.ss-lineup \.ss-slot-main \{[^}]*padding-right:\s*0/.test(mobile));
+ok('Lock and Pass are not pinned to a narrow corner',
+  !/\.ss-lineup \.ss-lp \{[^}]*justify-content:\s*flex-end/.test(mobile));
+ok('player keeps the first row',
+  /\.ss-lineup \.ss-slot-main \{[^}]*grid-row:\s*1/.test(mobile));
+
+//  Chips must WRAP, not scroll. A scrolling strip hides the second
+//  game rather than showing it; every slot in the bug report had
+//  its last chip sliced in half.
+ok('mobile chips wrap instead of scrolling',
+  /\.ss-lineup \.ss-games \{[^}]*flex-wrap:\s*wrap/.test(mobile));
+ok('no horizontal clipping on the chip row',
+  /\.ss-lineup \.ss-games \{[^}]*overflow:\s*visible/.test(mobile) &&
+  !/\.ss-lineup \.ss-games \{[^}]*overflow-x:\s*auto/.test(mobile));
 ok('mobile drops the long status note',
   /\.ss-lineup \.ss-st-note \{[^}]*display:\s*none/.test(mobile));
-ok('mobile chips scroll instead of wrapping',
-  /\.ss-lineup \.ss-games \{[^}]*flex-wrap:\s*nowrap/.test(mobile) &&
-  /\.ss-lineup \.ss-games \{[^}]*overflow-x:\s*auto/.test(mobile));
-ok('Swap keeps its width against the scrolling chips',
-  /\.ss-lineup \.ss-slot-main \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/.test(mobile));
+//  A fixed min-height was there to hold the row open for the
+//  out-of-flow score. With it back in the flow the row must size
+//  to its own content or it clips again.
+ok('row sizes to its content', /\.ss-lineup \.ss-slot \{[^}]*min-height:\s*0/.test(mobile));
 
 // Bench: chips at desktop width, a game count on a phone.
 ok('bench chips drop weekday and opponent at every width',
@@ -102,6 +116,11 @@ ok('bench count comes from gamesFor', /var bg = gamesFor\(id\)\.length;/.test(bo
 // Wide screens get a third bench column; its first row must also
 // lose the top border, or the grid shows a stray rule.
 const wide = block.slice(block.indexOf('@media (min-width: 1100px)'), block.indexOf('@media (max-width: 768px)'));
+//  Positional selectors are a trap: with no bench rows the STARTERS
+//  card becomes :last-child and would inherit the bench grid.
+ok('bench grid is targeted by class, not position',
+  !/\.ss-card:last-child/.test(code) && /\.ss-bench-card/.test(code));
+ok('viewLineup tags the bench card', /ss-card ss-bench-card/.test(js));
 ok('wide screens use three bench columns', /grid-template-columns:\s*repeat\(3, 1fr\)/.test(wide));
 ok('three-column bench fixes its first-row borders', /nth-child\(-n\+4\)[^}]*border-top:\s*0/.test(wide));
 
