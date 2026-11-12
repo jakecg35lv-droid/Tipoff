@@ -264,8 +264,13 @@ body.ss-open > *:not(#seasonApp):not(script):not(#toastContainer):not(.mode-back
 }
 
 /* ══ Mode chooser (Create League) ═════════════════════════ */
+/*  align-items + justify-content alongside place-items: an inline
+    `style.display = 'flex'` beats the stylesheet, and under flex
+    the justify half of place-items is ignored, which pins the
+    dialog to the left edge. See .modal-backdrop in styles.css.  */
 .mode-backdrop {
-  position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px;
+  position: fixed; inset: 0; z-index: 1000; display: grid;
+  place-items: center; align-items: center; justify-content: center; padding: 16px;
   background: rgba(3, 8, 16, .72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   opacity: 0; transition: opacity .2s ease;
 }
@@ -1092,7 +1097,9 @@ body.ss-open:has(#seasonApp.ss-glass) { background: #0a1220; }
 .ss-p5 .ss-conf.on b { color: var(--text); }
 
 /* ══ Lock-in explainer + How It Works page ══ */
-.ex-backdrop { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; padding: 16px;
+/*  Same reason as .mode-backdrop above. */
+.ex-backdrop { position: fixed; inset: 0; z-index: 400; display: grid;
+  place-items: center; align-items: center; justify-content: center; padding: 16px;
   background: rgba(5, 9, 18, .55); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); animation: ex-fade .25s ease both; }
 .ex-card { position: relative; width: min(440px, 100%); padding: 26px 24px 22px; border-radius: 28px; text-align: center;
   background: rgba(22, 30, 48, .82); border: 1px solid rgba(255,255,255,.16); color: var(--text);

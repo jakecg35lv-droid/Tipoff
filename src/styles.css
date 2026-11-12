@@ -1685,7 +1685,21 @@ select:focus {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   display: grid;
+  /*  place-items alone was not enough. Every modal is opened with
+      an inline `el.style.display = 'flex'`, and an inline style
+      beats the stylesheet — so the box became a flex container.
+      Under flex, place-items' align-items half still centres
+      vertically but its justify-items half is ignored entirely,
+      which is exactly why Delete League and Restart League sat
+      vertically centred and pinned hard to the left edge.
+
+      align-items + justify-content are honoured by BOTH grid and
+      flex, so the dialog is centred whichever one the inline
+      style happens to win with. Do not replace these with the
+      place-items shorthand again.                               */
   place-items: center;
+  align-items: center;
+  justify-content: center;
   z-index: 200;
   padding:
     max(20px, env(safe-area-inset-top))
@@ -6610,8 +6624,14 @@ select:focus {
   background: rgba(4, 7, 16, 0.84);
   backdrop-filter: blur(16px) saturate(120%);
   -webkit-backdrop-filter: blur(16px) saturate(120%);
+  /*  showTutorial() opens this with an inline display:flex, which
+      beats the stylesheet. place-items' justify half is ignored
+      under flex, so the card would hug the left edge. align-items
+      + justify-content work under both. See .modal-backdrop.   */
   display: grid;
   place-items: center;
+  align-items: center;
+  justify-content: center;
   padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
            max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
   overflow-y: auto;
