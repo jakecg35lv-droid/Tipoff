@@ -66,7 +66,17 @@
   --grad-hero: linear-gradient(135deg, #0d1b35 0%, #060f1c 100%);
   --grad-card: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
   --grad-green: linear-gradient(135deg, #34d399 0%, #059669 100%);
-  --grad-red: linear-gradient(135deg, #f05252 0%, #991b1b 100%);
+  /*  Destructive actions sit in the same family as the brand orange
+      rather than next to it. The old value was
+      linear-gradient(135deg, #f05252, #991b1b): a stock blue-leaning
+      fire-engine red running diagonally into brick brown, which read
+      as a default framework button dropped into a navy app.
+
+      This is warmer and deeper — it shares the orange's hue
+      direction, so the two read as the hot end of one palette — and
+      runs top-to-bottom like every other raised surface here, so it
+      catches light from the same direction as the rest of the UI. */
+  --grad-red: linear-gradient(180deg, #d8453d 0%, #a62f2b 100%);
   /* Borders */
   --border: rgba(255, 255, 255, 0.07);
   --border-2: rgba(255, 255, 255, 0.12);
@@ -1022,6 +1032,12 @@ select:focus {
   color: var(--text);
 }
 
+/*  Built like the rest of the raised surfaces in the app: a hairline
+    border, a 1px inner top highlight so it reads as lit from above,
+    and a coloured shadow tinted to its own hue instead of a generic
+    black drop. That construction is what separates this from a flat
+    coloured rectangle, and it is why the old button looked borrowed
+    from somewhere else.                                           */
 .btn-red {
   background: var(--grad-red);
   color: #fff;
@@ -1030,14 +1046,24 @@ select:focus {
   font-size: 15px;
   padding: 13px 24px;
   border-radius: var(--radius-xs);
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 6px 18px rgba(166, 47, 43, 0.30);
   cursor: pointer;
-  transition: opacity 0.18s;
+  /*  Brightness, not opacity. Fading a button on hover lets the
+      backdrop bleed through and desaturates it against the navy. */
+  transition: filter 0.16s, transform 0.1s, box-shadow 0.16s;
 }
 
 .btn-red:hover {
-  opacity: 0.85;
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 8px 22px rgba(166, 47, 43, 0.38);
 }
+
+.btn-red:active { transform: scale(0.985); }
 
 .btn-green {
   background: var(--grad-green);
@@ -1747,15 +1773,30 @@ select:focus {
   margin-top: 22px;
 }
 /*  44px floor: these are the buttons people tap to confirm something
-    destructive, and they were the smallest targets on the screen. */
-.modal-actions > button { min-height: 44px; padding-inline: 18px; }
+    destructive, and they were the smallest targets on the screen.
 
-/*  On a phone, side-by-side buttons squeeze the labels and put the
-    destructive one under the thumb. Stack them, confirm on top. */
-@media (max-width: 420px) {
+    flex: 1 1 0 with min-width: 0 is load-bearing. Cancel inherits
+    .btn-ghost's `padding: 16px 24px` and used to carry an explicit
+    flex-shrink: 0 (below), while the confirm button had no flex rule
+    at all. So on a narrow card Cancel refused to give up a single
+    pixel, grew past the card's left edge, and crushed "Yes, Delete"
+    onto two lines. Equal, shrinkable widths instead.             */
+.modal-actions > button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  padding-inline: 18px;
+  white-space: nowrap;
+}
+
+/*  On a narrow phone, side-by-side buttons squeeze the labels and
+    put the destructive one under the thumb. Stack them, confirm on
+    top. 430px, not 420: a Pro Max is 430 and sat just outside the
+    old query, which is where the overflow above was photographed. */
+@media (max-width: 430px) {
   .modal-card { padding: 22px 18px 18px; }
   .modal-actions { flex-direction: column-reverse; gap: 8px; }
-  .modal-actions > button { width: 100%; }
+  .modal-actions > button { width: 100%; flex: 0 0 auto; }
 }
 
 .modal-lg {
@@ -2408,13 +2449,29 @@ select:focus {
   background: rgba(246, 168, 78, 0.12);
 }
 
+/*  Same warmer crimson as --grad-red, so the Delete row in Settings
+    and the Delete button in the dialog it opens are the same colour.
+    They were #f05252 and a #f05252/#991b1b gradient before, which is
+    close enough to look like a mistake rather than a choice.      */
 .set-row-btn--danger {
-  color: #f05252;
-  border-color: rgba(240, 82, 82, 0.32);
+  color: #e9655c;
+  border-color: rgba(216, 69, 61, 0.34);
 }
 
 .set-row-btn--danger:hover {
-  background: rgba(240, 82, 82, 0.14);
+  background: rgba(216, 69, 61, 0.15);
+  border-color: rgba(216, 69, 61, 0.55);
+  color: #f2837b;
+}
+
+/*  Armed state: the second tap is the destructive one, so it stops
+    being an outline and becomes the same filled button the dialog
+    uses. The colour change IS the warning.                       */
+.set-row-btn--danger.confirm {
+  background: var(--grad-red);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
 .set-footer {
@@ -6447,13 +6504,20 @@ select:focus {
 }
 
 .modal-actions .btn-primary {
-  flex: 1;
   text-align: center;
 }
 
-.modal-actions .btn-ghost {
-  flex-shrink: 0;
-}
+/*  One radius across the pair. .btn-ghost is 14px and .btn-red is
+    --radius-xs (8px), so side by side the dialog had two different
+    corner treatments touching — a small thing that reads as sloppy
+    at exactly the moment the user is being asked to confirm
+    something irreversible.                                       */
+.modal-actions > button { border-radius: 10px; }
+
+/*  `.modal-actions .btn-ghost { flex-shrink: 0 }` lived here. It is
+    what let Cancel overflow the card rather than share the row —
+    the sizing is handled uniformly by `.modal-actions > button`
+    above now. Do not re-add a per-button flex rule here.        */
 
 .draft-go {
   background: var(--grad-orange) !important;
