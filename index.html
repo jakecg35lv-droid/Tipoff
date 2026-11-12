@@ -26,8 +26,8 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
     rel="stylesheet" />
   <!-- ?v= must match the scripts below and CACHE_NAME in sw.js. -->
-  <link rel="stylesheet" href="src/styles.css?v=235" />
-  <link rel="stylesheet" href="src/season/season.css?v=235" />
+  <link rel="stylesheet" href="src/styles.css?v=236" />
+  <link rel="stylesheet" href="src/season/season.css?v=236" />
 </head>
 
 <body>
@@ -293,9 +293,12 @@
     <div class="splash-leagues">
       <h3 class="splash-leagues-title">Your Leagues</h3>
       <div id="seasonLeagueSlot"></div>
-      <div id="savedLeaguesList" class="saved-leagues-list">
-        <p class="no-leagues">No leagues yet. Create or join one above.</p>
-      </div>
+      <!-- No hardcoded "no leagues" message here. _syncLeagueEmptyState()
+           in app.js owns that message and appends it to .splash-leagues
+           once BOTH the season slot and this list are known to be empty.
+           A copy sitting inside this container would be a second,
+           unmanaged one. -->
+      <div id="savedLeaguesList" class="saved-leagues-list"></div>
     </div>
     <!-- Footer actions -->
     <div class="splash-footer">
@@ -1742,7 +1745,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=235"></script>
+  <script src="firebase-config.js?v=236"></script>
 
   <!-- ══════════════════════════════════════════════════════════
        ?v= IS NOT DECORATION. BUMP IT ON EVERY RELEASE.
@@ -1765,14 +1768,14 @@
        its STATIC_ASSETS list, or the service worker precaches URLs
        the page never asks for.
   ══════════════════════════════════════════════════════════ -->
-  <script src="data/bracket.js?v=235"></script>
-  <script src="data/players.js?v=235"></script>
+  <script src="data/bracket.js?v=236"></script>
+  <script src="data/players.js?v=236"></script>
   <!-- Loaded before app.js so window.Analytics exists at first call.
        No-ops until a PostHog key is set in analytics.js. -->
-  <script src="src/analytics.js?v=235"></script>
-  <script src="src/app.js?v=235"></script>
-  <script src="data/conference-players.js?v=235"></script>
-  <script src="src/season/season.js?v=235"></script>
+  <script src="src/analytics.js?v=236"></script>
+  <script src="src/app.js?v=236"></script>
+  <script src="data/conference-players.js?v=236"></script>
+  <script src="src/season/season.js?v=236"></script>
 
   <!-- Service Worker Registration -->
   <script>

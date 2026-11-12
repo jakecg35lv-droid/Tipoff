@@ -881,6 +881,35 @@ function showSplash(fromInit) {
   renderSplashAccount();
 
   renderSavedLeagues();
+
+  /*  Repaint the season half EXPLICITLY.
+
+      It used to happen only as a side effect of a MutationObserver
+      watching this element's style attribute, which fires as a
+      microtask after this function returns. Depending on a style
+      mutation to paint your primary content is fragile — if the
+      splash was already display:flex, or the observer had not been
+      installed yet, the season cards simply did not repaint and the
+      screen came back without them. Calling it directly also means
+      both halves are painted before the empty-state check below.  */
+  try {
+    window.TipoffSeason && window.TipoffSeason.refreshSplash &&
+      window.TipoffSeason.refreshSplash();
+  } catch (e) { }
+  _syncLeagueEmptyState();
+
+  //  The account listener can still land a moment later on a slow
+  //  connection, which is the common case on a phone. One deferred
+  //  re-check costs nothing and closes the window where both halves
+  //  have painted empty and nothing is left to correct it.
+  setTimeout(function () {
+    try { renderSavedLeagues(); } catch (e) { }
+    try {
+      window.TipoffSeason && window.TipoffSeason.refreshSplash &&
+        window.TipoffSeason.refreshSplash();
+    } catch (e) { }
+  }, 600);
+
   checkInviteURL();
 
   if (fromInit && intro) {
@@ -1532,6 +1561,64 @@ function _hasSeasonCard() {
   return !!(slot && slot.innerHTML.trim().length);
 }
 
+/*  ── The empty state belongs to the SCREEN, not to either list ──
+    This is what made the splash come up blank after All Leagues.
+
+    Two separate renderers paint this screen: renderSavedLeagues()
+    here for tournament leagues, and renderSplashCard() in the season
+    module for season ones. They each used to decide the "No leagues
+    yet" message by reading the OTHER one's innerHTML, mid-flight,
+    with nothing re-checking afterwards. They do not run together:
+    renderSavedLeagues runs synchronously inside showSplash(), while
+    the season card is repainted from a MutationObserver that fires
+    after showSplash returns.
+
+    So the losing interleaving was:
+      1. renderSavedLeagues finds no tournament leagues
+      2. it peeks at the season slot, sees the PREVIOUS paint still
+         sitting there, concludes "the season card is covering it"
+         and writes nothing
+      3. renderSplashCard then runs, finds its own list empty (the
+         account listener had not come back yet) and clears the slot
+      4. both halves are now blank, and nothing re-runs step 2
+
+    Result: a completely empty screen with not even a message. More
+    often on a phone, because the account read is slower there and
+    the listener is more likely to have been dropped while the app
+    was backgrounded — so step 3 finding nothing is the common case,
+    not the rare one.
+
+    One function now owns the message, both renderers call it when
+    they finish, and it reads the DOM only after the fact. It is
+    idempotent, so calling it twice costs nothing.                 */
+function _syncLeagueEmptyState() {
+  const wrap = document.querySelector('.splash-leagues');
+  const container = document.getElementById('savedLeaguesList');
+  if (!wrap || !container) return;
+
+  const hasTournament = !!container.querySelector('.saved-league-card');
+  const hasSeason = _hasSeasonCard();
+
+  let msg = document.getElementById('noLeaguesMsg');
+  if (hasTournament || hasSeason) {
+    if (msg) msg.remove();
+    return;
+  }
+  if (!msg) {
+    msg = document.createElement('p');
+    msg.id = 'noLeaguesMsg';
+    msg.className = 'no-leagues';
+    msg.textContent = 'No leagues yet. Create or join one above.';
+    wrap.appendChild(msg);
+  }
+}
+
+//  The season module paints the other half of this screen, so it has
+//  to be able to tell app.js it has finished. Without this the two
+//  renderers can only guess at each other through the DOM, which is
+//  the bug above.
+window.TipoffLeagues = { syncEmpty: _syncLeagueEmptyState };
+
 /*  ── ONE source of truth for "which leagues exist" ──────────
     users/{uid}.leagues is the account's membership list and is already
     written on create, join and delete. Everything on screen is now
@@ -1642,15 +1729,18 @@ function renderSavedLeagues() {
     _localOnlyLeagues().forEach(l => rows.push(l));
   }
 
+  //  This container holds tournament cards and nothing else. It no
+  //  longer writes the "no leagues" message itself, because it cannot
+  //  see whether the season slot is about to paint or about to clear.
+  //  _syncLeagueEmptyState owns that decision for the whole screen.
   if (!rows.length) {
-    container.innerHTML = _hasSeasonCard()
-      ? ''
-      : '<p class="no-leagues">No leagues yet. Create or join one above.</p>';
+    container.innerHTML = '';
   } else {
     rows.sort(_leagueOrder);
     container.innerHTML = rows.map(_leagueCardHTML).join('');
     _attachLeagueCardListeners(container);
   }
+  _syncLeagueEmptyState();
 
   //  Paint from the local cache first (instant), then reconcile against
   //  the account. This list used to be localStorage and nothing else,

@@ -6907,6 +6907,12 @@
 
     if (!rows.length) {
       slot.innerHTML = '';
+      //  Clearing this slot can be the thing that leaves the whole
+      //  splash blank: app.js may already have decided not to print
+      //  "No leagues yet" because this slot was still showing the
+      //  PREVIOUS paint when it looked. Tell it to re-decide now
+      //  that the slot is genuinely empty.
+      try { window.TipoffLeagues && window.TipoffLeagues.syncEmpty(); } catch (e) { }
       return;
     }
 
@@ -6937,6 +6943,10 @@
     //  A second season league has to be reachable from here, because
     //  this screen is where a manager looks for one.
     '<button class="ss-splash-add" data-season-new="1">+ New season league</button>';
+
+    //  Cards exist again, so any "No leagues yet" message app.js put
+    //  up while this slot was empty has to come down.
+    try { window.TipoffLeagues && window.TipoffLeagues.syncEmpty(); } catch (e) { }
 
     try { maybeRestoreView(); } catch (e) { console.warn('[Season] restore view', e); }
   }
