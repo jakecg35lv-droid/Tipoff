@@ -3678,6 +3678,17 @@
       var x = cur.getBoundingClientRect().left - wrap.getBoundingClientRect().left + wrap.scrollLeft;
       wrap.scrollLeft = Math.max(0, x - wrap.clientWidth / 2 + cur.clientWidth / 2);
     }
+    //  Same treatment for the players tab strip. It scrolls sideways
+    //  on a phone now that there are six tabs, so after a render the
+    //  active one has to be brought into view — otherwise selecting
+    //  Transactions leaves the strip sitting on Available and the tab
+    //  you are actually looking at is off-screen.
+    var tabOn = root.querySelector('.draft-inner-tabs .dit-btn.active');
+    var tabWrap = tabOn && tabOn.closest('.draft-inner-tabs');
+    if (tabOn && tabWrap && tabWrap.scrollWidth > tabWrap.clientWidth) {
+      var tx = tabOn.getBoundingClientRect().left - tabWrap.getBoundingClientRect().left + tabWrap.scrollLeft;
+      tabWrap.scrollLeft = Math.max(0, tx - tabWrap.clientWidth / 2 + tabOn.clientWidth / 2);
+    }
     if (focusSearch) { var si = document.getElementById('ssSearch'); if (si) { si.focus(); try { si.setSelectionRange(caret, caret); } catch (er) { /* ignore */ } } }
     if (ui.toastMsg) { notify(ui.toastMsg, ui.toastType || 'info'); ui.toastMsg = ''; }
     var cl = document.getElementById('ssChatList');

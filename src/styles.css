@@ -3531,22 +3531,51 @@ select:focus {
   transform: scale(0.97);
 }
 
+/*  ── The tab strip scrolls sideways on a phone ──────────────
+    This was written when there were two tabs. The season players
+    page now renders six — Available, Full Pool, Claims, Trades,
+    Injuries, Transactions — and the old rules were
+    `.draft-inner-tabs { flex: 1 }` with `.dit-btn { flex: 1 }` and
+    no overflow anywhere.
+
+    Flex items default to min-width:auto, so the buttons refused to
+    shrink below their own labels. Six labels need far more than a
+    390px screen, so the strip simply overflowed its container and
+    everything past "Claims" was clipped off the edge with no way
+    to reach it — not hidden behind a scrollbar, just gone.
+
+    flex:0 0 auto plus overflow-x:auto turns it into a proper
+    horizontal strip: every tab keeps its real width and the row
+    scrolls. app.js and season.js scroll the active tab into view
+    after each render so you can always see where you are.      */
 @media (max-width: 560px) {
   .draft-tabs-row {
     gap: 10px;
+    flex-wrap: nowrap;
   }
 
   .draft-inner-tabs {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;            /* without this the strip still cannot shrink */
+    width: auto;             /* overrides the desktop width: fit-content */
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
   }
 
+  .draft-inner-tabs::-webkit-scrollbar { display: none; }
+
   .dit-btn {
-    flex: 1;
-    padding: 8px 12px;
+    flex: 0 0 auto;          /* NOT flex:1 — that is what crushed them */
+    padding: 8px 14px;
+    white-space: nowrap;
   }
 
   .dit-autopick-btn {
     padding: 9px 13px;
+    flex: 0 0 auto;
   }
 }
 
