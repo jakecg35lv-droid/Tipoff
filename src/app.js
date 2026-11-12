@@ -626,11 +626,45 @@ function readLastView() {
 function clearLastView() {
   try { localStorage.removeItem(_lastViewKey()); } catch (e) { }
 }
+/*  ── Arriving from outside is not the same as refreshing ───
+    Following a link from tipofffantasy.com or trivia.tipofffantasy.com
+    should land on the league list — that person is starting
+    something, not resuming it. Refreshing should resume.
+
+    document.referrer alone cannot tell these apart: browsers keep the
+    original referrer across a reload, so a refresh deep inside a
+    league still looks like it came from the marketing site.
+
+    Navigation Timing can. type 'reload' is a refresh, 'back_forward'
+    is history, 'navigate' is a fresh arrival — and only then does the
+    referrer's host decide. No referrer at all (typed, bookmark, or a
+    PWA launched from the home screen) counts as resuming, because
+    those are the ways a regular player opens the app.             */
+function cameFromExternalLink() {
+  try {
+    let type = '';
+    const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+    if (nav && nav.type) type = nav.type;
+    else if (performance.navigation) {
+      type = performance.navigation.type === 1 ? 'reload'
+           : performance.navigation.type === 2 ? 'back_forward' : 'navigate';
+    }
+    if (type === 'reload' || type === 'back_forward') return false;
+
+    const ref = document.referrer || '';
+    if (!ref) return false;
+    return new URL(ref).hostname !== location.hostname;
+  } catch (e) {
+    return false;   // never strand someone on the wrong screen over this
+  }
+}
+
 //  season.js is its own IIFE and cannot see these directly.
 window.TipoffView = {
   remember: rememberView,
   read: readLastView,
   clear: clearLastView,
+  external: cameFromExternalLink,
   taken: function () { const was = _viewRestored; _viewRestored = true; return was; }
 };
 
@@ -959,7 +993,7 @@ function showMainApp() {
   let _start = 'home';
   try {
     const lv = readLastView();
-    if (lv && lv.mode === 'tournament' && !_viewRestored &&
+    if (lv && lv.mode === 'tournament' && !_viewRestored && !cameFromExternalLink() &&
         (!lv.code || lv.code === state.leagueCode) &&
         document.getElementById(lv.page + 'Page')) {
       _start = lv.page;
@@ -1014,7 +1048,7 @@ function _afterLoginNav() {
   loginScreen.style.opacity = '0';
   setTimeout(() => {
     loginScreen.style.opacity = ''; loginScreen.style.transition = ''; loginScreen.style.display = 'none';
-    if (loadState() && state.leagueId) { enterLeague(); } else { showSplash(true); }
+    if (loadState() && state.leagueId && !cameFromExternalLink()) { enterLeague(); } else { showSplash(true); }
   }, 420);
 }
 
@@ -7440,7 +7474,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(user.uid); } catch (e) { }
         try { subscribeAccountLeagues(); } catch (e) { }
-        if (!differentUser && loadState() && state.leagueId) { _subscribeLeague(state.leagueCode); enterLeague(); }
+        if (!differentUser && loadState() && state.leagueId && !cameFromExternalLink()) { _subscribeLeague(state.leagueCode); enterLeague(); }
         else { showSplash(true); }
       } else {
         // Firebase says no user — check localStorage session (offline/testing fallback)
@@ -7448,7 +7482,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try { unsubscribeAccountLeagues(); } catch (e) { }
         const session = getSession();
         if (session) {
-          if (loadState() && state.leagueId) { enterLeague(); }
+          if (loadState() && state.leagueId && !cameFromExternalLink()) { enterLeague(); }
           else { showSplash(true); }
         } else { showLanding(); }
       }
@@ -7456,7 +7490,7 @@ document.addEventListener('DOMContentLoaded', () => {
   } else {
     const session = getSession();
     if (session) {
-      if (loadState() && state.leagueId) { enterLeague(); }
+      if (loadState() && state.leagueId && !cameFromExternalLink()) { enterLeague(); }
       else { showSplash(true); }
     } else { showLanding(); }
   }

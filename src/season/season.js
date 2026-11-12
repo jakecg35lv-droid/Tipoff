@@ -6817,6 +6817,10 @@
   function maybeRestoreView() {
     var V = window.TipoffView;
     if (!V) return;
+    //  Followed a link in from the marketing site or the trivia site?
+    //  They are starting something, not resuming it. Leave them on
+    //  the league list.
+    if (V.external && V.external()) return;
     var lv = V.read();
     if (!lv || lv.mode !== 'season' || !lv.code) return;
     //  Already looking at the season app: nothing to restore, and
