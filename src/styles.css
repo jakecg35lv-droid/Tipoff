@@ -13031,3 +13031,136 @@ select:focus {
   .tsm-item-blurb { font-size: 12px; line-height: 1.45; }
   .ttc-star, .tsm-star { font-size: 9px; padding: 2px 6px; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   PROFILE — mobile first
+   Built narrow and allowed to widen, not a desktop layout
+   squeezed down. Everything below is the phone layout; the
+   only min-width query sits at the bottom.
+══════════════════════════════════════════════════════════ */
+.pf-sec { margin-bottom: 18px; }
+
+.pf-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pf-sec-h {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pf-sec-h span { color: var(--text); text-transform: none; letter-spacing: 0; }
+
+.pf-sec-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Career tiles: 2-up on a phone, never cramped ── */
+.pf-career {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pf-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 14px;
+  min-width: 0;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.pf-tile b {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  /*  "Member since" holds a date, not a count, so it has to be
+      allowed to shrink rather than overflow the tile.          */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-tile span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── League rows: full-width tap targets ── */
+.pf-leagues { display: flex; flex-direction: column; gap: 8px; }
+
+.pf-league {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 14px;
+  text-align: left;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.pf-league:hover { border-color: var(--border-2); background: rgba(255, 255, 255, 0.03); }
+.pf-league.is-here { border-color: rgba(242, 107, 33, 0.4); background: rgba(242, 107, 33, 0.06); cursor: default; }
+
+.pf-lg-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.pf-lg-main b {
+  font-size: 14.5px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pf-lg-main span {
+  font-size: 11.5px; color: var(--muted);
+  font-family: var(--font-display, inherit); letter-spacing: 0.06em;
+}
+
+.pf-lg-kind {
+  flex: none;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 5px;
+  color: var(--muted); background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+}
+.pf-lg-kind.season { color: var(--orange-light, #ff8a4c); background: rgba(242, 107, 33, 0.1); border-color: rgba(242, 107, 33, 0.28); }
+
+.pf-lg-go { flex: none; font-size: 20px; color: var(--muted); line-height: 1; }
+.pf-lg-here {
+  flex: none; font-size: 9.5px; font-weight: 800; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--orange-light, #ff8a4c);
+}
+
+.pf-empty {
+  margin: 0; padding: 18px 14px; text-align: center;
+  font-size: 13px; color: var(--muted);
+  border: 1px dashed var(--border); border-radius: 12px;
+}
+
+/* ── Desktop gets more columns, not different furniture ── */
+@media (min-width: 720px) {
+  .pf-career { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pf-tile { padding: 15px 16px; }
+  .pf-tile b { font-size: 22px; }
+}

@@ -26,8 +26,8 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
     rel="stylesheet" />
   <!-- ?v= must match the scripts below and CACHE_NAME in sw.js. -->
-  <link rel="stylesheet" href="src/styles.css?v=244" />
-  <link rel="stylesheet" href="src/season/season.css?v=244" />
+  <link rel="stylesheet" href="src/styles.css?v=245" />
+  <link rel="stylesheet" href="src/season/season.css?v=245" />
 </head>
 
 <body>
@@ -1002,24 +1002,31 @@
           </div>
         </div>
 
-        <!-- Stats row -->
-        <div class="profile-stats-grid" id="profileStats"></div>
+        <!-- ── CAREER: account-level, survives switching leagues ──
+             The old page put League Rank / Proj. FPTS / Drafted up
+             here as if they were career numbers. They are scoped to
+             whichever league you happen to be standing in, so they
+             reset to zero on every new league — which is exactly how
+             they read. Account-wide totals belong at the top; the
+             current league gets its own clearly-named section below. -->
+        <div class="pf-sec">
+          <h3 class="pf-sec-h">Career</h3>
+          <div class="pf-career" id="profileCareer"></div>
+        </div>
 
-        <!-- Your Look: accent color used for your avatar ring, standings
-             row and draft picks so managers are distinguishable at a glance -->
-        <div class="panel look-panel">
-          <h3 class="panel-title">Your Color</h3>
-          <p class="panel-sub">Marks your picks, your standings row, and your avatar ring.</p>
-          <div class="look-swatches" id="lookSwatches">
-            <button type="button" class="look-swatch" data-color="#f26b21" style="--sw:#f26b21" aria-label="Orange"></button>
-            <button type="button" class="look-swatch" data-color="#4f8ff7" style="--sw:#4f8ff7" aria-label="Blue"></button>
-            <button type="button" class="look-swatch" data-color="#34d399" style="--sw:#34d399" aria-label="Green"></button>
-            <button type="button" class="look-swatch" data-color="#f6a84e" style="--sw:#f6a84e" aria-label="Gold"></button>
-            <button type="button" class="look-swatch" data-color="#a78bfa" style="--sw:#a78bfa" aria-label="Purple"></button>
-            <button type="button" class="look-swatch" data-color="#22d3ee" style="--sw:#22d3ee" aria-label="Teal"></button>
-            <button type="button" class="look-swatch" data-color="#f472b6" style="--sw:#f472b6" aria-label="Pink"></button>
-            <button type="button" class="look-swatch" data-color="#94a3b8" style="--sw:#94a3b8" aria-label="Slate"></button>
+        <!-- Every league on the account, not just this one -->
+        <div class="pf-sec">
+          <div class="pf-sec-head">
+            <h3 class="pf-sec-h">Your leagues</h3>
+            <span class="pf-sec-count" id="profileLeagueCount"></span>
           </div>
+          <div class="pf-leagues" id="profileLeagues"></div>
+        </div>
+
+        <!-- The league-scoped numbers, labelled as such -->
+        <div class="pf-sec" id="profileThisLeagueSec">
+          <h3 class="pf-sec-h">In <span id="profileThisLeagueName">this league</span></h3>
+          <div class="profile-stats-grid" id="profileStats"></div>
         </div>
 
         <!-- Invite / Refer a Friend -->
@@ -1745,7 +1752,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=244"></script>
+  <script src="firebase-config.js?v=245"></script>
 
   <!-- ══════════════════════════════════════════════════════════
        ?v= IS NOT DECORATION. BUMP IT ON EVERY RELEASE.
@@ -1768,14 +1775,14 @@
        its STATIC_ASSETS list, or the service worker precaches URLs
        the page never asks for.
   ══════════════════════════════════════════════════════════ -->
-  <script src="data/bracket.js?v=244"></script>
-  <script src="data/players.js?v=244"></script>
+  <script src="data/bracket.js?v=245"></script>
+  <script src="data/players.js?v=245"></script>
   <!-- Loaded before app.js so window.Analytics exists at first call.
        No-ops until a PostHog key is set in analytics.js. -->
-  <script src="src/analytics.js?v=244"></script>
-  <script src="src/app.js?v=244"></script>
-  <script src="data/conference-players.js?v=244"></script>
-  <script src="src/season/season.js?v=244"></script>
+  <script src="src/analytics.js?v=245"></script>
+  <script src="src/app.js?v=245"></script>
+  <script src="data/conference-players.js?v=245"></script>
+  <script src="src/season/season.js?v=245"></script>
 
   <!-- Service Worker Registration -->
   <script>

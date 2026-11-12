@@ -2380,6 +2380,82 @@ function renderProfile() {
     heroInfo.appendChild(badge);
   }
 
+  /*  ── CAREER: account-level ────────────────────────────────
+      accountLeagues() is the users/{uid}.leagues list, so these
+      numbers are the same on every device and do not change when
+      you switch leagues. That is the whole distinction this page
+      was missing.                                               */
+  const careerEl = document.getElementById('profileCareer');
+  const leagues = (function () { try { return accountLeagues(); } catch (e) { return []; } })();
+  if (careerEl) {
+    const season = leagues.filter(function (l) { return l && l.kind === 'season'; }).length;
+    const tourn = leagues.length - season;
+    //  Firebase records when the account was created. Fall back to
+    //  nothing rather than inventing a date.
+    let since = '';
+    try {
+      const ct = window._auth && window._auth.currentUser &&
+        window._auth.currentUser.metadata && window._auth.currentUser.metadata.creationTime;
+      if (ct) {
+        const d = new Date(ct);
+        if (!isNaN(d)) since = d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+      }
+    } catch (e) { }
+
+    function tile(val, label) {
+      return '<div class="pf-tile"><b>' + esc(String(val)) + '</b><span>' + esc(label) + '</span></div>';
+    }
+    careerEl.innerHTML =
+      tile(leagues.length, leagues.length === 1 ? 'League' : 'Leagues') +
+      tile(tourn, 'Tournament') +
+      tile(season, 'Season') +
+      (since ? tile(since, 'Member since') : '');
+  }
+
+  /*  ── EVERY league on the account ──────────────────────────
+      Tapping one opens it. A profile that only knows about the
+      league you are already inside is a league page.           */
+  const lgEl = document.getElementById('profileLeagues');
+  const lgCount = document.getElementById('profileLeagueCount');
+  if (lgCount) lgCount.textContent = leagues.length ? String(leagues.length) : '';
+  if (lgEl) {
+    if (!leagues.length) {
+      lgEl.innerHTML = '<p class="pf-empty">No leagues yet. Create or join one from the league list.</p>';
+    } else {
+      const here = String(state.leagueCode || '').toUpperCase();
+      lgEl.innerHTML = leagues.slice().sort(_leagueOrder).map(function (l) {
+        const code = String(l.code || '').toUpperCase();
+        const isHere = code && code === here;
+        return '<button class="pf-league' + (isHere ? ' is-here' : '') + '"' +
+          ' data-code="' + esc(code) + '" data-kind="' + esc(l.kind || 'tournament') + '">' +
+          '<span class="pf-lg-main"><b>' + esc(l.name || 'League') + '</b>' +
+          '<span>' + esc(code) + '</span></span>' +
+          '<span class="pf-lg-kind' + (l.kind === 'season' ? ' season' : '') + '">' +
+            (l.kind === 'season' ? 'Season' : 'Tournament') + '</span>' +
+          (isHere ? '<span class="pf-lg-here">Here</span>' : '<span class="pf-lg-go">&#8250;</span>') +
+          '</button>';
+      }).join('');
+      lgEl.querySelectorAll('.pf-league').forEach(function (b) {
+        b.addEventListener('click', function () {
+          const code = b.dataset.code;
+          if (!code || b.classList.contains('is-here')) return;
+          if (b.dataset.kind === 'season') {
+            try { window.TipoffSeason && window.TipoffSeason.open(code); } catch (e) { }
+          } else {
+            _loadAndEnterLeague(code);
+          }
+        });
+      });
+    }
+  }
+
+  //  Name the league these numbers belong to, so "#1 / 0 / 0" can
+  //  never be mistaken for a career record again.
+  const tlName = document.getElementById('profileThisLeagueName');
+  if (tlName) tlName.textContent = state.leagueName || 'this league';
+  const tlSec = document.getElementById('profileThisLeagueSec');
+  if (tlSec) tlSec.style.display = state.leagueId ? '' : 'none';
+
   // Stats
   const statsEl = document.getElementById('profileStats');
   if (statsEl) {
