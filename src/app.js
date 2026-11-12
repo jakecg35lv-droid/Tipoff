@@ -7463,7 +7463,17 @@ var _newsFetching = false;
 function renderNews(forceRefresh, opts) {
   opts = opts || {};
   var feed = opts.feed || document.getElementById('newsFeed');
-  var teams = opts.teams !== undefined ? opts.teams : null;
+  /*  THREE states, not two. Flattening undefined to null here is
+      what broke the tournament feed: it stopped asking
+      getActiveTeamNames() and rendered one untiered list on every
+      load, refresh or not.
+
+        undefined -> work it out from the selected tournament
+        an array  -> use exactly these schools (season roster)
+        null      -> there are no schools; render one flat feed
+
+      Pass it straight through and let displayNewsArticles decide. */
+  var teams = opts.teams;
   var refreshBtn = opts.refreshBtn !== undefined
     ? opts.refreshBtn : document.getElementById('newsRefreshBtn');
 
@@ -7524,12 +7534,10 @@ function renderNews(forceRefresh, opts) {
 //  is mislabelled — a reader can always see which articles are about
 //  their teams and which are not.
 function displayNewsArticles(articles, feed, teamsOverride) {
-  //  undefined means "work it out from the tournament". null is a
-  //  real answer meaning "no school list", which renders a single
-  //  untiered feed — correct for a season league before the draft.
-  var teamNames = teamsOverride !== undefined && teamsOverride !== null
-    ? teamsOverride
-    : (teamsOverride === null ? null : getActiveTeamNames());
+  //  Only undefined means "not specified". null is a real answer —
+  //  "no school list" — and renders a single untiered feed, which is
+  //  correct for a season league before the draft.
+  var teamNames = teamsOverride === undefined ? getActiveTeamNames() : teamsOverride;
 
   var byDate = function (a, b) {
     return new Date(b.lastModified || b.published || 0) - new Date(a.lastModified || a.published || 0);

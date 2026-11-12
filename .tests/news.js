@@ -40,7 +40,7 @@ ok('display accepts an override', /function displayNewsArticles\(articles, feed,
 //  null is a real value meaning "no school list" (a season league
 //  before the draft), and must not fall through to the tournament.
 ok('null means untiered, not "use the tournament"',
-  /teamsOverride === null \? null : getActiveTeamNames\(\)/.test(app));
+  /teamsOverride === undefined \? getActiveTeamNames\(\) : teamsOverride/.test(app));
 ok('the tournament mount still works unchanged',
   /document\.getElementById\('newsFeed'\)/.test(app));
 
@@ -126,6 +126,56 @@ ok('image styles still exist', /\.news-featured-img \{/.test(css) && /\.news-car
 //  The no-image layout still has to work — plenty of articles have
 //  no images[] entry at all.
 ok('the bare fallback layout is kept', /\.news-featured-badge--bare \{/.test(css));
+
+/*  ══ The three-state truth table ══════════════════════════
+    This is the bug that shipped: renderNews normalised
+    `opts.teams` with `!== undefined ? opts.teams : null`, which
+    flattened undefined into null. displayNewsArticles then took
+    null to mean "no school list" and stopped calling
+    getActiveTeamNames() — so the TOURNAMENT news page rendered one
+    untiered feed on every load, not just after a refresh. The
+    "your teams first" grouping was simply gone.
+
+    There are three states and they must stay three:
+      undefined -> derive from the selected tournament
+      array     -> use exactly these schools
+      null      -> no schools, one flat feed
+
+    Run the real resolution logic rather than pattern-matching it. */
+(function truthTable() {
+  const rn = app.slice(app.indexOf('function renderNews(forceRefresh, opts)'), app.indexOf('function displayNewsArticles'));
+  const dm = app.match(/var teamNames = ([^;]+);/);
+  ok('the normaliser passes teams through untouched',
+    /var teams = opts\.teams;/.test(rn), (rn.match(/var teams = [^;]+;/) || [''])[0]);
+  ok('resolution happens in one place', !!dm);
+
+  //  Rebuild the two lines exactly as shipped and exercise them.
+  const resolve = new Function('teamsOverride', 'getActiveTeamNames',
+    'var teamNames = ' + dm[1] + '; return teamNames;');
+  const FIELD = ['arizona', 'byu'];
+  const gatn = function () { return FIELD; };
+
+  const norm = new Function('opts', 'opts = opts || {}; ' +
+    (rn.match(/var teams = opts\.teams;/) || ['var teams = opts.teams;'])[0] + ' return teams;');
+
+  function run(opts) { return resolve(norm(opts), gatn); }
+
+  ok('tournament first load is tiered by the event field',
+    JSON.stringify(run(undefined)) === JSON.stringify(FIELD), JSON.stringify(run(undefined)));
+  ok('tournament Refresh keeps the tiering',
+    JSON.stringify(run({})) === JSON.stringify(FIELD), JSON.stringify(run({})));
+  //  The refresh listener re-invokes with the same opts object, so
+  //  a feed-only opts must behave identically.
+  ok('a feed-only opts still tiers',
+    JSON.stringify(run({ feed: 1 })) === JSON.stringify(FIELD), JSON.stringify(run({ feed: 1 })));
+  ok('an explicit roster is used verbatim',
+    JSON.stringify(run({ teams: ['duke'] })) === JSON.stringify(['duke']));
+  ok('explicit null stays untiered', run({ teams: null }) === null);
+})();
+
+//  The refresh button hands its own opts back in, so whatever the
+//  first call resolved to must be reproducible on the second.
+ok('refresh reuses the same opts', /renderNews\(true, opts\)/.test(app));
 
 // ── Shipped ──────────────────────────────────────────────
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
