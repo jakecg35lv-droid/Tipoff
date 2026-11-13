@@ -12,16 +12,25 @@ T('restore cannot trigger a second open',
 T('all four boot branches consult the last view',
   (a.match(/&& !lastViewWantsSeason\(\)/g)||[]).length===4);
 T('helper exists', /function lastViewWantsSeason\(\)/.test(a));
-T('helper requires the league to be held locally', /tipoff-season-v1:' \+ uid \+ ':L:'/.test(a));
+//  The league check is by CODE across any bucket now: keying it on
+//  the uid raced with Firebase's async auth and a season refresh
+//  landed in the tournament. See lastview.js for the full account.
+T('helper requires the league to be held locally',
+  /const suffix = ':L:' \+ code;/.test(a) && /indexOf\('tipoff-season-v1:'\) === 0/.test(a));
 T('helper ignores external arrivals', /if \(cameFromExternalLink\(\)\) return false;/.test(a));
 
 // --- behaviour of the helper ---
-const m={}; global.localStorage={getItem:k=>k in m?m[k]:null,setItem:(k,v)=>{m[k]=String(v)},removeItem:k=>{delete m[k]}};
+//  length/key are required by the by-code league scan, and
+//  getSession by _viewUid's synchronous uid fallback.
+const m={}; global.localStorage={getItem:k=>k in m?m[k]:null,setItem:(k,v)=>{m[k]=String(v)},removeItem:k=>{delete m[k]},
+  get length(){return Object.keys(m).length},key:i=>Object.keys(m)[i]};
 global._uid=()=>'u1';
+global.getSession=()=>({uid:global._uid()});
 global.performance={getEntriesByType:()=>[{type:'reload'}]};
 global.document={referrer:''}; global.location={hostname:'app.tipofffantasy.com'}; global.URL=URL;
 const grab=(src,n)=>{const i=src.indexOf('function '+n+'(');let d=0,j=src.indexOf('{',i);for(let k=j;k<src.length;k++){const c=src[k];if(c==='{')d++;else if(c==='}'){d--;if(!d)return src.slice(i,k+1);}}};
-eval("var LAST_VIEW_KEY='tipoff-last-view';"+grab(a,'_lastViewKey')+grab(a,'rememberView')+grab(a,'readLastView')
+eval("var LAST_VIEW_KEY='tipoff-last-view';"+grab(a,'_sessionUid')+grab(a,'_viewUid')+grab(a,'_lastViewKey')
+     +grab(a,'rememberView')+grab(a,'readLastView')
      +grab(a,'cameFromExternalLink')+grab(a,'lastViewWantsSeason'));
 
 T('no last view -> tournament boot wins', lastViewWantsSeason()===false);

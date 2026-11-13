@@ -599,10 +599,32 @@ function dismissToast(el) {
 const LAST_VIEW_KEY = 'tipoff-last-view';
 let _viewRestored = false;          // one restore per page load, see above
 
-function _lastViewKey() {
+/*  ── The uid has to be available SYNCHRONOUSLY ─────────────
+    _uid() reads window._auth.currentUser, which Firebase fills in
+    asynchronously. Every boot path below runs `lastViewWantsSeason()`
+    to decide season-vs-tournament, and two of them run while that is
+    still null — the branches that fall back to a localStorage session
+    when Firebase reports no user. On those, _uid() is null by
+    definition, not just sometimes.
+
+    The consequence was the bug: the season module WRITES the record
+    under `tipoff-last-view:<realUid>` once auth has landed, and boot
+    READS `tipoff-last-view:anon`. Different key, nothing found, so
+    the gate said "not season" and enterLeague() dropped the user into
+    whatever tournament league state.leagueId happened to hold.
+
+    The session in localStorage carries the uid and is readable with
+    no network and no Firebase, so it closes the window.          */
+function _sessionUid() {
+  try { const s = getSession(); return (s && s.uid) || ''; } catch (e) { return ''; }
+}
+function _viewUid() {
   let uid = '';
   try { uid = _uid() || ''; } catch (e) { }
-  return LAST_VIEW_KEY + ':' + (uid || 'anon');
+  return uid || _sessionUid() || '';
+}
+function _lastViewKey() {
+  return LAST_VIEW_KEY + ':' + (_viewUid() || 'anon');
 }
 function rememberView(mode, code, page) {
   if (!mode || !page) return;
@@ -614,6 +636,12 @@ function rememberView(mode, code, page) {
 }
 function readLastView() {
   try {
+    /*  Strictly per-uid. An earlier draft of this fix also scanned
+        for records under OTHER uids as a last resort, which broke
+        account isolation for no gain: _viewUid() already falls back
+        to the session's uid, and the only case it cannot cover is
+        "no session either" — where boot shows the landing page and
+        never consults this at all.                                */
     const raw = localStorage.getItem(_lastViewKey());
     const v = raw ? JSON.parse(raw) : null;
     if (!v || !v.mode || !v.page) return null;
@@ -682,9 +710,21 @@ function lastViewWantsSeason() {
     if (cameFromExternalLink()) return false;
     const lv = readLastView();
     if (!lv || lv.mode !== 'season' || !lv.code) return false;
-    const uid = (function () { try { return _uid() || 'anon'; } catch (e) { return 'anon'; } })();
-    const key = 'tipoff-season-v1:' + uid + ':L:' + String(lv.code).toUpperCase();
-    return !!localStorage.getItem(key);
+    /*  Does ANY bucket hold this league? Keying this on the uid hit
+        the same race: on the session-fallback boot paths the uid is
+        null, the lookup missed, and a season refresh landed in the
+        tournament. The league CODE is the identifier that matters
+        here — whose bucket it sits in is decided at restore time by
+        the season module, which checks the real uid.             */
+    const code = String(lv.code).toUpperCase();
+    const suffix = ':L:' + code;
+    const uid = _viewUid();
+    if (uid && localStorage.getItem('tipoff-season-v1:' + uid + suffix)) return true;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf('tipoff-season-v1:') === 0 && k.indexOf(suffix) === k.length - suffix.length) return true;
+    }
+    return false;
   } catch (e) { return false; }
 }
 
