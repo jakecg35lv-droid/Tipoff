@@ -1430,17 +1430,9 @@ select:focus {
   filter: drop-shadow(0 0 5px rgba(242, 107, 33, 0.6));
 }
 
-/* Baskets - filled dots, hidden until faded in */
-.mm-court-basket {
-  fill: #f26b21;
-  opacity: 0;
-  filter: drop-shadow(0 0 6px rgba(242, 107, 33, 0.9));
-}
-
-/* ── Logo / title / glow - hidden until .playing ── */
-.mm-intro-logo,
-.mm-intro-title,
-.mm-intro-sub {
+/*  Hidden until .playing, so a cold paint never flashes the
+    wordmark before the court has drawn. */
+.mm-intro-word {
   opacity: 0;
 }
 
@@ -1463,197 +1455,125 @@ select:focus {
   gap: 12px;
 }
 
-.mm-intro-logo {
-  display: block;
-  width: 110px;
-  height: 110px;
-  border-radius: 22px;
-  mix-blend-mode: screen;
-}
-
-.mm-intro-title {
-  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
-  font-size: 46px;
-  font-weight: 300;
-  letter-spacing: 0.32em;
-  color: #fff;
-  text-transform: uppercase;
-  text-shadow: 0 0 60px rgba(242, 107, 33, 0.5), 0 2px 24px rgba(0, 0, 0, 0.8);
-}
-
-.mm-intro-sub {
-  font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  font-weight: 400;
-  letter-spacing: 0.38em;
-  text-transform: uppercase;
-  color: rgba(242, 107, 33, 0.65);
-}
-
-.mm-flash {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: rgba(255, 255, 255, 0);
-}
-
 /* ════════════════════════════════════════════════════════════
    .playing - added by JS after reflow, triggers everything
    Draw order mirrors the nav icon: outline → interior lines
    ══════════════════════════════════════════════════════════ */
 
-/* 1. Court outer boundary - first to draw */
-#mmIntro.playing .mm-court-outline {
-  animation: mm-draw 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.0s forwards;
-}
-
-/* 2. Half-court line */
-#mmIntro.playing .mm-court-half {
-  animation: mm-draw 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s forwards;
-}
-
-/* 3. Center circle */
-#mmIntro.playing .mm-court-circle {
-  animation: mm-draw 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.65s forwards;
-}
-
-/* 4. Key boxes */
-#mmIntro.playing .mm-court-key {
-  animation: mm-draw 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.8s forwards;
-}
-
-/* 5. 3-point arcs */
-#mmIntro.playing .mm-court-3pt {
-  animation: mm-draw 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94) 1.05s forwards;
-}
-
-/* 6. Baskets fade in as filled dots */
-#mmIntro.playing .mm-court-basket {
-  animation: fade-in 0.35s ease 1.5s both;
-}
-
-@keyframes mm-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-/* Glow orb expands slowly */
-#mmIntro.playing .mm-glow {
-  animation: mm-glow-expand 1.3s ease 0.0s both;
-}
-
-@keyframes mm-glow-expand {
-  from {
-    transform: scale(0.1);
-    opacity: 0;
-  }
-
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* Logo + title - hidden from layout inside the intro (appear on splash instead) */
-#mmIntro .mm-intro-logo,
-#mmIntro .mm-intro-title {
-  display: none;
-}
-
-/* Tagline: big, centered over the court */
-#mmIntro .mm-intro-sub {
+/*  The wordmark the court resolves into. Barlow Condensed via
+    --font-display, the same face the splash and every page header
+    use, so the intro hands off to a splash in the same voice
+    instead of introducing a typeface that appears nowhere else. */
+.mm-intro-word {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: max-content;
-  max-width: 92vw;
-  text-align: center;
-  font-size: clamp(24px, 8vw, 40px);
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  line-height: 1.05;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(44px, 16vw, 92px);
+  letter-spacing: 0.3em;
+  /*  Tracked-out type pads only the RIGHT of the last glyph, which
+      shifts an optically centred word left by half the tracking. */
+  text-indent: 0.3em;
+  line-height: 1;
   color: #fff;
-  text-shadow:
-    0 0 30px rgba(242, 107, 33, 0.55),
-    0 0 70px rgba(242, 107, 33, 0.28),
-    0 2px 18px rgba(0, 0, 0, 0.85);
+  text-transform: uppercase;
   white-space: nowrap;
+  text-shadow: 0 0 60px rgba(242, 107, 33, 0.45), 0 2px 24px rgba(0, 0, 0, 0.8);
 }
 
-#mmIntro .mm-intro-sub span {
-  display: block;
-  opacity: 0;
-  will-change: transform, opacity, filter;
+/* ══════════════════════════════════════════════════════════
+   TIMELINE — hard budget 2.5s, door to door
+   ──────────────────────────────────────────────────────────
+   Court draws, dims, and resolves into the wordmark. Every
+   number below is load-bearing: the last motion ends at 1.50s,
+   the hold runs to 1.70s, and showSplash() crossfades for
+   0.55s, finishing at 2.25s. That leaves 250ms of headroom.
+
+   Before this the sequence ran to 2.06s, then sat on a fixed
+   2.3s setTimeout and an 0.8s crossfade — about 1.1s of dead
+   air at the end and a 3.15s gate before the splash was
+   usable. If you lengthen anything here, shorten something
+   else or move the JS timers in showSplash() to match.
+══════════════════════════════════════════════════════════ */
+
+/* 1. Court outer boundary - first to draw */
+#mmIntro.playing .mm-court-outline {
+  animation: mm-draw 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.0s forwards;
 }
 
-/* Third word gets the accent */
-#mmIntro .mm-intro-sub span:last-child {
-  color: var(--orange);
+/* 2. Half-court line */
+#mmIntro.playing .mm-court-half {
+  animation: mm-draw 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.30s forwards;
 }
 
-/* Each word settles in on its own beat, after the court finishes drawing */
-#mmIntro.playing .mm-intro-sub span:nth-child(1) {
-  animation: mm-word-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) 1.35s both;
+/* 3. Center circle */
+#mmIntro.playing .mm-court-circle {
+  animation: mm-draw 0.40s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.42s forwards;
 }
 
-#mmIntro.playing .mm-intro-sub span:nth-child(2) {
-  animation: mm-word-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) 1.48s both;
+/* 4. Key boxes */
+#mmIntro.playing .mm-court-key {
+  animation: mm-draw 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.55s forwards;
 }
 
-#mmIntro.playing .mm-intro-sub span:nth-child(3) {
-  animation: mm-word-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) 1.61s both;
+/* 5. 3-point arcs - last line of the court, done at 1.10s */
+#mmIntro.playing .mm-court-3pt {
+  animation: mm-draw 0.42s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.68s forwards;
 }
 
-@keyframes mm-word-in {
-  0% {
-    opacity: 0;
-    transform: translateY(20px) scale(0.94);
-    filter: blur(9px);
-    letter-spacing: 0.38em;
-  }
-
-  60% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0);
-    letter-spacing: 0.14em;
-  }
+@keyframes mm-draw {
+  to { stroke-dashoffset: 0; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  #mmIntro.playing .mm-intro-sub span {
-    animation: fade-in 0.4s ease 1.6s both !important;
-  }
-}
-
-/* Court dims behind the tagline as it appears */
-#mmIntro.playing .mm-bsv {
-  animation: mm-court-dim 0.7s ease 1.45s both;
-}
-
+/* Glow orb expands slowly */
 #mmIntro.playing .mm-glow {
-  animation: mm-glow-expand 1.3s ease 0.0s both, mm-court-dim 0.7s ease 1.45s both;
+  animation: mm-glow-expand 1.0s ease 0.0s both, mm-court-dim 0.50s ease 1.00s both;
+}
+
+/*  The court recedes as the wordmark arrives, so the two share
+    the same 0.50s window rather than queueing. */
+#mmIntro.playing .mm-bsv {
+  animation: mm-court-dim 0.50s ease 1.00s both;
 }
 
 @keyframes mm-court-dim {
-  from {
-    opacity: 1;
-  }
+  to { opacity: 0.18; transform: scale(0.97); }
+}
 
-  to {
-    opacity: 0.18;
+/*  The resolve. Starts while the court is still dimming so the
+    two read as one movement, and lands at 1.50s. */
+#mmIntro.playing .mm-intro-word {
+  animation: mm-word-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) 1.05s both;
+}
+
+@keyframes mm-word-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); letter-spacing: 0.5em; }
+  to   { opacity: 1; transform: none; letter-spacing: 0.3em; }
+}
+
+/*  Reduced motion: no drawing, no scaling, no letter-spacing
+    tween. The whole point of the intro is movement, so what is
+    left is a plain cross-dissolve that still respects the
+    2.5s budget. The previous rule only quieted the tagline and
+    left the court drawing itself, which is most of the motion. */
+@media (prefers-reduced-motion: reduce) {
+  #mmIntro.playing .mm-path {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+    opacity: 0;
+    animation: fade-in 0.4s ease 0s both !important;
+  }
+  #mmIntro.playing .mm-glow,
+  #mmIntro.playing .mm-bsv {
+    animation: mm-court-dim 0.4s ease 0.9s both !important;
+  }
+  #mmIntro.playing .mm-intro-word {
+    animation: fade-in 0.4s ease 1.0s both !important;
   }
 }
+
 
 @keyframes mm-logo-rise {
   0% {
@@ -1693,7 +1613,6 @@ select:focus {
 }
 
 /* Flash burst - fires just before crossfade */
-/* mm-flash removed */
 
 /* ── MODAL ──────────────────────────────────────────────── */
 /*  ── Modals: one centring rule for all of them ─────────────

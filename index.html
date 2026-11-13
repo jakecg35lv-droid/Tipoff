@@ -26,8 +26,8 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
     rel="stylesheet" />
   <!-- ?v= must match the scripts below and CACHE_NAME in sw.js. -->
-  <link rel="stylesheet" href="src/styles.css?v=253" />
-  <link rel="stylesheet" href="src/season/season.css?v=253" />
+  <link rel="stylesheet" href="src/styles.css?v=254" />
+  <link rel="stylesheet" href="src/season/season.css?v=254" />
 </head>
 
 <body>
@@ -258,20 +258,22 @@
       <!-- Bottom 3-point arc -->
       <path class="mm-path mm-court-3pt mm-court-3pt-b" pathLength="100"
             d="M 109,675 L 109,541 A 95,95 0 0 1 281,541 L 281,675"/>
-      <!-- Baskets (filled dots, same as nav icon) -->
-      <circle class="mm-court-basket" cx="195" cy="125" r="11"/>
-      <circle class="mm-court-basket" cx="195" cy="635" r="11"/>
+      <!-- No baskets. The filled dots read as stray circles at full
+           screen rather than hoops, and they were the last thing to
+           animate, which pushed the sequence past its budget. -->
     </svg>
     <!-- Central glow -->
     <div class="mm-glow"></div>
-    <!-- Logo + title -->
+    <!-- The court resolves into the wordmark. Barlow Condensed, the
+         same display face the rest of the app uses.
+
+         The logo <img>, the "TIPOFF FANTASY" title and .mm-flash all
+         lived here and are gone: the first two were display:none in
+         CSS (the image still being fetched on the critical path of a
+         2.5s intro) and the flash had no animation attached at all. -->
     <div class="mm-content">
-      <img class="mm-intro-logo" src="logo-icon.png" alt="Tipoff Fantasy" width="120" height="120" />
-      <div class="mm-intro-title">TIPOFF FANTASY</div>
-      <div class="mm-intro-sub"><span>Draft.</span><span>Compete.</span><span>Win.</span></div>
+      <div class="mm-intro-word" aria-hidden="true">TIPOFF</div>
     </div>
-    <!-- Flash burst -->
-    <div class="mm-flash"></div>
   </div>
 
   <!-- ═══════════════════════════════════════════
@@ -1752,7 +1754,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=253"></script>
+  <script src="firebase-config.js?v=254"></script>
 
   <!-- ══════════════════════════════════════════════════════════
        ?v= IS NOT DECORATION. BUMP IT ON EVERY RELEASE.
@@ -1775,14 +1777,14 @@
        its STATIC_ASSETS list, or the service worker precaches URLs
        the page never asks for.
   ══════════════════════════════════════════════════════════ -->
-  <script src="data/bracket.js?v=253"></script>
-  <script src="data/players.js?v=253"></script>
+  <script src="data/bracket.js?v=254"></script>
+  <script src="data/players.js?v=254"></script>
   <!-- Loaded before app.js so window.Analytics exists at first call.
        No-ops until a PostHog key is set in analytics.js. -->
-  <script src="src/analytics.js?v=253"></script>
-  <script src="src/app.js?v=253"></script>
-  <script src="data/conference-players.js?v=253"></script>
-  <script src="src/season/season.js?v=253"></script>
+  <script src="src/analytics.js?v=254"></script>
+  <script src="src/app.js?v=254"></script>
+  <script src="data/conference-players.js?v=254"></script>
+  <script src="src/season/season.js?v=254"></script>
 
   <!-- Service Worker Registration -->
   <script>

@@ -925,12 +925,20 @@ function showSplash(fromInit) {
     void intro.offsetWidth; // reflow so animations start clean
     intro.classList.add('playing');
 
-    // 2.3s = court drawn, all three tagline words landed + brief hold
+    /*  BUDGET: 2.5s door to door, and these timers own most of it.
+        The CSS timeline finishes its last motion at 1.50s; this holds
+        to 1.70s, then crossfades for 0.55s, so the splash is usable
+        at 2.25s with 250ms to spare.
+
+        It used to wait 2.3s and crossfade for 0.8s against a sequence
+        that ended at 2.06s — about 1.1s of dead air and a 3.15s gate.
+        If you change a delay in the .playing block in styles.css,
+        change these to match; nothing enforces it at runtime.      */
     setTimeout(function () {
       // Crisp crossfade
-      intro.style.transition = 'opacity 0.8s ease';
+      intro.style.transition = 'opacity 0.55s ease';
       intro.style.opacity = '0';
-      splash.style.transition = 'opacity 0.8s ease';
+      splash.style.transition = 'opacity 0.55s ease';
       splash.style.opacity = '1';
 
       setTimeout(function () {
@@ -943,8 +951,8 @@ function showSplash(fromInit) {
 
         // Fire staggered element entrances now that splash is fully visible
         splash.classList.add('reveal');
-      }, 850);
-    }, 2300);
+      }, 560);
+    }, 1700);
 
   } else {
     // ── No intro: fade splash in and immediately reveal elements ─
