@@ -72,14 +72,59 @@ const word = (function () {
     if (/font-family/.test(body)) { at = i; break; }
     from = i + 1;
   }
-  return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  //  Strip comments. This rule documents the two mistakes it fixes
+  //  by naming `text-indent` and `text-shadow`, and a raw search
+  //  then finds the explanation and reports the bug as present.
+  return at < 0 ? '' : css.slice(at, css.indexOf('}', at)).replace(/\/\*[\s\S]*?\*\//g, '');
 })();
 ok('the wordmark styling rule was found', word.length > 50);
 //  "Correct font" means the app's display face, not a one-off.
 ok('it uses the app display font', /font-family:\s*var\(--font-display\)/.test(word));
 ok('--font-display is Barlow Condensed', /--font-display:\s*'Barlow Condensed'/.test(css));
-//  Tracked-out type pads only the right of the last glyph.
-ok('tracking is optically centred', /text-indent/.test(word));
+/*  Tracked-out type pads only AFTER the last glyph, so the glyph
+    mass sits half a tracking-unit left of the box centre. The
+    compensation is half the tracking, to the right — and because
+    mm-word-in animates the tracking, it has to live in the same
+    transform so the two interpolate together. A fixed text-indent
+    was wrong twice: full tracking instead of half, and static
+    while the tracking moved.                                     */
+ok('centring is folded into the transform',
+  /transform:\s*translate\(calc\(-50% \+ 0\.15em\), -50%\)/.test(word));
+ok('no fixed text-indent is used', !/text-indent/.test(word));
+
+//  The X offset must equal letter-spacing / 2 at BOTH ends of the
+//  keyframes, or the word drifts sideways as it resolves.
+const kf = css.slice(css.indexOf('@keyframes mm-word-in'),
+                     css.indexOf('}', css.indexOf('to {', css.indexOf('@keyframes mm-word-in'))) + 200);
+const pairs = [...kf.matchAll(/letter-spacing:\s*([\d.]+)em[\s\S]{0,220}?translate\(calc\(-50% \+ ([\d.]+)em\)/g)]
+  .map(function (m) { return [parseFloat(m[1]), parseFloat(m[2])]; });
+ok('both keyframe ends were parsed', pairs.length === 2, JSON.stringify(pairs));
+pairs.forEach(function (pr) {
+  ok('offset is half the ' + pr[0] + 'em tracking',
+    Math.abs(pr[1] - pr[0] / 2) < 0.001, pr[1] + 'em');
+});
+//  The animation's end state must equal the base rule, or the word
+//  jumps the moment the animation hands control back.
+const baseOff = parseFloat((word.match(/translate\(calc\(-50% \+ ([\d.]+)em\)/) || [])[1]);
+ok('the animation lands on the base transform',
+  Math.abs(baseOff - pairs[1][1]) < 0.001, baseOff + 'em vs ' + pairs[1][1] + 'em');
+
+// ── Orange, the same one the court uses ──────────────────
+ok('the wordmark carries the court orange', /#f26b21/.test(word));
+ok('the court outline is that same orange',
+  /\.mm-court-outline \{[^}]*stroke: #f26b21/.test(css));
+//  White at the top, orange washing up from the baseline — a touch,
+//  not an orange word.
+ok('it is a wash, not a flat fill', /linear-gradient\(180deg[^;]*#f26b21 100%\)/.test(word));
+ok('the gradient is clipped to the glyphs', /background-clip: text/.test(word));
+/*  text-shadow paints behind the text box, and the fill is
+    transparent for the gradient, so a shadow had nothing to cast
+    from. The glow has to be a filter.                           */
+ok('the glow survives the transparent fill', /filter:\s*drop-shadow/.test(word));
+ok('no text-shadow glow that cannot render', !/text-shadow/.test(word));
+//  A transparent fill with no clip support leaves an invisible word.
+ok('there is a no-background-clip fallback',
+  /@supports not \(\(-webkit-background-clip: text\)/.test(css));
 ok('the wordmark animates in', /mm-intro-word \{[\s\S]{0,200}mm-word-in/.test(tl));
 ok('it lands with the court dim',
   Math.abs(lastEnd - 1.50) < 0.001, 'last motion at ' + lastEnd.toFixed(2) + 's');

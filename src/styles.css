@@ -1468,19 +1468,57 @@ select:focus {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  /*  ── Centring tracked-out type ──────────────────────────
+      letter-spacing adds its full value AFTER the last glyph, so
+      the box is one tracking-unit wider than the letterforms. The
+      glyph mass therefore sits HALF a tracking-unit left of the
+      box centre, and the box is what gets centred.
+
+      The compensation is half the tracking, to the right. I first
+      wrote `text-indent: 0.3em`, which is wrong twice over: it is
+      the full tracking rather than half, and it is a fixed value
+      while mm-word-in animates the tracking from 0.5em to 0.3em —
+      so the word also drifted sideways as it resolved.
+
+      Folding it into the transform means it interpolates in the
+      same keyframes as the tracking, and the word is optically
+      centred on every frame. Keep the two in step: the X offset
+      is always letter-spacing ÷ 2.                              */
+  transform: translate(calc(-50% + 0.15em), -50%);
   font-family: var(--font-display);
   font-weight: 600;
   font-size: clamp(44px, 16vw, 92px);
   letter-spacing: 0.3em;
-  /*  Tracked-out type pads only the RIGHT of the last glyph, which
-      shifts an optically centred word left by half the tracking. */
-  text-indent: 0.3em;
   line-height: 1;
-  color: #fff;
   text-transform: uppercase;
   white-space: nowrap;
-  text-shadow: 0 0 60px rgba(242, 107, 33, 0.45), 0 2px 24px rgba(0, 0, 0, 0.8);
+
+  /*  A touch of the court's own orange, washed up from the
+      baseline rather than colouring the whole word — the name
+      should still read as white with the court's light on it. */
+  color: #fff;
+  background: linear-gradient(180deg, #fff 0%, #fff 52%, #f26b21 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-fill-color: transparent;
+
+  /*  Glow in the same #f26b21 as .mm-court-outline. Applied as a
+      filter, not text-shadow: text-shadow paints BEHIND the text
+      box, and with the fill transparent for the gradient there is
+      nothing to cast from, so the glow vanished.               */
+  filter: drop-shadow(0 0 28px rgba(242, 107, 33, 0.55))
+          drop-shadow(0 2px 20px rgba(0, 0, 0, 0.85));
+}
+
+/*  If background-clip:text is unsupported, a transparent fill
+    leaves the word invisible. Fall back to solid white.       */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .mm-intro-word {
+    background: none;
+    -webkit-text-fill-color: #fff;
+    text-fill-color: #fff;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1549,8 +1587,19 @@ select:focus {
 }
 
 @keyframes mm-word-in {
-  from { opacity: 0; transform: translateY(14px) scale(0.97); letter-spacing: 0.5em; }
-  to   { opacity: 1; transform: none; letter-spacing: 0.3em; }
+  from {
+    opacity: 0;
+    letter-spacing: 0.5em;
+    /*  0.5em tracking -> 0.25em compensation. */
+    transform: translate(calc(-50% + 0.25em), calc(-50% + 14px)) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    letter-spacing: 0.3em;
+    /*  0.3em tracking -> 0.15em. Matches the base rule exactly, so
+        the word does not jump when the animation hands back. */
+    transform: translate(calc(-50% + 0.15em), -50%) scale(1);
+  }
 }
 
 /*  Reduced motion: no drawing, no scaling, no letter-spacing
@@ -7007,7 +7056,7 @@ select:focus {
   .tut-score-cell { padding: 10px 2px 9px; }
   .tut-score-cell b { font-size: 14px; }
   .tut-score-cell span { font-size: 8.5px; letter-spacing: 0.05em; }
-  .tut-code-display { font-size: 36px; letter-spacing: 7px; text-indent: 7px; }
+  .tut-code-display { font-size: 36px; letter-spacing: 7px; text-indent: 3.5px; }
 
   .tut-size-grid {
     gap: 6px;
@@ -7040,7 +7089,12 @@ select:focus {
   font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
   font-size: 44px;
   letter-spacing: 9px;
-  text-indent: 9px;
+  /*  Half the tracking, not all of it: letter-spacing pads only
+      after the last glyph, so the letterforms sit half a unit left
+      of centre. A full-width indent over-corrects by 2x and the
+      code reads visibly right of centre. Same mistake was in the
+      intro wordmark.                                            */
+  text-indent: 4.5px;
   color: #fff;
   text-align: center;
   padding: 18px 14px 15px;
