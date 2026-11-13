@@ -1709,6 +1709,13 @@
     //  When the draft actually finished. Everything that asks "was
     //  this game played before anyone had a roster?" keys off this.
     state.draft.completedAt = Date.now();
+    //  Any week already fetched during the draft was stored with
+    //  preDraft:false, because completedAt did not exist yet. Now it
+    //  does, so ask again.
+    try {
+      var voided = remarkPreDraftGames();
+      if (voided) console.log('[Season] voided ' + voided + ' game(s) played before the draft finished');
+    } catch (e) { console.warn('[Season] pre-draft sweep', e); }
     //  Week 1 is anchored to the DRAFT, not to a fixed calendar date.
     //  Previously every league measured from a hard-coded 2 November,
     //  so a league drafting on Sunday 8 November started on a week
@@ -1823,6 +1830,10 @@
   function startWeek() {
     state.day = 0;
     updateInjuries(state.week);
+    //  Heals leagues whose weeks were stored before this rule
+    //  existed, or before their draft had finished. Only ever
+    //  removes points, so it is safe to run on every week start.
+    try { remarkPreDraftGames(); } catch (e) { }
 
     //  ── Do not invent opponents ───────────────────────────
     //  generateWeekGames picks a random school from a conference list
@@ -2135,6 +2146,42 @@
     return gameDay.getTime() <= draftDay.getTime();
   }
 
+  /*  ── Re-mark games that were stored before the draft ended ──
+      preDraft and fpts are computed once, when a week is built, and
+      then PERSISTED into state.games. isPreDraftGame() returns false
+      whenever completedAt is null — so any week built while the
+      draft was still running froze every game as legal, with its
+      real fantasy points, forever. Finishing the draft afterwards
+      never went back to correct them.
+
+      That is how a two-man league that drafted on a Friday evening
+      came out holding a week of Wednesday and Thursday box scores:
+      the week had been fetched during the draft, the flag said
+      "fine", and nothing re-asked the question.
+
+      Called whenever completedAt changes. Idempotent, and it only
+      ever takes points away, so running it twice cannot inflate a
+      score.                                                      */
+  function remarkPreDraftGames() {
+    if (!state || !state.games) return 0;
+    var fixed = 0;
+    Object.keys(state.games).forEach(function (w) {
+      var byPlayer = state.games[w] || {};
+      Object.keys(byPlayer).forEach(function (pid) {
+        (byPlayer[pid] || []).forEach(function (g) {
+          if (!g) return;
+          var pre = isPreDraftGame(g);
+          if (pre && (!g.preDraft || g.fpts)) {
+            g.preDraft = true;
+            g.fpts = 0;
+            fixed++;
+          }
+        });
+      });
+    });
+    return fixed;
+  }
+
   //  Turns the two collections into the exact structure the
   //  simulation produced, so nothing downstream changes.
   function buildRealWeek(week, real) {
@@ -2268,6 +2315,11 @@
         var built = buildRealWeek(week, real);
         if (!Object.keys(built).length) return false;
         state.games[week] = built;
+        //  A week can land mid-draft, when completedAt is still null
+        //  and every game looks legal. Re-ask once it is stored so
+        //  the question is answered against the current state rather
+        //  than whatever was true when the fetch started.
+        try { remarkPreDraftGames(); } catch (e) { }
         //  Mark the week as fed by real data, so finalizeWeek can tell
         //  a real result from a simulated one and the UI can stop
         //  calling itself a preview.
@@ -2514,6 +2566,8 @@
         //  7pm tip would appear at breakfast as a live 0.0 and sit in
         //  the manager's decision queue all day.
         if (!gameHasStarted(g)) return;
+        //  Played before anyone owned him: not a result to lock.
+        if (g.preDraft || isPreDraftGame(g)) return;
         var rec = {
           playerId: s.playerId, day: d, fpts: g.fpts, dnp: g.dnp,
           final: gameIsFinal(g), gameId: g.gameId || null
@@ -3467,11 +3521,22 @@
     return Object.keys(rows).map(function (k) { return rows[k]; })
       .sort(function (a, b) { return (b.w + b.t / 2) - (a.w + a.t / 2) || b.pf - a.pf; });
   }
+  /*  A pre-draft game is not a game this roster played. It must not
+      add points, and it must not count toward `gp` either — gp is
+      what the Teams page uses to decide between a real total and a
+      projection, so counting one made a player who had scored
+      nothing show a confident 0.0 instead of his projection.
+
+      Checked live rather than trusting the stored flag, so a league
+      whose week was fetched mid-draft is correct on the next render
+      even before the sweep has run.                              */
   function seasonPoints(pid) {
     var total = 0, gp = 0;
     Object.keys(state.games).forEach(function (w) {
       (state.games[w][pid] || []).forEach(function (g) {
-        if (+w < state.week || g.day < state.day) { total += g.fpts; gp++; }
+        if (!(+w < state.week || g.day < state.day)) return;
+        if (g.preDraft || isPreDraftGame(g)) return;
+        total += g.fpts; gp++;
       });
     });
     return { total: total, gp: gp };
