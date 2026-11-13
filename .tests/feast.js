@@ -279,6 +279,58 @@ ok('a label and a startMs agree on the same day',
   dayKey('Monday, Nov 23', maui.startMs) + ' vs ' + dayFromMs(maui.startMs).key);
 ok('schedule chip styles exist', /\.cmb-chip \{/.test(css) && /\.cmb-pending-row \{/.test(css));
 
+// ══ The preview modal must not invent a bracket ═══════════
+/*  It used to build `seed: i + 1` from array position for any event
+    without seededTeams — stamping seeds on events explicitly marked
+    `seeded: false` — and then draw ceil(log2(n)) knockout rounds of
+    TBD. Feast Week, which is six separate tournaments with no
+    bracket at all, rendered a six-round draw with a "Round 4" and a
+    56 seed.                                                      */
+const prev = app.slice(app.indexOf('function openBracketPreview'), app.indexOf('function closeBracketPreview'));
+ok('the preview no longer fabricates seeds',
+  !/seed: i \+ 1/.test(prev), 'still generating seeds by index');
+ok('it no longer computes rounds from team count',
+  !/Math\.ceil\(Math\.log2/.test(prev));
+ok('it emits no invented TBD slots', !/bpm-tbd/.test(prev));
+
+//  It delegates to the SAME renderers the Bracket page uses, so the
+//  two surfaces cannot disagree about what an event is.
+ok('combined events get the merged schedule', /renderCombinedEvents\(bodyEl/.test(prev));
+ok('group events get their fixture list', /renderFixtureList\(bodyEl, t\)/.test(prev));
+ok('only published matchups draw a bracket',
+  /\(t\.matchups \|\| \[\]\)\.length[\s\S]{0,200}renderRegionSimple\(bodyEl/.test(prev));
+ok('an unpublished draw says so', /draw has not been published yet/.test(prev));
+
+//  Route every selectable event and check nothing gets a bracket it
+//  has not earned.
+function previewRoute(t) {
+  const f = t.bracketFormat;
+  if (f === 'combined') return 'schedule';
+  if (f === 'pod' || f === 'doubleheader' || f === 'group6') return 'fixtures';
+  if ((t.matchups || []).length) return 'bracket';
+  return 'pending';
+}
+const selectable2 = [];
+Object.values(TOURNAMENTS).forEach(function (g) {
+  g.forEach(function (t) { if (!t.comingSoon && t.canSelect !== false) selectable2.push(t); });
+});
+const fakeBracket = selectable2.filter(function (t) {
+  return previewRoute(t) === 'bracket' && !(t.matchups || []).length;
+});
+ok('no event draws a bracket without matchups', fakeBracket.length === 0,
+  fakeBracket.map(function (t) { return t.id; }).join(', '));
+//  An unseeded event must never show seed numbers.
+const unseeded = selectable2.filter(function (t) { return t.seeded === false; });
+ok('unseeded events exist to protect', unseeded.length > 0, String(unseeded.length));
+ok('Feast Week routes to the schedule', previewRoute(feast) === 'schedule');
+ok('Maui still draws its real bracket', previewRoute(byId('maui-2026')) === 'bracket');
+ok('Atlantis shows fixtures, not a bracket', previewRoute(byId('b4a-2026')) === 'fixtures');
+ok('Players Era shows fixtures, not a bracket', previewRoute(byId('players-era-2026')) === 'fixtures');
+
+//  And the button has to say what it opens.
+ok('the button label follows the route',
+  /\? ' View Schedule' : ' View Bracket'/.test(app));
+
 // ── Shipped ──────────────────────────────────────────────
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

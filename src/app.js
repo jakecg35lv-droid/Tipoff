@@ -5107,7 +5107,13 @@ function renderTournaments() {
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">' +
           '<path d="M3 5h5v5"/><path d="M3 19h5v-5"/><path d="M8 7.5h4v9h4"/><path d="M16 12h5"/>' +
           '</svg>' +
-          ' View Bracket' +
+          //  "View Bracket" on an event with no bracket is a promise
+          //  the modal cannot keep. Label it by what it shows.
+          (t.bracketFormat === 'combined' ||
+           t.bracketFormat === 'pod' ||
+           t.bracketFormat === 'doubleheader' ||
+           t.bracketFormat === 'group6' ||
+           !(t.matchups || []).length ? ' View Schedule' : ' View Bracket') +
           '</button>' +
           '<span class="tourn-team-count">' + t.teams.length + ' teams</span>' +
           '</div>';
@@ -5147,6 +5153,23 @@ function renderTournaments() {
 }
 
 // ── Bracket preview modal ─────────────────────────────────
+/*  ── The preview shows what the EVENT is, not a bracket ────
+    This used to draw a knockout for anything with a team list.
+    Two inventions, both on screen at once:
+
+      1. Seeds. `(t.teams||[]).map((name,i) => ({name, seed:i+1}))`
+         stamped 1..N on events that are explicitly `seeded: false`.
+         Feast Week showed a 56 seed; Maui and Atlantis showed seeds
+         their organisers never published.
+
+      2. Rounds. ceil(log2(n)) rounds of empty TBD slots, so Feast
+         Week — which is six separate tournaments and has no bracket
+         at all — rendered a six-round knockout with a "Round 4".
+
+    It now delegates to the same renderers the Bracket page uses, so
+    the preview and the page can never disagree: a combined event
+    gets the merged schedule, a group event gets its fixture list,
+    and only an event with PUBLISHED matchups draws a bracket.    */
 function openBracketPreview(tid) {
   const t = findTournamentById(tid);
   if (!t) return;
@@ -5160,62 +5183,38 @@ function openBracketPreview(tid) {
   if (titleEl) titleEl.textContent = t.name;
   if (subEl) subEl.textContent = t.dates + (t.location ? ' · ' + t.location : '');
 
-  // Seeded teams if available, else plain team list
-  const seeded = (t.seededTeams && t.seededTeams.length)
-    ? t.seededTeams
-    : (t.teams || []).map(function (name, i) { return { name: name, seed: i + 1 }; });
+  bodyEl.innerHTML = '';
+  const fmt = t.bracketFormat;
 
-  const n = seeded.length;
-  if (!n) {
-    bodyEl.innerHTML = '<div class="bpm-empty">Bracket not available yet.</div>';
+  if (fmt === 'combined') {
+    renderCombinedEvents(bodyEl, t, getBracketState() || { regions: {} });
     modal.style.display = 'flex';
     return;
   }
 
-  const rounds = Math.ceil(Math.log2(n));
-  const roundNames = t.roundNames || (function () {
-    const names = [];
-    for (let r = 0; r < rounds; r++) {
-      const left = Math.pow(2, rounds - r);
-      if (left === 2) names.push('Championship');
-      else if (left === 4) names.push('Semifinals');
-      else if (left === 8) names.push('Quarterfinals');
-      else names.push('Round of ' + left);
-    }
-    return names;
-  })();
-
-  let html = '<div class="bpm-bracket">';
-  for (let r = 0; r < rounds; r++) {
-    const matches = Math.pow(2, rounds - 1 - r);
-    html += '<div class="bpm-round">';
-    html += '<div class="bpm-round-label">' + esc(roundNames[r] || ('Round ' + (r + 1))) + '</div>';
-    for (let m = 0; m < matches; m++) {
-      html += '<div class="bpm-match">';
-      for (let side = 0; side < 2; side++) {
-        if (r === 0) {
-          const idx = m * 2 + side;
-          const tm = seeded[idx];
-          if (tm) {
-            html += '<div class="bpm-team">' +
-              '<span class="bpm-seed">' + (tm.seed || '') + '</span>' +
-              getSchoolLogoHTML(tm.name, 18) +
-              '<span class="bpm-name">' + esc(tm.name) + '</span>' +
-              '</div>';
-          } else {
-            html += '<div class="bpm-team bpm-tbd"><span class="bpm-seed">-</span><span class="bpm-name">TBD</span></div>';
-          }
-        } else {
-          html += '<div class="bpm-team bpm-tbd"><span class="bpm-seed">-</span><span class="bpm-name">TBD</span></div>';
-        }
-      }
-      html += '</div>';
-    }
-    html += '</div>';
+  if (fmt === 'pod' || fmt === 'doubleheader' || fmt === 'group6') {
+    renderFixtureList(bodyEl, t);
+    modal.style.display = 'flex';
+    return;
   }
-  html += '</div>';
 
-  bodyEl.innerHTML = html;
+  //  A real bracket, but only when the pairings are published. No
+  //  matchups means the draw is not out, and an empty bracket of
+  //  invented seeds is worse than saying so.
+  if ((t.matchups || []).length) {
+    const regData = _regionFromMatchups(t);
+    const bs = getBracketState() || { regions: {} };
+    renderRegionSimple(bodyEl, regData, bs, regData.name, t.roundNames || null);
+    try { renderPlacementGames(bodyEl, t); } catch (e) { }
+    modal.style.display = 'flex';
+    return;
+  }
+
+  bodyEl.innerHTML = '<div class="bpm-empty">' +
+    (t.teams && t.teams.length
+      ? esc(t.teams.length) + ' teams confirmed. The draw has not been published yet — it appears here as soon as it is.'
+      : 'Field not announced yet.') +
+    '</div>';
   modal.style.display = 'flex';
 }
 
