@@ -169,13 +169,14 @@ ok('autopick goes through the same gate',
 ok('combined format builds one region per sub-event',
   /bracketFormat === 'combined'[\s\S]{0,700}regions\.push\(_regionFromMatchups\(sub\)\)/.test(app));
 ok('renderBracket dispatches combined', /if \(fmt === 'combined'\)/.test(app));
-//  Both renderers assign innerHTML, so each sub-event needs its own
-//  node or the second would erase the first.
-ok('each sub-event gets its own node',
-  /renderCombinedEvents[\s\S]{0,1600}createElement\('section'\)[\s\S]{0,400}createElement\('div'\)/.test(app));
-ok('pod sub-events use the fixture list', /renderFixtureList\(body, sub\)/.test(app));
-ok('knockout sub-events keep their placement games',
-  /renderRegionSimple\(body, regData[\s\S]{0,200}renderPlacementGames\(body, sub\)/.test(app));
+/*  These three used to assert the stacked-sub-bracket design: a
+    <section> per sub-event, pods routed to renderFixtureList and
+    knockouts to renderRegionSimple + renderPlacementGames. That
+    design is gone on purpose — Feast Week has no bracket, so it
+    renders one merged schedule instead. The checks that replaced
+    them live in "The schedule view" below.                      */
+ok('every sub-event contributes to one merged list',
+  /\(t\.subEvents \|\| \[\]\)\.forEach/.test(app) && /function push\(key, label, game\)/.test(app));
 ok('combined styles exist', /\.cmb-event \{/.test(css) && /\.cmb-cap \{/.test(css));
 
 // ── Scope is honest about what was left out ──────────────
@@ -225,6 +226,58 @@ ok('blurb is escaped in the picker', /esc\(t\.blurb\)/.test(picker));
  'tsm-item--featured', 'tsm-star', 'tsm-item-blurb'].forEach(function (c) {
   ok('.' + c + ' is styled', css.indexOf('.' + c) >= 0);
 });
+
+// ══ The schedule view ═════════════════════════════════════
+//  Feast Week has no bracket. Stacking each sub-event's own
+//  bracket answered a question nobody asks; a merged day-by-day
+//  list of games answers "what is on today".
+const rce = app.slice(app.indexOf('function renderCombinedEvents'), app.indexOf('//  Appends the placement'));
+ok('combined view groups by day', /const days = \{\}/.test(rce) && /fx-day-h/.test(rce));
+ok('each game names its tournament', /cmb-chip/.test(rce));
+ok('it no longer stacks sub-brackets',
+  !/renderRegionSimple\(body/.test(rce) && !/renderFixtureList\(body/.test(rce));
+ok('live scores still appear', /fx-score/.test(rce) && /fx-final/.test(rce));
+
+//  Three tiers of certainty, kept apart rather than flattened.
+ok('published games use their own time', /\[g\.time, g\.tv\]/.test(rce));
+ok('known pairings with no time are marked TBD', /tbd: true/.test(rce) && /Time TBD/.test(rce));
+ok('events with nothing published are named, not invented',
+  /unscheduled\.push\(sub\)/.test(rce) && /Not announced yet/.test(rce));
+
+/*  THE UTC BUG. startMs is authored as new Date('2026-11-23') —
+    UTC midnight. Reading it back with LOCAL getters in any negative
+    offset returns the previous day, which put Maui under "Sunday,
+    Nov 22" and gave Rady a second, duplicate "Nov 25" heading that
+    never merged with the real one. Verified by running the real
+    helper across every US timezone.                              */
+const os2 = require('os');
+const fs2 = require('fs');
+const hs = app.indexOf('function _dayFromMs');
+const he = app.indexOf('function _dayKey');
+const tmp2 = path.join(os2.tmpdir(), 'feastday-' + process.pid + '.js');
+fs2.writeFileSync(tmp2, app.slice(hs, he) + '\nmodule.exports = _dayFromMs;');
+const dayFromMs = require(tmp2);
+fs2.unlinkSync(tmp2);
+ok('it reads the date in UTC', /getUTCFullYear\(\)[\s\S]{0,60}getUTCDate\(\)/.test(app.slice(hs, he)));
+[['maui-2026', 23], ['rady-2026', 26], ['players-era-2026', 24]].forEach(function (pair) {
+  const sub = byId(pair[0]);
+  const got = new Date(dayFromMs(sub.startMs).key).getDate();
+  ok(pair[0] + ' lands on the ' + pair[1] + 'th', got === pair[1], 'got the ' + got + 'th');
+});
+//  A fixture label and a startMs for the same day must produce the
+//  SAME key, or the day renders twice.
+const kiFrom = app.indexOf('function _dayKey');
+const kiTo = app.indexOf('function _eventChip');
+const tmp3 = path.join(os2.tmpdir(), 'feastkey-' + process.pid + '.js');
+fs2.writeFileSync(tmp3, app.slice(app.indexOf('const _MONTHS'), app.indexOf('function _dayFromMs')) +
+  app.slice(kiFrom, kiTo) + '\nmodule.exports = _dayKey;');
+const dayKey = require(tmp3);
+fs2.unlinkSync(tmp3);
+//  `maui` is already bound above; reuse it rather than shadowing.
+ok('a label and a startMs agree on the same day',
+  dayKey('Monday, Nov 23', maui.startMs) === dayFromMs(maui.startMs).key,
+  dayKey('Monday, Nov 23', maui.startMs) + ' vs ' + dayFromMs(maui.startMs).key);
+ok('schedule chip styles exist', /\.cmb-chip \{/.test(css) && /\.cmb-pending-row \{/.test(css));
 
 // ── Shipped ──────────────────────────────────────────────
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');

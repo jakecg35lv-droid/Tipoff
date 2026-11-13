@@ -12922,6 +12922,54 @@ select:focus {
 
 .cmb-cap b { color: var(--orange-light, #ff8a4c); }
 
+/*  Feast Week renders a merged day-by-day schedule, so the chip
+    identifying which tournament a game belongs to is the one piece
+    of furniture a single-event fixture list never needed.        */
+.cmb-count {
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.cmb-chip {
+  flex: none;
+  min-width: 96px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--orange-light, #ff8a4c);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fx-tbd { font-style: normal; font-size: 11.5px; color: var(--muted); opacity: 0.8; }
+
+.cmb-pending { opacity: 0.85; }
+.cmb-pending-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.cmb-pending-row:first-of-type { border-top: 0; }
+.cmb-pending-row b { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.cmb-pending-row span { font-size: 12px; color: var(--muted); }
+
+/*  On a phone the chip moves above the matchup rather than
+    stealing width from the team names.                         */
+@media (max-width: 560px) {
+  .cmb-chip { min-width: 0; width: 100%; order: -1; margin-bottom: 2px; }
+  .fx-game { flex-wrap: wrap; }
+  .cmb-count { font-size: 11.5px; }
+}
+
 .cmb-event {
   margin-bottom: 26px;
   padding-top: 18px;
@@ -12953,7 +13001,55 @@ select:focus {
 }
 
 @media (max-width: 560px) {
-  .cmb-event { margin-bottom: 20px; padding-top: 14px; }
+  /*  Feast Week renders a merged day-by-day schedule, so the chip
+    identifying which tournament a game belongs to is the one piece
+    of furniture a single-event fixture list never needed.        */
+.cmb-count {
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.cmb-chip {
+  flex: none;
+  min-width: 96px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--orange-light, #ff8a4c);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fx-tbd { font-style: normal; font-size: 11.5px; color: var(--muted); opacity: 0.8; }
+
+.cmb-pending { opacity: 0.85; }
+.cmb-pending-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.cmb-pending-row:first-of-type { border-top: 0; }
+.cmb-pending-row b { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.cmb-pending-row span { font-size: 12px; color: var(--muted); }
+
+/*  On a phone the chip moves above the matchup rather than
+    stealing width from the team names.                         */
+@media (max-width: 560px) {
+  .cmb-chip { min-width: 0; width: 100%; order: -1; margin-bottom: 2px; }
+  .fx-game { flex-wrap: wrap; }
+  .cmb-count { font-size: 11.5px; }
+}
+
+.cmb-event { margin-bottom: 20px; padding-top: 14px; }
   .cmb-ev-head { gap: 2px; }
   .cmb-ev-head h3 { font-size: 15.5px; }
   .cmb-ev-head span { font-size: 11.5px; }

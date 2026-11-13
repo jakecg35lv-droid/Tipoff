@@ -5285,53 +5285,166 @@ function renderBracket() {
   }
 }
 
-/*  Draws every sub-event of a combined tournament, each with the
-    renderer its own format calls for, under its own heading.
+/*  ── Feast Week is a SCHEDULE, not a bracket ───────────────
+    This used to stack each sub-event's own bracket or fixture list
+    under a heading. With two events that was defensible; with eight
+    it is six scrolls of mixed furniture, and it answers the wrong
+    question. Nobody opens Feast Week to study a bracket — there
+    isn't one. They open it to see what is on today.
 
-    Each sub-event gets a fresh child element because renderFixtureList
-    and renderRegionSimple both assign innerHTML on whatever node they
-    are handed — passing `content` twice would mean the second event
-    erased the first.                                                */
+    So: every game from every sub-event, merged and grouped by day,
+    each tagged with the event it belongs to, with live scores.
+
+    Three tiers of certainty, kept visibly apart rather than
+    flattened:
+      1. a published day and time        -> listed under that day
+      2. a known pairing, no time yet    -> listed under its day,
+                                            marked TBD
+      3. no pairings published at all    -> named at the bottom as
+                                            not yet announced
+    Inventing a tip time for tier 2, or a matchup for tier 3, is
+    exactly the class of mistake that put wrong games on the Maui
+    and Atlantis pages once already.                             */
+
+//  Fixture days read "Monday, Nov 23". Pull a sortable key out of
+//  one, falling back to the event's own start so an unparseable
+//  label still lands in roughly the right place instead of first.
+const _MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+/*  startMs values are authored as new Date('2026-11-23') — UTC
+    midnight. Reading them back with local getters in any negative
+    offset returns the PREVIOUS day: Maui rendered under "Sunday,
+    Nov 22" and Rady under a second, duplicate "Nov 25". Read the
+    UTC components and rebuild a LOCAL midnight from them, so the
+    key matches the one _dayKey() builds from a fixture label and
+    the two merge into one heading.                              */
+function _dayFromMs(ms) {
+  const d = new Date(ms || Date.now());
+  const local = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return {
+    key: local.getTime(),
+    label: local.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
+  };
+}
+
+function _dayKey(label, fallbackMs) {
+  const m = String(label || '').match(/([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})/);
+  if (m && _MONTHS[m[1].toLowerCase()] !== undefined) {
+    const yr = new Date(fallbackMs || Date.now()).getUTCFullYear();
+    return new Date(yr, _MONTHS[m[1].toLowerCase()], parseInt(m[2], 10)).getTime();
+  }
+  return fallbackMs || 0;
+}
+
+//  Short label for the chip beside each game.
+function _eventChip(t) {
+  const n = t.name || '';
+  if (/Fort Myers/i.test(n)) return (t.subtitle || '').split('·')[0].trim() || 'Fort Myers';
+  if (/ESPN Events/i.test(n)) return (t.subtitle || '').split('·')[0].trim() || 'ESPN Events';
+  if (/Rady/i.test(n)) return "Rady Children's";
+  return n;
+}
+
 function renderCombinedEvents(content, t, bracketData) {
   content.innerHTML = '';
 
-  const head = document.createElement('div');
-  head.className = 'cmb-head';
-  head.innerHTML =
-    '<p class="cmb-intro">' + esc(t.formatLabel || '') + '</p>' +
-    (t.eventCap
-      ? '<p class="cmb-cap"><b>Roster rule:</b> ' + esc(t.eventCap.note || '') + '</p>'
-      : '');
-  content.appendChild(head);
+  const live = (window._liveGames && typeof _liveGames === 'object') ? _liveGames : {};
+  function scoreFor(home, away) {
+    const hit = Object.values(live).find(function (g) {
+      return g && ((_sameSchool(g.home && g.home.school, home) && _sameSchool(g.away && g.away.school, away)) ||
+                   (_sameSchool(g.home && g.home.school, away) && _sameSchool(g.away && g.away.school, home)));
+    });
+    if (!hit) return '';
+    const hs = hit.home && hit.home.score, as = hit.away && hit.away.score;
+    if (hs == null || as == null) return '';
+    const flip = !_sameSchool(hit.home && hit.home.school, home);
+    return '<span class="fx-score">' + (flip ? as : hs) + '\u2013' + (flip ? hs : as) + '</span>' +
+      (hit.completed ? '<span class="fx-final">Final</span>' : '<span class="fx-live">Live</span>');
+  }
+
+  const days = {};          // key -> { label, games[] }
+  const unscheduled = [];   // events with nothing published
+  let gameCount = 0;
+
+  function push(key, label, game) {
+    if (!days[key]) days[key] = { label: label, games: [] };
+    days[key].games.push(game);
+    gameCount++;
+  }
 
   (t.subEvents || []).forEach(function (id) {
     const sub = findTournamentById(id);
     if (!sub) return;
+    const chip = _eventChip(sub);
 
-    const wrap = document.createElement('section');
-    wrap.className = 'cmb-event';
-    wrap.innerHTML =
-      '<header class="cmb-ev-head"><h3>' + esc(sub.name) + '</h3>' +
-      '<span>' + esc(sub.dates) + ' · ' + esc(sub.location || '') + '</span></header>';
-    content.appendChild(wrap);
+    const fx = sub.fixtures || [];
+    const fxCount = fx.reduce(function (n, d) { return n + ((d.games || []).length); }, 0);
 
-    const body = document.createElement('div');
-    wrap.appendChild(body);
-
-    const f = sub.bracketFormat;
-    if (f === 'pod' || f === 'doubleheader' || f === 'group6') {
-      renderFixtureList(body, sub);
+    if (fxCount) {
+      fx.forEach(function (d) {
+        const key = _dayKey(d.day, sub.startMs);
+        (d.games || []).forEach(function (g) {
+          push(key, d.day, { chip: chip, home: g.home, away: g.away, when: [g.time, g.tv].filter(Boolean).join(' \u00b7 ') });
+        });
+      });
       return;
     }
-    const regData = (window.MM_BRACKET_DATA || { regions: [] })
-      .regions.find(function (r) { return r.name === sub.name; });
-    if (!regData) {
-      body.innerHTML = '<p style="color:var(--muted);padding:16px">No bracket data for ' + esc(sub.name) + '.</p>';
+
+    //  Pairings known, no times. The day comes from the event's own
+    //  start date, which is sourced; the time is not invented.
+    if ((sub.matchups || []).length) {
+      const day = _dayFromMs(sub.startMs);
+      sub.matchups.forEach(function (pair) {
+        push(day.key, day.label, { chip: chip, home: pair[0], away: pair[1], when: '', tbd: true });
+      });
       return;
     }
-    renderRegionSimple(body, regData, bracketData, regData.name, sub.roundNames || null);
-    try { renderPlacementGames(body, sub); } catch (e) { console.warn('renderPlacementGames', e); }
+
+    unscheduled.push(sub);
   });
+
+  const ordered = Object.keys(days).sort(function (a, b) { return a - b; });
+
+  let html =
+    '<div class="cmb-head">' +
+      '<p class="cmb-intro">' + esc(t.formatLabel || '') + '</p>' +
+      (t.eventCap ? '<p class="cmb-cap"><b>Roster rule:</b> ' + esc(t.eventCap.note || '') + '</p>' : '') +
+      '<p class="cmb-count">' + (t.teams || []).length + ' teams \u00b7 ' +
+        (t.subEvents || []).length + ' tournaments \u00b7 ' +
+        gameCount + ' game' + (gameCount === 1 ? '' : 's') + ' scheduled</p>' +
+    '</div>';
+
+  if (!ordered.length && !unscheduled.length) {
+    content.innerHTML = html + '<p style="color:var(--muted);padding:20px">No schedule published yet.</p>';
+    return;
+  }
+
+  html += '<div class="fixture-wrap">' + ordered.map(function (k) {
+    const d = days[k];
+    return '<div class="fx-day"><h4 class="fx-day-h">' + esc(d.label) + '</h4>' +
+      d.games.map(function (g) {
+        return '<div class="fx-game">' +
+          '<span class="cmb-chip">' + esc(g.chip) + '</span>' +
+          '<span class="fx-team">' + getSchoolLogoHTML(g.home, 22) + esc(g.home) + '</span>' +
+          '<span class="fx-vs">vs</span>' +
+          '<span class="fx-team">' + getSchoolLogoHTML(g.away, 22) + esc(g.away) + '</span>' +
+          '<span class="fx-meta">' +
+            (scoreFor(g.home, g.away) || esc(g.when) || (g.tbd ? '<em class="fx-tbd">Time TBD</em>' : '')) +
+          '</span>' +
+        '</div>';
+      }).join('') + '</div>';
+  }).join('');
+
+  if (unscheduled.length) {
+    html += '<div class="fx-day cmb-pending"><h4 class="fx-day-h">Not announced yet</h4>' +
+      unscheduled.map(function (sub) {
+        return '<div class="cmb-pending-row"><b>' + esc(sub.name) + '</b>' +
+          '<span>' + (sub.teams || []).length + ' teams \u00b7 ' + esc(sub.dates) + '</span></div>';
+      }).join('') +
+      '<p class="fixture-tba">Games appear here automatically once the pairings are published.</p></div>';
+  }
+
+  html += '</div>';
+  content.innerHTML = html;
 }
 
 //  Appends the placement/consolation schedule under a knockout bracket.
