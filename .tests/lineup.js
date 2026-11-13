@@ -37,8 +37,20 @@ for (const [label, src] of [['slot row', body.slice(body.indexOf('var rows = slo
 }
 
 // ── 2. Every compact rule is scoped ──────────────────────
-const block = css.slice(css.indexOf('LINEUP: condensed'));
+/*  Bounded by an explicit marker, not end-of-file. Twice a rule
+    appended to this stylesheet landed inside this slice and was
+    reported as an unscoped selector. Moving the new rule fixes the
+    symptom; terminating the block fixes the cause.              */
+const _lb = css.indexOf('LINEUP: condensed');
+const _lm = css.indexOf('END LINEUP BLOCK', _lb);
+//  Cut at the terminator COMMENT's opener, not at its text, or the
+//  slice ends mid-comment and leaves a dangling "/*" that the
+//  comment stripper then reports as a selector.
+const _le = _lm > 0 ? css.lastIndexOf('/*', _lm) : -1;
+const block = css.slice(_lb, _le > 0 ? _le : undefined);
 ok('compact block found in season.css', block.length > 500);
+ok('the block is explicitly terminated', _le > 0,
+  'restore the END LINEUP BLOCK marker in season.css');
 
 //  Comments in this block legitimately NAME the shared classes to
 //  explain why they are scoped, so strip them before scanning —

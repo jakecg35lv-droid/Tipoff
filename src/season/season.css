@@ -1945,3 +1945,19 @@ button.ss-lab-chip[aria-expanded="true"] { box-shadow: 0 0 0 2px rgba(246, 197, 
       and it is the cheapest thing to give up on a phone.       */
   .ss-lineup .ss-hint { display: none; }
 }
+
+/* ── END LINEUP BLOCK ─────────────────────────────────────
+   Rules below here are NOT part of the lineup page. The
+   lineup test suite scans from the LINEUP header to this
+   marker; without it the scan ran to end-of-file and every
+   rule appended to this stylesheet was reported as an
+   unscoped lineup selector. Twice.                        */
+
+/*  Shown instead of a frozen 0:00 while waiting for the seat-holder's
+    device or the takeover window. Smaller, because the word is longer
+    than the clock it replaces and must not reflow the pill. */
+.ss-clock-wait {
+  font-size: 0.62em;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}

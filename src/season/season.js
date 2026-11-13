@@ -744,6 +744,14 @@
   //  genuinely disconnected manager cannot stall the room for long,
   //  but a live one is no longer robbed by ordinary network latency.
   var HOST_TAKEOVER_MS = 20000;
+  /*  If the HOST's device is also asleep, nobody covers and the draft
+      sits on 0:00 forever. After this longer window any live client
+      may step in, staggered by seat index so they fire one at a time
+      rather than all at once — the first push advances the pick, and
+      by the time the next window opens that client's snapshot shows
+      a different seat on the clock, so it stands down.            */
+  var ANY_TAKEOVER_MS = 45000;
+  var ANY_TAKEOVER_STAGGER_MS = 4000;
 
   function multiplayer() {
     return !!(syncDb() && state && state.league && state.league.code && SYNC.unsub);
@@ -1639,7 +1647,21 @@
     var seatIsHuman = !!(t && t.uid);
     var mineToPick = t.isUser;
     var hostCovers = isHost() && (!seatIsHuman || now >= d.endsAt + HOST_TAKEOVER_MS);
-    var mayAct = !mp || mineToPick || hostCovers;
+
+    /*  Last resort. A phone that is locked or a tab in the background
+        has its timers throttled to a crawl or stopped outright, so the
+        seat-holder's own device may never fire the autopick — and that
+        is exactly the situation autopick exists for. The host covers
+        after 20s, but if the host is the one who walked away, the
+        draft used to stall indefinitely on 0:00.
+
+        Everyone else waits longer still, staggered by seat order.  */
+    var myIdx = 0;
+    (state.teams || []).forEach(function (x, i) { if (x && x.isUser) myIdx = i; });
+    var anyCovers = seatIsHuman && !mineToPick &&
+      now >= d.endsAt + ANY_TAKEOVER_MS + myIdx * ANY_TAKEOVER_STAGGER_MS;
+
+    var mayAct = !mp || mineToPick || hostCovers || anyCovers;
 
     if (!mayAct) { paintClock(); return; }
 
@@ -1653,7 +1675,15 @@
         ui.confirmId = null;
         livePick(t.id, pid, 'auto');
         ui.toastMsg = 'Time ran out. ' + (qid ? 'Took ' + P(pid).name + ' from your queue.' : 'Autopicked ' + P(pid).name + '.'); ui.toastType = 'info';
-      } else livePick(t.id, botChoose(t.id), 'bot');
+      } else {
+        //  Covering for a human who is away. Honour their queue the
+        //  same way their own device would have, so a manager who
+        //  set one up is not punished for a dead tab.
+        var oq = (d.queue || []).filter(function (id) {
+          return available().some(function (a) { return a.id === id; });
+        })[0];
+        livePick(t.id, oq || botChoose(t.id), seatIsHuman ? 'auto' : 'bot');
+      }
       afterPick(); return;
     }
     paintClock();
@@ -4542,9 +4572,15 @@
     if (!root || state.phase !== 'draft') return;
     var left = timeLeft(), d = draftCfg();
     var urgent = d.status === 'live' && team(onClock()).isUser && left <= 10;
+    /*  A clock frozen on 0:00 is indistinguishable from a broken app.
+        It is not broken: this client is not allowed to make that pick
+        yet, and is waiting for either the seat-holder's own device or
+        the takeover window. Say so.                                */
+    var stalled = d.status === 'live' && left <= 0 && !team(onClock()).isUser;
     root.querySelectorAll('[data-ss-clock]').forEach(function (el) {
-      el.textContent = fmtClock(left);
+      el.textContent = stalled ? 'Autopicking' : fmtClock(left);
       el.classList.toggle('urgency', urgent);
+      el.classList.toggle('ss-clock-wait', stalled);
     });
     var ring = root.querySelector('[data-ss-ring]');
     if (ring) {
@@ -6438,6 +6474,27 @@
     document.body.classList.add('ss-open');
     clearInterval(open._tick);
     open._tick = setInterval(function () { try { draftTick(); } catch (er) { console.warn('[Season] tick', er); } }, 250);
+
+    /*  Browsers clamp setInterval in a hidden tab to about once a
+        second, then to once a minute after a few minutes, and a
+        locked phone stops it altogether. So the one device that most
+        needs to fire the autopick — the one belonging to the manager
+        who walked away — is the least likely to.
+
+        Firing a tick the instant the tab comes back means returning
+        to the app resolves an expired clock immediately instead of
+        waiting out whatever throttled interval was next. Wired once;
+        open() can run many times per session.                     */
+    if (!open._visWired) {
+      open._visWired = true;
+      var kick = function () {
+        if (document.visibilityState === 'hidden') return;
+        try { draftTick(); } catch (er) { }
+      };
+      document.addEventListener('visibilitychange', kick);
+      window.addEventListener('focus', kick);
+      window.addEventListener('pageshow', kick);
+    }
     if (!root._wired) {
       root.addEventListener('click', onClick);
       root.addEventListener('input', onInput);
