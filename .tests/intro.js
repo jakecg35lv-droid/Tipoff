@@ -148,6 +148,52 @@ const rmBlock = rm.slice(0, rm.indexOf('\n}\n', rm.indexOf('mm-intro-word')) + 3
 ok('reduced motion stops the court drawing', /\.mm-path \{[\s\S]{0,120}animation: none/.test(rmBlock));
 ok('reduced motion still shows the wordmark', /mm-intro-word \{[\s\S]{0,80}fade-in/.test(rmBlock));
 
+/*  ══ No font-swap jump on the wordmark ════════════════════
+    Reported: on mobile the word sits "slightly on the left for a
+    fraction of a second and then it looks good."
+
+    Cause: the stylesheet requests Barlow Condensed from Google
+    Fonts with display=swap, so the first paint uses the fallback
+    stack — 'Arial Narrow', system-ui — which is materially WIDER
+    than Barlow Condensed. The word was laid out and centred at the
+    fallback's width, then reflowed narrower the instant the
+    webfont landed. Worst on a phone, where the font request
+    competes with everything else on the connection.             */
+ok('the stylesheet still uses display=swap', /display=swap/.test(html));
+ok('gstatic is preconnected', /preconnect[^>]*fonts\.gstatic/.test(html));
+
+const hidden = css.slice(css.indexOf('.mm-intro-word {'), css.indexOf('#mmIntro.fonts-ready'));
+ok('the word is hidden until the real face loads', /visibility:\s*hidden/.test(hidden));
+/*  visibility, NOT display or opacity: it keeps the element in
+    layout so the animation runs underneath, which turns a late
+    font into a later fade-in rather than a jump.               */
+ok('it stays in layout while hidden',
+  !/\.mm-intro-word \{[^}]*display:\s*none/.test(css));
+ok('it is revealed by a fonts-ready class',
+  /#mmIntro\.fonts-ready \.mm-intro-word \{[^}]*visibility:\s*visible/.test(css));
+//  A synthesised bold on the fallback is wider still.
+ok('no faux-bold on the fallback', /font-synthesis:\s*none/.test(hidden));
+
+const fontGate = app.slice(app.indexOf('var markReady'), app.indexOf('if (fromInit && intro)'));
+ok('the font load is kicked explicitly', /document\.fonts\.load\('600 1em "Barlow Condensed"'\)/.test(fontGate));
+//  A font that never resolves must not mean a missing wordmark.
+ok('the wait is capped', /setTimeout\(markReady, 1200\)/.test(fontGate));
+ok('a rejected load still reveals it', /\.catch\(function \(\) \{ clearTimeout\(cap\); markReady\(\); \}\)/.test(fontGate));
+ok('a browser with no Font Loading API still reveals it',
+  /\} else \{\s*markReady\(\);/.test(fontGate));
+
+/*  The cap has to sit past the word's own cue but inside the hold,
+    or a slow font either shows the word mid-flight for no reason
+    or leaves it hidden when the crossfade starts.               */
+const CAP = 1.2;
+const wordCue = (function () {
+  const m = tl.match(/mm-intro-word \{[\s\S]{0,160}?mm-word-in\s+[\d.]+s[^;]*?\s([\d.]+)s/);
+  return m ? parseFloat(m[1]) : null;
+})();
+ok('the word cue was parsed', wordCue !== null, String(wordCue));
+ok('the cap is past the word cue', CAP > wordCue, CAP + 's vs ' + wordCue + 's');
+ok('the cap lands before the hold ends', CAP < hold, CAP + 's vs ' + hold + 's');
+
 // ── Shipped ──────────────────────────────────────────────
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const b = (sw.match(/BUILD = '(\d+)'/) || [])[1];

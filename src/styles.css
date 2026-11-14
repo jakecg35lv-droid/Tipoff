@@ -1430,10 +1430,35 @@ select:focus {
   filter: drop-shadow(0 0 5px rgba(242, 107, 33, 0.6));
 }
 
-/*  Hidden until .playing, so a cold paint never flashes the
-    wordmark before the court has drawn. */
+/*  ── Two separate gates, for two separate reasons ──────────
+    opacity:0 — hidden until .playing, so a cold paint never
+    flashes the wordmark before the court has drawn.
+
+    visibility:hidden — hidden until the REAL face has loaded. The
+    stylesheet asks Google Fonts for Barlow Condensed with
+    display=swap, so the first paint uses 'Arial Narrow'/system-ui.
+    Those are materially wider than Barlow Condensed, so the word
+    rendered at one width, got centred, and then reflowed to a
+    narrower width the instant the webfont landed — reading as the
+    wordmark sitting slightly left for a fraction of a second and
+    then snapping into place. Worse on a phone, where the font
+    request competes with everything else.
+
+    visibility, not display or opacity: it keeps the element in
+    layout so the animation is already running underneath, which
+    means a late font produces a slightly later fade-in rather than
+    a jump. showSplash() caps the wait so the word can never be
+    missing outright.                                            */
 .mm-intro-word {
   opacity: 0;
+  visibility: hidden;
+  /*  Stop the browser synthesising a faux-bold on the fallback,
+      which widens it further and makes the swap jump larger. */
+  font-synthesis: none;
+}
+
+#mmIntro.fonts-ready .mm-intro-word {
+  visibility: visible;
 }
 
 .mm-glow {

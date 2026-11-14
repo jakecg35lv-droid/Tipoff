@@ -952,6 +952,35 @@ function showSplash(fromInit) {
 
   checkInviteURL();
 
+  /*  ── Make sure the wordmark is drawn in the right face ─────
+      The stylesheet loads Barlow Condensed with display=swap, so
+      the first paint uses Arial Narrow / system-ui. Those are
+      wider, so the word was laid out and centred at the fallback's
+      width and then reflowed when the webfont arrived — the
+      left-shift-then-snap everyone saw on mobile.
+
+      Kick the load as early as possible and mark the intro ready
+      when it resolves. CSS keeps .mm-intro-word visibility:hidden
+      until then, so the animation runs underneath and a late font
+      costs a slightly later fade-in rather than a visible jump.
+
+      The cap matters: a font that never loads must not mean a
+      missing wordmark. 1200ms is past the word's 1.05s cue and
+      still inside the 1.70s hold, so the budget holds either way. */
+  if (intro) {
+    var markReady = function () { try { intro.classList.add('fonts-ready'); } catch (e) { } };
+    if (document.fonts && document.fonts.load) {
+      var cap = setTimeout(markReady, 1200);
+      Promise.race([
+        document.fonts.load('600 1em "Barlow Condensed"'),
+        new Promise(function (r) { setTimeout(r, 1200); })
+      ]).then(function () { clearTimeout(cap); markReady(); })
+       .catch(function () { clearTimeout(cap); markReady(); });
+    } else {
+      markReady();   // no Font Loading API: nothing to wait for
+    }
+  }
+
   if (fromInit && intro) {
     // ── Bracket intro → crossfade → element entrances ────────
     // Reset any leftover intro state from a previous run
