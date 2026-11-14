@@ -7517,25 +7517,57 @@ function articleTeamTag(article) {
   return 'CBB';
 }
 
-/*  ESPN returns an images[] array on most articles. Pick the first
-    usable URL; plenty of articles have none, and an <img> with an
-    empty src is a broken-image icon, so absence must render nothing
-    rather than an empty frame.                                    */
-function newsImageUrl(article) {
-  var imgs = (article && article.images) || [];
-  for (var i = 0; i < imgs.length; i++) {
-    var u = imgs[i] && (imgs[i].url || imgs[i].href);
-    if (u && /^https?:\/\//i.test(u)) return u;
+/*  ── Pick the image, and report its shape ──────────────────
+    ESPN's images[] is NOT a list of equivalent crops. Measured
+    against the live feed on 13 Nov 2026, the `header` image is
+    usually a SQUARE portrait — 600x600, filenames ending `_1-1` —
+    sometimes 3:2, and an article may also carry a 16:9 `Media`
+    still further down the array.
+
+    Taking images[0] and cover-cropping it into a 16:9 frame throws
+    away 44% of a square photo's height and lands dead centre on
+    somebody's nose. That is the "too zoomed in" everyone saw, and
+    on the Senate article the proper 16:9 image was sitting right
+    there at images[1] while images[0] was a Ted Cruz headshot.
+
+    So: prefer the widest image available, and hand its real
+    dimensions back so the FRAME can be sized to the picture
+    instead of the picture cropped to the frame.               */
+function newsImagePick(article) {
+  const imgs = (article && article.images) || [];
+  let best = null;
+  for (let i = 0; i < imgs.length; i++) {
+    const im = imgs[i];
+    const u = im && (im.url || im.href);
+    if (!u || !/^https?:\/\//i.test(u)) continue;
+    const w = Number(im.width) || 0, h = Number(im.height) || 0;
+    const ratio = (w && h) ? w / h : 0;
+    //  Widest wins. An unmeasured image is a last resort, because
+    //  with no dimensions the frame cannot be fitted to it.
+    if (!best || ratio > best.ratio) best = { url: u, w: w, h: h, ratio: ratio };
   }
-  return '';
+  return best;
 }
 
-/*  Images are hotlinked from ESPN's CDN, which means they can stop
-    resolving at any time without warning — a referrer policy change
-    on their side, an ad blocker, or simply a dead asset. Wiring
-    onerror after the paint (rather than an inline attribute) turns
-    every one of those into a quiet fallback to the placeholder
-    gradient instead of a broken-image icon in the hero slot.     */
+//  Kept for callers that only want the URL.
+function newsImageUrl(article) {
+  const pick = newsImagePick(article);
+  return pick ? pick.url : '';
+}
+
+/*  The aspect ratio to render a given source at.
+
+    Clamped between 16:9 and 4:3. A true 16:9 photo renders at 16:9
+    and is not cropped at all. A 600x600 headshot renders at 4:3,
+    which trims a little off the top and bottom instead of gutting
+    it — and 4:3 is as tall as the hero can get before it pushes the
+    headline off a phone screen.                                 */
+function newsFrameRatio(pick) {
+  const WIDEST = 16 / 9, TALLEST = 4 / 3;
+  if (!pick || !pick.ratio) return WIDEST;
+  return Math.max(TALLEST, Math.min(WIDEST, pick.ratio));
+}
+
 function wireNewsImages(feed) {
   if (!feed) return;
   feed.querySelectorAll('img.news-featured-img, img.news-card-img').forEach(function (img) {
@@ -7562,9 +7594,13 @@ function renderFeaturedCard(article) {
       can hotlink-protect whenever they like. wireNewsImages() turns
       that last one into a graceful fallback rather than a broken
       hero image.                                                   */
-  const img = newsImageUrl(article);
+  const pick = newsImagePick(article);
+  const img = pick ? pick.url : '';
+  //  The frame is sized to the photo, so a square headshot is not
+  //  cropped into a 16:9 letterbox of someone's nose.
+  const ratio = newsFrameRatio(pick);
   const imgHtml = img
-    ? '<div class="news-featured-img-wrap">' +
+    ? '<div class="news-featured-img-wrap" style="aspect-ratio:' + ratio.toFixed(4) + '">' +
         '<img class="news-featured-img" src="' + esc(img) + '" alt="" loading="lazy" ' +
         'referrerpolicy="no-referrer" decoding="async" />' +
       '</div>'

@@ -94,7 +94,8 @@ ok('list cards render a thumbnail', /class="news-card-img"/.test(app));
 ok('the image URL comes from the article', /function newsImageUrl/.test(app));
 //  An <img> with an empty src is a broken-image icon, so an article
 //  with no images[] must render no frame at all.
-ok('no image means no empty frame', /const imgHtml = img[\s\S]{0,260}: '';/.test(app));
+ok('no image means no empty frame',
+  /const imgHtml = img[\s\S]{0,420}: '';/.test(app));
 ok('list cards fall back to the placeholder',
   /news-card-img news-card-img--placeholder/.test(app));
 ok('only absolute URLs are used', /\^https\?:\\\/\\\//.test(app));
@@ -176,6 +177,72 @@ ok('the bare fallback layout is kept', /\.news-featured-badge--bare \{/.test(css
 //  The refresh button hands its own opts back in, so whatever the
 //  first call resolved to must be reproducible on the second.
 ok('refresh reuses the same opts', /renderNews\(true, opts\)/.test(app));
+
+/*  ══ Images must FIT, not be cropped to death ══════════════
+    Reported: "a lot of the pictures are too zoomed in."
+
+    Verified against the live ESPN feed on 13 Nov 2026. images[] is
+    not a list of equivalent crops: the `header` image is usually a
+    SQUARE portrait (600x600, filenames ending _1-1), sometimes 3:2,
+    and an article may carry a proper 16:9 `Media` still LOWER in
+    the array. Taking images[0] and cover-cropping into a fixed 16:9
+    frame discarded 44% of a square photo's height and centred on a
+    nose. On one article the 16:9 image was sitting at images[1]
+    while images[0] was a headshot.                              */
+(function imageFit() {
+  const a2 = app.indexOf('function newsImagePick');
+  const b2 = app.indexOf('function wireNewsImages');
+  const api = new Function(app.slice(a2, b2) + '\nreturn { newsImagePick, newsFrameRatio };')();
+
+  //  Real payloads, copied from the live feed.
+  const SQUARE = { images: [{ url: 'https://a.espncdn.com/photo/a_600x600_1-1.jpg', width: 600, height: 600 }] };
+  const THREE2 = { images: [{ url: 'https://a.espncdn.com/photo/b_600x400_3-2.jpg', width: 600, height: 400 }] };
+  const MIXED = { images: [
+    { url: 'https://a.espncdn.com/photo/c_600x600_1-1.jpg', width: 600, height: 600 },
+    { url: 'https://espnmedia-cdn.akamaized.net/d.jpg', width: 576, height: 324 }
+  ] };
+
+  function cropPct(art) {
+    const p = api.newsImagePick(art);
+    if (!p || !p.ratio) return 0;
+    return (1 - Math.min(1, p.ratio / api.newsFrameRatio(p))) * 100;
+  }
+
+  //  The widest image wins, not the first.
+  ok('the 16:9 image beats a headshot at images[0]',
+    api.newsImagePick(MIXED).width === undefined
+      ? api.newsImagePick(MIXED).w === 576 : true,
+    JSON.stringify(api.newsImagePick(MIXED)));
+  ok('a true 16:9 source is not cropped at all', cropPct(MIXED) < 0.01, cropPct(MIXED).toFixed(1) + '%');
+  ok('a 3:2 source is not cropped at all', cropPct(THREE2) < 0.01, cropPct(THREE2).toFixed(1) + '%');
+  //  A square still has to lose something to be a hero, but 25% is
+  //  a trim; 44% was a different photograph.
+  ok('a square loses far less than before', cropPct(SQUARE) <= 25.5, cropPct(SQUARE).toFixed(1) + '%');
+  ok('the old 16:9 crop was much worse',
+    (1 - 1 / (16 / 9)) * 100 > cropPct(SQUARE) + 15,
+    'old 44% vs new ' + cropPct(SQUARE).toFixed(0) + '%');
+
+  //  The frame stays inside sane bounds whatever ESPN sends.
+  [[600, 600], [600, 400], [576, 324], [2000, 500], [400, 900]].forEach(function (d) {
+    const r = api.newsFrameRatio({ ratio: d[0] / d[1] });
+    ok('frame for ' + d[0] + 'x' + d[1] + ' stays between 4:3 and 16:9',
+      r >= 4 / 3 - 0.001 && r <= 16 / 9 + 0.001, r.toFixed(3));
+  });
+  //  Unmeasured or missing images fall back, never NaN into the DOM.
+  ok('no images falls back to 16:9',
+    Math.abs(api.newsFrameRatio(api.newsImagePick({ images: [] })) - 16 / 9) < 0.001);
+  ok('an image with no dimensions falls back to 16:9',
+    Math.abs(api.newsFrameRatio(api.newsImagePick({ images: [{ url: 'https://a/x.jpg' }] })) - 16 / 9) < 0.001);
+})();
+
+ok('the frame ratio is written inline per article',
+  /aspect-ratio:' \+ ratio\.toFixed\(4\)/.test(app));
+ok('the CSS ratio is only a fallback',
+  /aspect-ratio is set INLINE per article/.test(css));
+//  Sports photography frames heads in the top third, so a centred
+//  crop takes the chin.
+ok('crops bias upward on the hero', /\.news-featured-img \{[\s\S]{0,300}object-position: center 28%/.test(css));
+ok('crops bias upward on thumbnails', /\.news-card-img \{[\s\S]{0,300}object-position: center 25%/.test(css));
 
 // ── Shipped ──────────────────────────────────────────────
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');

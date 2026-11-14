@@ -5552,6 +5552,9 @@ select:focus {
   transform: translateY(-2px);
 }
 
+/*  aspect-ratio is set INLINE per article, from the chosen image's
+    real dimensions (see newsFrameRatio in app.js). 16/9 here is only
+    the fallback for an image whose dimensions ESPN did not report. */
 .news-featured-img-wrap {
   position: relative;
   width: 100%;
@@ -5564,6 +5567,10 @@ select:focus {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /*  When a crop IS needed, bias upward. Sports photography frames
+      the subject's head in the top third, so a centred crop takes
+      the chin and leaves the torso. */
+  object-position: center 28%;
   display: block;
 }
 
@@ -5673,6 +5680,10 @@ select:focus {
   height: 60px;
   min-width: 84px;
   object-fit: cover;
+  /*  7:5. A square source loses only the sides here, which is far
+      less destructive than the hero's crop was, but the same upward
+      bias keeps faces in frame. */
+  object-position: center 25%;
   flex-shrink: 0;
   border-radius: 8px;
   background: var(--panel-solid);
