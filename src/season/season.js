@@ -412,6 +412,19 @@
   function encodeState(st) {
     var copy = JSON.parse(JSON.stringify(st || {}));
     delete copy.games;
+    /*  ── isUser is this DEVICE's business, not the league's ────
+        "Which seat is mine" is per-device by definition, and it was
+        being written into the shared document along with everything
+        else. Whoever pushed last therefore published their own seat
+        flags to all eight managers. Receivers re-run markMine() so
+        they usually self-correct, but any read that skipped it
+        inherited a stranger's seat — and the draft UI decides who
+        may press Pick from exactly this flag.
+
+        Strip it on the way out. markMine() recomputes it locally
+        from the uid on every snapshot, which is the only place it
+        can be computed correctly.                               */
+    (copy.teams || []).forEach(function (t) { if (t) delete t.isUser; });
     copy.schedule = encodeSchedule(copy.schedule);
     return copy;
   }
@@ -868,15 +881,60 @@
     if (!state || !state.teams) return;
     var uid = myUid();
     var claimed = false;
+    var anySeatClaimed = false;
     state.teams.forEach(function (t) {
       if (!t) return;
+      if (t.uid) anySeatClaimed = true;
       t.isUser = !!(uid && t.uid === uid);
       if (t.isUser) claimed = true;
     });
-    // Signed out, or a league created before uids existed: fall back
-    // to seat 0 so a solo player still sees a team rather than none.
-    if (!claimed && !uid && state.teams[0]) state.teams[0].isUser = true;
+
+    /*  ── The seat-0 fallback nearly broke a live draft ─────────
+        This used to read:
+
+            if (!claimed && !uid && state.teams[0])
+              state.teams[0].isUser = true;
+
+        intended for a solo league made before uids existed. But
+        `!uid` is also true for the second or two while Firebase
+        resolves the signed-in user — and far longer on a cold Home
+        Screen launch. In that window EVERY manager's device marked
+        seat 0 as its own.
+
+        The damage is that the whole draft UI keys off isUser. On
+        their actual turn team(onClock()).isUser was false, so the
+        pick handler hit a bare `return` and the button did nothing
+        at all. The clock then ran out and autopick took the player.
+        That is the "I literally cannot draft and it just autos"
+        report, and it also explains managers who finished a draft
+        having made none of their own picks.
+
+        A league where anybody holds a seat is a real league, and
+        guessing a seat in one is never right. Claim seat 0 only
+        when no seat is claimed at all — the genuine legacy case. */
+    if (!claimed && !uid && !anySeatClaimed && state.teams[0]) {
+      state.teams[0].isUser = true;
+    }
   }
+
+  /*  Is the seat on the clock mine? Computed from the uid rather
+      than read from the cached isUser flag.
+
+      isUser is per-device, and it used to travel inside the synced
+      blob, so it could arrive wrong from another manager's push or
+      be stale from before auth resolved. Everything that decides
+      whether somebody may press a button now asks this instead, so
+      a wrong flag can mis-render a label but can never take away a
+      manager's pick.                                             */
+  function seatIsMine(t) {
+    if (!t) return false;
+    var uid = myUid();
+    if (uid && t.uid) return t.uid === uid;
+    //  Unclaimed seat, or auth not resolved: the cached flag is the
+    //  only thing left to go on.
+    return !!t.isUser;
+  }
+  function myTurn() { return seatIsMine(team(onClock())); }
 
   function unsubscribeSeason() {
     if (SYNC.unsub) { try { SYNC.unsub(); } catch (e) { } SYNC.unsub = null; }
@@ -1546,11 +1604,11 @@
         non-human seat the moment the clock expires — but it expires
         after the real 60 seconds, which is long enough for someone
         to join and take their own pick.                          */
-    d.botAt = (!multiplayer() && !team(onClock()).isUser)
+    d.botAt = (!multiplayer() && !seatIsMine(team(onClock())))
       ? nowSynced() + 2000 + Math.floor(Math.random() * 3000)
       : null;
     save();
-    if (team(onClock()).isUser) deviceNotify('onClock', 'You’re on the clock', 'Round ' + (Math.floor(d.pick / state.league.numTeams) + 1) + ' in ' + state.league.name + '. ' + fmtClock(d.timerSecs) + ' to pick.');
+    if (seatIsMine(team(onClock()))) deviceNotify('onClock', 'You’re on the clock', 'Round ' + (Math.floor(d.pick / state.league.numTeams) + 1) + ' in ' + state.league.name + '. ' + fmtClock(d.timerSecs) + ' to pick.');
   }
   function startDraft() {
     var d = draftCfg();
@@ -1840,7 +1898,11 @@
            grace period so a disconnect cannot stall the draft    */
     var mp = multiplayer();
     var seatIsHuman = !!(t && t.uid);
-    var mineToPick = t.isUser;
+    /*  Computed from the uid, not the cached flag. With t.isUser a
+        device whose flag was wrong would both refuse to autopick for
+        its own seat AND consider itself entitled to another seat —
+        the two halves of the "I cannot draft" report. */
+    var mineToPick = seatIsMine(t);
     var hostCovers = isHost() && (!seatIsHuman || now >= d.endsAt + HOST_TAKEOVER_MS);
 
     /*  Last resort. A phone that is locked or a tab in the background
@@ -4769,7 +4831,7 @@
   }
   function ordinal(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
   function confirmModal() {
-    if (!ui.confirmId || !draftLive() || !team(onClock()).isUser) { ui.confirmId = null; return ''; }
+    if (!ui.confirmId || !draftLive() || !seatIsMine(team(onClock()))) { ui.confirmId = null; return ''; }
     var p = P(ui.confirmId);
     var stats = [[f1(p.avg.points), 'PTS'], [f1(p.avg.rebounds), 'REB'], [f1(p.avg.assists), 'AST'], [f1(p.avg.steals), 'STL'], [f1(p.avg.blocks), 'BLK'], [f1(p.proj), 'FPTS']];
     return '<div class="modal-backdrop ss-confirm" style="display:flex;" data-act="cancelpick"><div class="modal-card" role="dialog" aria-modal="true" aria-label="Confirm pick">' +
@@ -4850,12 +4912,12 @@
   function paintClock() {
     if (!root || state.phase !== 'draft') return;
     var left = timeLeft(), d = draftCfg();
-    var urgent = d.status === 'live' && team(onClock()).isUser && left <= 10;
+    var urgent = d.status === 'live' && seatIsMine(team(onClock())) && left <= 10;
     /*  A clock frozen on 0:00 is indistinguishable from a broken app.
         It is not broken: this client is not allowed to make that pick
         yet, and is waiting for either the seat-holder's own device or
         the takeover window. Say so.                                */
-    var stalled = d.status === 'live' && left <= 0 && !team(onClock()).isUser;
+    var stalled = d.status === 'live' && left <= 0 && !seatIsMine(team(onClock()));
     root.querySelectorAll('[data-ss-clock]').forEach(function (el) {
       el.textContent = stalled ? 'Autopicking' : fmtClock(left);
       el.classList.toggle('urgency', urgent);
@@ -5817,7 +5879,11 @@
     if (draft) {
       if (!owner) {
         var qd = draftCfg().queue.indexOf(pid) >= 0;
-        if (draftLive() && team(onClock()).isUser) acts.push('<button class="g-btn solid" data-act="pick" data-id="' + pid + '">Draft</button>');
+        //  This is what renders the Draft button at all. Keyed off
+        //  the cached flag, a device with the wrong one simply had no
+        //  button to press — the most literal form of "it does not
+        //  register". seatIsMine() asks the uid instead.
+        if (draftLive() && seatIsMine(team(onClock()))) acts.push('<button class="g-btn solid" data-act="pick" data-id="' + pid + '">Draft</button>');
         acts.push('<button class="g-btn" data-act="queue" data-id="' + pid + '">' + (qd ? '★ In queue' : '☆ Add to queue') + '</button>');
       }
     } else if (state.phase === 'season') {
@@ -6356,23 +6422,63 @@
         break;
       case 'opt': ui.setup[el.getAttribute('data-k')] = +el.getAttribute('data-v'); break;
       case 'pick':
-        var pid = el.getAttribute('data-id'), rule = pickAllowed(userTeam().id, pid);
-        if (!draftLive() || !team(onClock()).isUser) return;
+        var pid = el.getAttribute('data-id');
+        /*  ── Never fail silently here ──────────────────────────
+            This was a bare `return`. When the gate was wrong — and
+            it was, because it read the cached isUser flag which
+            could belong to another device — the button simply did
+            nothing, over and over, until the clock expired and
+            autopick took the player. Nobody could tell whether the
+            app was broken or they had misunderstood the rules.
+
+            myTurn() computes from the uid, so the gate is now
+            correct; and when it does refuse it says why.        */
+        if (!draftLive()) {
+          notify(draftCfg().status === 'paused'
+            ? 'The draft is paused. ' + commissionerName() + ' can resume it.'
+            : 'The draft has not started yet.', 'info');
+          return;
+        }
+        if (!myTurn()) {
+          var oc = team(onClock());
+          notify('It is ' + ((oc && oc.name) || 'another manager') + '\u2019s pick right now.', 'info');
+          return;
+        }
+        /*  Validate against the seat ON THE CLOCK, not userTeam().
+            userTeam() still falls back to seat 0 when it cannot
+            identify this account, so the roster rules were being
+            checked against a stranger's team. By this line myTurn()
+            has already proved the on-clock seat is mine, which makes
+            it the only id worth trusting here.                    */
+        var rule = pickAllowed(onClock(), pid);
         if (!rule.ok) { notify(rule.reason, 'error'); return; }
         ui.pcard = null; ui.confirmId = pid; break;
       case 'cancelpick':
         if (e.target !== el && el.classList.contains('modal-backdrop')) return;   // clicks inside the card
         ui.confirmId = null; break;
       case 'confirmpick':
-        if (!ui.confirmId || !draftLive() || !team(onClock()).isUser) { ui.confirmId = null; break; }
+        //  Same gate, same reason: a silent dismissal of a confirm
+        //  dialog is indistinguishable from a broken app.
+        if (!ui.confirmId) { break; }
+        if (!draftLive() || !myTurn()) {
+          ui.confirmId = null;
+          notify(!draftLive() ? 'The draft is not live right now.'
+            : 'That pick is no longer yours \u2014 the draft has moved on.', 'info');
+          break;
+        }
         var cp = ui.confirmId; ui.confirmId = null; ui.search = '';
-        livePick(userTeam().id, cp, 'user');
+        //  onClock(), for the same reason: it is provably this
+        //  account's seat here, and userTeam() can still guess.
+        livePick(onClock(), cp, 'user');
         if (state.phase !== 'draft') { ui.page = 'lineup'; ui.toastMsg = 'Draft complete. Set your week 1 lineup.'; ui.toastType = 'success'; }
         break;
       case 'autopick':
-        if (!draftLive() || !team(onClock()).isUser) return;
-        var ap = queueChoice() || botChoose(userTeam().id);
-        livePick(userTeam().id, ap, 'auto');
+        if (!draftLive() || !myTurn()) {
+          notify(!draftLive() ? 'The draft is not live right now.' : 'It is not your pick.', 'info');
+          return;
+        }
+        var ap = queueChoice() || botChoose(onClock());
+        livePick(onClock(), ap, 'auto');
         if (state.phase !== 'draft') { ui.page = 'lineup'; ui.toastMsg = 'Draft complete. Set your week 1 lineup.'; ui.toastType = 'success'; }
         break;
       //  ── Draft control belongs to the commissioner ────────────

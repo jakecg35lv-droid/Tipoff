@@ -255,7 +255,9 @@ ok('rendering continues while deferred',
 })();
 
 // ══ 5. Authority rules still intact ══════════════════════
-ok('a human seat is picked for by its own device', /var mineToPick = t\.isUser;/.test(code));
+ok('a human seat is picked for by its own device',
+  /var mineToPick = seatIsMine\(t\);/.test(code),
+  'must be computed from the uid, not the cached flag');
 ok('bot seats belong to the host alone',
   /hostCovers = isHost\(\) && \(!seatIsHuman \|\| now >= d\.endsAt \+ HOST_TAKEOVER_MS\)/.test(code));
 ok('the last-resort takeover is staggered by seat',
@@ -289,7 +291,7 @@ ok('a pick writes the league doc, which is what triggers push',
     taken at ~3s a pick. The first live league's log recorded 78 of
     96 picks as how:'bot' with six of eight managers never picking. */
 ok('the quick bot clock is limited to solo leagues',
-  /d\.botAt = \(!multiplayer\(\) && !team\(onClock\(\)\)\.isUser\)/.test(code),
+  /d\.botAt = \(!multiplayer\(\) && !seatIsMine\(team\(onClock\(\)\)\)\)/.test(code),
   'an unclaimed seat gets drafted for in seconds');
 ok('a multiplayer seat gets no shortcut clock',
   /\? nowSynced\(\) \+ 2000 \+ Math\.floor\(Math\.random\(\) \* 3000\)\s*: null;/.test(code));
@@ -298,9 +300,11 @@ ok('a multiplayer seat gets no shortcut clock',
   const m = code.match(/d\.botAt = (\(![\s\S]*?: null);/);
   ok('the botAt expression is liftable', !!m);
   if (!m) return;
-  const f = new Function('multiplayer', 'team', 'onClock', 'nowSynced',
+  const f = new Function('multiplayer', 'team', 'onClock', 'nowSynced', 'seatIsMine',
     'return ' + m[1].replace(/\bd\.botAt\b/g, 'x') + ';');
-  const run = (mp, isUser) => f(() => mp, () => ({ isUser }), () => 't0', () => 1000);
+  //  seatIsMine replaced the raw .isUser read; stub it faithfully.
+  const run = (mp, isUser) => f(() => mp, () => ({ isUser }), () => 't0', () => 1000,
+    (t) => !!(t && t.isUser));
   ok('solo + bot seat gets the quick clock', run(false, false) > 1000);
   ok('solo + my seat gets no bot clock', run(false, true) === null);
   ok('multiplayer + another seat gets NO quick clock', run(true, false) === null,
@@ -490,6 +494,137 @@ ok('the covering branch arms the backoff',
 ok('every pick is timestamped', /at: nowSynced[(][)]/.test(code));
 ok('the timestamp is on the shared clock, not Date.now',
   !/at: Date[.]now[(][)]/.test(code), 'skew would make the gaps meaningless');
+
+
+// ══ 11. "I literally cannot draft" ═══════════════════════
+/*  Reported mid-draft: the Draft button does not register and the
+    pick just autos. Root cause was markMine's fallback.
+
+        if (!claimed && !uid && state.teams[0])
+          state.teams[0].isUser = true;
+
+    !uid is true not only when signed out but for the second or two
+    while Firebase resolves the user — much longer on a cold Home
+    Screen launch. In that window EVERY device marked seat 0 as its
+    own. The whole draft UI keys off isUser, including whether the
+    Draft button is rendered, so on their real turn these managers
+    had no button and the clock ran out. It also explains a draft
+    finishing with managers who made none of their own picks.      */
+const mm = code.slice(code.indexOf('function markMine'), code.indexOf('function seatIsMine'));
+ok('markMine resets every seat', /t[.]isUser = !![(]uid && t[.]uid === uid[)];/.test(mm));
+ok('markMine notices whether ANY seat is claimed', /anySeatClaimed = true;/.test(mm));
+ok('the seat-0 fallback cannot fire in a claimed league',
+  /!claimed && !uid && !anySeatClaimed/.test(mm),
+  'this is the bug that stole peoples picks');
+
+// Execute markMine across the states that matter.
+(function () {
+  const i = code.indexOf('function markMine');
+  const open = code.indexOf('{', i);
+  let dep = 0, end = -1;
+  for (let k = open; k < code.length; k++) {
+    if (code[k] === '{') dep++;
+    else if (code[k] === '}') { dep--; if (dep === 0) { end = k; break; } }
+  }
+  const src = code.slice(i, end + 1);
+  const run = new Function('st', 'uid', [
+    'var state = st;',
+    'function myUid() { return uid; }',
+    src,
+    'markMine();',
+    'return state.teams.map(function (t) { return !!t.isUser; });'
+  ].join('\n'));
+
+  const claimed = () => ({ teams: [{ id: 't0', uid: 'uA' }, { id: 't1', uid: 'uB' }, { id: 't2', uid: 'uC' }] });
+  const legacy = () => ({ teams: [{ id: 't0' }, { id: 't1' }] });
+
+  ok('my own seat is marked', JSON.stringify(run(claimed(), 'uB')) === JSON.stringify([false, true, false]));
+  ok('exactly one seat is ever marked',
+    run(claimed(), 'uB').filter(Boolean).length === 1);
+  //  THE REGRESSION: auth not resolved yet, in a real league.
+  ok('an unresolved uid claims NO seat in a real league',
+    run(claimed(), null).every(v => v === false),
+    'seat 0 used to be handed to everyone');
+  ok('an unknown account claims no seat either',
+    run(claimed(), 'uZZZ').every(v => v === false));
+  //  The legitimate legacy case still works.
+  ok('a league with no claimed seats still falls back to seat 0',
+    JSON.stringify(run(legacy(), null)) === JSON.stringify([true, false]));
+  ok('a signed-in user in a legacy league claims nothing',
+    run(legacy(), 'uA').every(v => v === false));
+})();
+
+// ── Authority is computed from the uid, not the cached flag ──
+ok('seatIsMine exists', /function seatIsMine/.test(code));
+ok('myTurn is built on it', /function myTurn[(][)] [{] return seatIsMine[(]team[(]onClock[(][)][)][)]; [}]/.test(code));
+(function () {
+  const i = code.indexOf('function seatIsMine');
+  const open = code.indexOf('{', i);
+  let dep = 0, end = -1;
+  for (let k = open; k < code.length; k++) {
+    if (code[k] === '{') dep++;
+    else if (code[k] === '}') { dep--; if (dep === 0) { end = k; break; } }
+  }
+  const run = new Function('t', 'uid', [
+    'function myUid() { return uid; }',
+    code.slice(i, end + 1),
+    'return seatIsMine(t);'
+  ].join('\n'));
+  ok('a matching uid is mine', run({ uid: 'uA' }, 'uA') === true);
+  ok('a different uid is not mine', run({ uid: 'uB' }, 'uA') === false);
+  //  The crucial one: a WRONG cached flag must not grant a pick.
+  ok('a wrong cached flag cannot steal a seat',
+    run({ uid: 'uB', isUser: true }, 'uA') === false,
+    'this is how one device could pick for another');
+  //  And a right uid must not be denied by a missing flag.
+  ok('a missing cached flag cannot deny my own seat',
+    run({ uid: 'uA', isUser: false }, 'uA') === true,
+    'this is how managers lost their pick');
+  ok('an unclaimed seat still honours the flag', run({ isUser: true }, 'uA') === true);
+  ok('a null seat is not mine', run(null, 'uA') === false);
+})();
+
+// Every gate that decides who may act must use it.
+ok('no gate reads team(onClock()).isUser any more',
+  !/team[(]onClock[(][)][)][.]isUser/.test(code),
+  'one left means one way to lose a pick');
+ok('the Draft button is rendered from seatIsMine',
+  /draftLive[(][)] && seatIsMine[(]team[(]onClock[(][)][)][)][)] acts[.]push/.test(code),
+  'this is literally whether the button exists');
+ok('the confirm modal uses it', /!seatIsMine[(]team[(]onClock[(][)][)][)][)] [{] ui[.]confirmId = null; return/.test(code));
+ok('draftTick decides mineToPick from it', /var mineToPick = seatIsMine[(]t[)];/.test(code));
+ok('the on-the-clock notification uses it', /if [(]seatIsMine[(]team[(]onClock[(][)][)][)][)] deviceNotify/.test(code));
+
+// ── isUser must not travel between devices ───────────────
+/*  encodeState stripped only `games`, so a per-device flag was
+    published to the whole league and whoever wrote last imposed
+    their seat on everybody. */
+const enc = code.slice(code.indexOf('function encodeState'), code.indexOf('function syncPayload'));
+ok('isUser is stripped before the push', /delete t[.]isUser;/.test(enc),
+  'a per-device flag was being shared');
+ok('games are still stripped too', /delete copy[.]games;/.test(enc));
+
+// ── The gates must explain themselves ────────────────────
+/*  The old gates were bare returns. A button that does nothing,
+    silently, repeatedly, is indistinguishable from a broken app —
+    and that is the sentence the report used. */
+const pickCase = code.slice(code.indexOf("case 'pick':"), code.indexOf("case 'cancelpick'"));
+ok('the pick gate has no bare return', !/[)] return;\s*if [(]!rule/.test(pickCase));
+ok('a paused draft says so', /draft is paused/.test(pickCase));
+ok('not-your-turn names who it is', /s pick right now/.test(pickCase));
+ok('the confirm path explains a refusal', /no longer yours/.test(code));
+ok('autopick explains a refusal', /It is not your pick/.test(code));
+
+// ── Roster rules validate the right roster ───────────────
+/*  pickAllowed was called with userTeam().id, and userTeam() still
+    falls back to seat 0 when it cannot identify the account — so the
+    rules were checked against a stranger's roster. */
+ok('pick rules are checked against the on-clock seat',
+  /var rule = pickAllowed[(]onClock[(][)], pid[)];/.test(code));
+ok('a confirmed pick is made for the on-clock seat',
+  /livePick[(]onClock[(][)], cp, 'user'[)];/.test(code));
+ok('a manual autopick is made for the on-clock seat',
+  /livePick[(]onClock[(][)], ap, 'auto'[)];/.test(code));
 
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

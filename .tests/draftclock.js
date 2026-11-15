@@ -32,7 +32,11 @@ function ok(name, cond, detail) {
 const tick = season.slice(season.indexOf('function draftTick'), season.indexOf('function afterPick'));
 
 // ── 1. Somebody always covers ────────────────────────────
-ok('the seat-holder may pick for itself', /var mineToPick = t\.isUser/.test(tick));
+/*  Was /var mineToPick = t\.isUser/. Authority now comes from
+    seatIsMine(), which compares uids instead of trusting a cached
+    per-device flag — because a wrong flag was denying managers
+    their own pick and the button simply did not appear. */
+ok('the seat-holder may pick for itself', /var mineToPick = seatIsMine\(t\)/.test(tick));
 ok('the host covers an absent human', /hostCovers = isHost\(\)[\s\S]{0,120}HOST_TAKEOVER_MS/.test(tick));
 ok('a last-resort takeover exists', /anyCovers/.test(tick) && /ANY_TAKEOVER_MS/.test(season));
 ok('it is part of the authority rule',
@@ -67,7 +71,7 @@ ok('a hidden tab does not tick on the way out',
 const paint = season.slice(season.indexOf('function paintClock'), season.indexOf('function paintClock') + 1200);
 ok('a stalled clock says what it is doing', /stalled \? 'Autopicking'/.test(paint));
 ok('it only applies to someone else\'s expired clock',
-  /left <= 0 && !team\(onClock\(\)\)\.isUser/.test(paint));
+  /left <= 0 && !seatIsMine\(team\(onClock\(\)\)\)/.test(paint));
 ok('the waiting state is styled', /\.ss-clock-wait \{/.test(scss));
 
 // ── Covering for a human honours their queue ─────────────
