@@ -1466,6 +1466,7 @@
     });
     if (state.draft.pick >= state.draft.order.length) startSeason();
     save();
+    return true;
   }
   // Bot: best projection, but make sure the starting slots can be filled.
   function botChoose(teamId) {
@@ -1596,7 +1597,17 @@
   function livePick(teamId, pid, how) {
     var p = P(pid);
     var q = draftCfg().queue, at = q.indexOf(pid); if (at >= 0) q.splice(at, 1);
-    makePick(teamId, pid, how);
+    /*  makePick now validates and can refuse — a stale device trying
+        to take a player who is already gone, or to pick for a seat
+        the draft has moved past. A refusal must not be announced or
+        toasted: telling someone they drafted a player they did not
+        get is worse than saying nothing, and restartClock() below
+        would hand the room a deadline for a pick that never
+        happened.                                                 */
+    if (makePick(teamId, pid, how) === false) {
+      render();
+      return false;
+    }
     //  ── Whose pick gets the full screen ───────────────────
     //  The old rule was "mine, OR anyone's if it arrived at a human
     //  pace", which in a live room full of people meant the screen was
@@ -1828,8 +1839,13 @@
       if (mineToPick) {
         var qid = queueChoice(), pid = qid || botChoose(t.id);
         ui.confirmId = null;
-        livePick(t.id, pid, 'auto');
-        ui.toastMsg = 'Time ran out. ' + (qid ? 'Took ' + P(pid).name + ' from your queue.' : 'Autopicked ' + P(pid).name + '.'); ui.toastType = 'info';
+        //  Only claim the autopick happened if it actually did.
+        //  makePick refuses a stale or out-of-turn pick, and
+        //  announcing one anyway tells a manager they own a player
+        //  who is on somebody else's roster.
+        if (livePick(t.id, pid, 'auto') !== false) {
+          ui.toastMsg = 'Time ran out. ' + (qid ? 'Took ' + P(pid).name + ' from your queue.' : 'Autopicked ' + P(pid).name + '.'); ui.toastType = 'info';
+        }
       } else {
         //  Covering for a human who is away. Honour their queue the
         //  same way their own device would have, so a manager who
