@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const js = fs.readFileSync(path.join(ROOT, 'src/season/season.js'), 'utf8');
+const seasonCss = fs.readFileSync(path.join(ROOT, 'src/season/season.css'), 'utf8');
 const code = js.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 let pass = 0, fail = 0;
@@ -272,6 +273,98 @@ ok('only the host fires a scheduled start', /isHost\(\)/.test(code.slice(code.in
 // ══ 6. Push after a pick still fires ═════════════════════
 ok('a pick writes the league doc, which is what triggers push',
   /function makePick[\s\S]*?save\(\);/.test(code));
+
+
+// ══ 7. Autopick pacing and the snake turn ════════════════
+/*  The reported "it autopicked for him then looped over him" was
+    two separate things: a correct snake turn that nothing explained,
+    and a genuine pacing bug that had drafted whole rosters for
+    people who were merely late.                                  */
+
+/*  botAt is the 2-5 second "thinking" delay. A seat counts as a bot
+    purely by having no uid, and a seat has no uid until that person
+    opens the app. So in a real league anyone late had their roster
+    taken at ~3s a pick. The first live league's log recorded 78 of
+    96 picks as how:'bot' with six of eight managers never picking. */
+ok('the quick bot clock is limited to solo leagues',
+  /d\.botAt = \(!multiplayer\(\) && !team\(onClock\(\)\)\.isUser\)/.test(code),
+  'an unclaimed seat gets drafted for in seconds');
+ok('a multiplayer seat gets no shortcut clock',
+  /\? nowSynced\(\) \+ 2000 \+ Math\.floor\(Math\.random\(\) \* 3000\)\s*: null;/.test(code));
+//  Run the real expression for all four combinations.
+(function () {
+  const m = code.match(/d\.botAt = (\(![\s\S]*?: null);/);
+  ok('the botAt expression is liftable', !!m);
+  if (!m) return;
+  const f = new Function('multiplayer', 'team', 'onClock', 'nowSynced',
+    'return ' + m[1].replace(/\bd\.botAt\b/g, 'x') + ';');
+  const run = (mp, isUser) => f(() => mp, () => ({ isUser }), () => 't0', () => 1000);
+  ok('solo + bot seat gets the quick clock', run(false, false) > 1000);
+  ok('solo + my seat gets no bot clock', run(false, true) === null);
+  ok('multiplayer + another seat gets NO quick clock', run(true, false) === null,
+    'this is the bug that drafted for latecomers');
+  ok('multiplayer + my seat gets no bot clock', run(true, true) === null);
+})();
+/*  The bot branch in draftTick is what botAt unlocks, so with botAt
+    null in multiplayer an unclaimed seat must still autopick — via
+    the ordinary clock expiry, which the host covers immediately for
+    a non-human seat. Confirm both halves still exist. */
+ok('the bot branch still requires botAt',
+  /if \(!seatIsHuman && d\.botAt && now >= d\.botAt\)/.test(code));
+ok('the host still covers a non-human seat at expiry',
+  /isHost\(\) && \(!seatIsHuman \|\|/.test(code));
+
+// ── The snake turn, explained rather than hidden ─────────
+ok('a back-to-back note exists', /function backToBackNote/.test(code));
+ok('paintClock keeps it current', /data-ss-turn/.test(code));
+ok('the note is rendered in Up Next', /class="rp-un-turn" data-ss-turn="1"/.test(code));
+ok('the note is styled', /\.rp-un-turn \{/.test(seasonCss));
+ok('an empty note collapses', /\.rp-un-turn:empty \{ display: none; \}/.test(seasonCss));
+(function () {
+  const i = code.indexOf('function backToBackNote');
+  const open = code.indexOf('{', i);
+  let dep = 0, end = -1;
+  for (let k = open; k < code.length; k++) {
+    if (code[k] === '{') dep++;
+    else if (code[k] === '}') { dep--; if (dep === 0) { end = k; break; } }
+  }
+  const src = code.slice(i, end + 1);
+  const run = new Function('env', `
+    var state, draftCfg, team;
+    ${src}
+    return function (st, cfg, teams) {
+      state = st;
+      draftCfg = function () { return cfg; };
+      team = function (id) { return teams[id]; };
+      return backToBackNote();
+    };
+  `)({});
+  //  8-team snake: R1 t0..t7, R2 t7..t0. Pick 8 is t7 again.
+  //  Three rounds, so pick 16 (the R2->R3 turn, which is t0's) is
+  //  inside the order rather than past its end.
+  const order = ['t0','t1','t2','t3','t4','t5','t6','t7',
+                 't7','t6','t5','t4','t3','t2','t1','t0',
+                 't0','t1','t2','t3','t4','t5','t6','t7'];
+  const teams = { t7: { name: 'Jackson davis', isUser: false }, t6: { name: 'River', isUser: false },
+                  t0: { name: 'JC', isUser: true } };
+  const st = { phase: 'draft', league: { numTeams: 8 } };
+  const cfg = (pick) => ({ status: 'live', order, pick });
+
+  ok('mid-round shows no note', run(st, cfg(5), teams) === '');
+  ok('the round turn is named', /second pick in a row/.test(run(st, cfg(8), teams)),
+    run(st, cfg(8), teams));
+  ok('it names the manager', /Jackson davis/.test(run(st, cfg(8), teams)));
+  ok('it names both rounds', /end of round 1 into round 2/.test(run(st, cfg(8), teams)),
+    run(st, cfg(8), teams));
+  ok('your own turn reads as yours', /^Your second pick/.test(run(st, cfg(16), teams)),
+    run(st, cfg(16), teams));
+  ok('pick 0 is never a turn', run(st, cfg(0), teams) === '');
+  ok('past the end of the order is safe', run(st, cfg(99), teams) === '');
+  ok('a paused draft shows nothing',
+    run(st, { status: 'paused', order, pick: 8 }, teams) === '');
+  ok('the season phase shows nothing',
+    run({ phase: 'season', league: { numTeams: 8 } }, cfg(8), teams) === '');
+})();
 
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

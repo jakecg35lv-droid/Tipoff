@@ -1510,8 +1510,27 @@
     //  Written on the synced clock so the deadline means the same
     //  instant on every device, not just this one.
     d.endsAt = nowSynced() + d.timerSecs * 1000;
-    // Lab bots "think" for 2–5 seconds so you can watch the board move.
-    d.botAt = team(onClock()).isUser ? null : nowSynced() + 2000 + Math.floor(Math.random() * 3000);
+    /*  ── The 2–5s "thinking" clock is for SOLO leagues only ────
+        Bots in a solo league should pick quickly so the board moves
+        while you watch. In a real league with friends it is a
+        disaster, because a seat counts as a bot purely by having no
+        uid — and a seat has no uid until that person has actually
+        opened the app and claimed it.
+
+        So anyone who was a minute late to the draft had their whole
+        roster drafted for them at roughly three seconds a pick,
+        before they ever saw the board. The evidence is in the first
+        league's log: 78 of 96 picks recorded how:'bot', and six of
+        eight managers never made a single pick of their own.
+
+        In a multiplayer league every seat now gets the full pick
+        clock. An unclaimed seat still autopicks — the host covers a
+        non-human seat the moment the clock expires — but it expires
+        after the real 60 seconds, which is long enough for someone
+        to join and take their own pick.                          */
+    d.botAt = (!multiplayer() && !team(onClock()).isUser)
+      ? nowSynced() + 2000 + Math.floor(Math.random() * 3000)
+      : null;
     save();
     if (team(onClock()).isUser) deviceNotify('onClock', 'You’re on the clock', 'Round ' + (Math.floor(d.pick / state.league.numTeams) + 1) + ' in ' + state.league.name + '. ' + fmtClock(d.timerSecs) + ' to pick.');
   }
@@ -4521,7 +4540,9 @@
       var d = state.draft, n = state.league.numTeams, t = team(onClock());
       html += '<div class="rp-section"><div class="rp-section-title">Up Next</div>' +
         '<div class="rp-up-next-card">' + avatarHTML(t.name, 38) +
-          '<div class="rp-un-info"><div class="rp-un-pre">Round ' + (Math.floor(d.pick / n) + 1) + ', Pick ' + ((d.pick % n) + 1) + '</div><div class="rp-un-name">' + esc(t.isUser ? 'You' : t.name) + '</div></div>' +
+          '<div class="rp-un-info"><div class="rp-un-pre">Round ' + (Math.floor(d.pick / n) + 1) + ', Pick ' + ((d.pick % n) + 1) + '</div><div class="rp-un-name">' + esc(t.isUser ? 'You' : t.name) + '</div>' +
+          //  Blank unless this is a snake turn; paintClock keeps it current.
+          '<div class="rp-un-turn" data-ss-turn="1">' + esc(backToBackNote()) + '</div></div>' +
           '<div class="rp-un-timer"' + (draftCfg().status === 'pre' ? '>' + fmtClock(draftCfg().timerSecs) : ' data-ss-clock="1">' + fmtClock(timeLeft())) + '</div></div>' +
         '<button class="rp-view-all-btn" data-act="nav" data-page="draft">Open Draft Room</button></div>';
     } else {
@@ -4739,6 +4760,21 @@
     announce._t = setTimeout(function () { el.style.display = 'none'; }, 1600);
   }
   // Update every clock on screen without a full re-render.
+  /*  "Back-to-back" when the seat on the clock also held the pick
+      before it, which in a snake is always a round turn. Returns ''
+      when it does not apply, so the element simply goes blank. */
+  function backToBackNote() {
+    if (!state || state.phase !== 'draft') return '';
+    var d = draftCfg(), o = d.order || [], n = state.league.numTeams || 1;
+    if (d.status !== 'live' || d.pick <= 0 || d.pick >= o.length) return '';
+    if (o[d.pick] !== o[d.pick - 1]) return '';
+    var t = team(o[d.pick]);
+    var roundNow = Math.floor(d.pick / n) + 1;
+    return (t && t.isUser ? 'Your' : ((t && t.name ? t.name + '’s' : 'A'))) +
+      ' second pick in a row — end of round ' + (roundNow - 1) +
+      ' into round ' + roundNow + '.';
+  }
+
   function paintClock() {
     if (!root || state.phase !== 'draft') return;
     var left = timeLeft(), d = draftCfg();
@@ -4752,6 +4788,18 @@
       el.textContent = stalled ? 'Autopicking' : fmtClock(left);
       el.classList.toggle('urgency', urgent);
       el.classList.toggle('ss-clock-wait', stalled);
+    });
+    /*  ── Say when a manager picks twice in a row ───────────────
+        In a snake draft the managers at either end of the order
+        hold the last pick of one round and the first pick of the
+        next. So after their pick the clock restarts for THEM, and
+        if both picks autopicked it looks exactly like the draft
+        looped over them — which is what got reported.
+
+        Nothing on screen explained it. Naming it removes the whole
+        class of "is this broken?" without changing any behaviour. */
+    root.querySelectorAll('[data-ss-turn]').forEach(function (el) {
+      el.textContent = backToBackNote();
     });
     var ring = root.querySelector('[data-ss-ring]');
     if (ring) {
