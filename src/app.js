@@ -7929,7 +7929,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   document.getElementById('signOutBtn')?.addEventListener('click', doSignOut);
   document.getElementById('navSignOutBtn')?.addEventListener('click', doSignOut);
-  document.getElementById('splashBackBtn')?.addEventListener('click', showLanding);
+  //  splashBackBtn was removed from the markup on purpose (Sign out
+  //  at the bottom of the same screen already does the only thing it
+  //  did). Its listener outlived it; optional chaining meant it
+  //  never errored, which is exactly why it went unnoticed.
   //  The splash back arrow is gone: Sign out at the bottom of the
   //  same screen already does the only thing it did, and two ways out
   //  of one screen is one too many.
