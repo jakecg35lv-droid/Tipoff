@@ -160,6 +160,8 @@ ok('makePick is liftable', /function makePick/.test(mkSrc));
     function track() {}
     function save() { env.saved = (env.saved || 0) + 1; }
     function startSeason() { env.started = true; state.phase = 'season'; }
+    //  Log entries are now timestamped on the shared clock.
+    function nowSynced() { return env.clock = (env.clock || 1000) + 1000; }
     ${mkSrc}
     return function (st, teamId, playerId) {
       state = st;
@@ -365,6 +367,129 @@ ok('an empty note collapses', /\.rp-un-turn:empty \{ display: none; \}/.test(sea
   ok('the season phase shows nothing',
     run({ phase: 'season', league: { numTeams: 8 } }, cfg(8), teams) === '');
 })();
+
+
+// ══ 8. Restart must not start the draft ══════════════════
+/*  Reported and then confirmed from the live league: pressing
+    Restart League immediately started the draft. The document still
+    held scheduledAt = 17 minutes ago with soonSent = true.
+
+    restartLeague puts status back to 'pre', and draftTick fires a
+    scheduled start whenever status is 'pre' and scheduledAt has
+    passed. So the host's very next tick relaunched the draft a
+    quarter of a second later. Same oversight as seasonStart, one
+    field over.                                                   */
+const restart = code.slice(code.indexOf('function restartLeague'), code.indexOf('function applyScoring'));
+ok('restart clears the schedule', /d[.]scheduledAt = null;/.test(restart),
+  'this is why Restart auto-started the draft');
+ok('restart re-arms the starts-soon warning', /d[.]soonSent = false;/.test(restart));
+for (const f of ['d.pick = 0', "d.status = 'pre'", 'd.log = []', 'd.endsAt = null',
+                 'd.botAt = null', 'd.completedAt = null', 'd.scheduledAt = null',
+                 'state.league.seasonStart = null', 'state.realWeeks = null',
+                 'state.week = 0', 'state.day = 0']) {
+  ok('restart resets ' + f, restart.includes(f));
+}
+ok('restart keeps the teams and their seats',
+  /state[.]teams[.]forEach/.test(restart) && !/state[.]teams = /.test(restart),
+  'clearing uids would make everyone rejoin');
+
+// Execute it against a live, scheduled, part-drafted league.
+(function () {
+  const i = code.indexOf('function restartLeague');
+  const open = code.indexOf('{', i);
+  let dep = 0, end = -1;
+  for (let k = open; k < code.length; k++) {
+    if (code[k] === '{') dep++;
+    else if (code[k] === '}') { dep--; if (dep === 0) { end = k; break; } }
+  }
+  const src = code.slice(i, end + 1);
+  const parts = [
+    'var state = st;',
+    'function draftCfg() { return state.draft; }',
+    'function round1() { return state.draft.round1; }',
+    'function snake(r, n) { var o = []; for (var k = 0; k < n; k++) { o.push.apply(o, k % 2 ? r.slice().reverse() : r.slice()); } return o; }',
+    'function regWeeks() { return 2; }',
+    'function buildSchedule() { return []; }',
+    'function save() {}',
+    src,
+    'restartLeague();',
+    'return state;'
+  ].join('\n');
+  const run = new Function('st', parts);
+  const before = {
+    phase: 'draft', week: 3, day: 2,
+    league: { numTeams: 2, rosterSize: 2, seasonStart: 1700000000000 },
+    teams: [{ id: 't0', uid: 'u0', roster: ['p1', 'p2'] }, { id: 't1', uid: 'u1', roster: ['p3'] }],
+    realWeeks: [1, 2],
+    draft: {
+      round1: ['t0', 't1'], order: ['t0', 't1', 't1', 't0'], pick: 3, log: [{ pick: 0 }],
+      status: 'live', endsAt: 123, botAt: 456, completedAt: 789,
+      scheduledAt: Date.now() - 3600000, soonSent: true, queue: ['p9']
+    },
+    games: { 1: {} }, lineups: { 1: {} }, results: [1]
+  };
+  const after = run(JSON.parse(JSON.stringify(before)));
+  ok('after restart the status is pre', after.draft.status === 'pre');
+  ok('after restart the pick is zero', after.draft.pick === 0);
+  ok('after restart NO schedule is left to fire', after.draft.scheduledAt === null,
+    String(after.draft.scheduledAt) + ' <- would relaunch the draft');
+  ok('after restart rosters are empty', after.teams.every(t => (t.roster || []).length === 0));
+  ok('after restart seats are still claimed', after.teams.every(t => !!t.uid));
+  ok('after restart the order is a full snake',
+    after.draft.order.length === 4 && after.draft.order[1] === after.draft.order[2]);
+  ok('after restart the season anchor is cleared', after.league.seasonStart === null);
+  ok('after restart the week is back to zero', after.week === 0 && after.day === 0);
+  ok('after restart the queue is cleared', (after.draft.queue || []).length === 0);
+})();
+
+// A schedule nobody attended must not fire hours later either.
+ok('a stale schedule is dropped instead of starting',
+  /if [(]now0 - at > SCHEDULE_STALE_MS[)]/.test(code));
+ok('dropping it clears the field so it cannot retry', (function () {
+  //  Slice the stale-schedule branch and look inside it, rather than
+  //  trying to span it with one regex.
+  const i = code.indexOf('now0 - at > SCHEDULE_STALE_MS');
+  if (i < 0) return false;
+  const seg = code.slice(i, i + 400);
+  return /scheduledAt = null;/.test(seg) && /soonSent = false;/.test(seg) && /save\(\);/.test(seg);
+})(), 'without clearing it, the next tick tries again');
+ok('the commissioner is told why', /scheduled start time has passed/.test(code));
+ok('only the host can fire a scheduled start',
+  /if [(]!isHost[(][)][)] [{] paintClock[(][)]; return; [}]/.test(code));
+
+// ══ 9. A refused pick must not spin ══════════════════════
+/*  My own regression. makePick can refuse, and livePick returns
+    before restartClock(), so endsAt stays expired — and draftTick
+    runs every 250ms. That is a four-per-second retry loop with
+    "Autopicking" frozen on screen and the draft stuck on one seat:
+    exactly "it says autopicking and then it restarts the timer for
+    that person".                                                  */
+ok('a backoff exists', /var PICK_BACKOFF_MS/.test(code) && /var PICK_BLOCKED_AT/.test(code));
+ok('the tick respects the backoff',
+  /if [(]PICK_BLOCKED_AT && now - PICK_BLOCKED_AT < PICK_BACKOFF_MS[)]/.test(code));
+ok('the backoff clears itself', /PICK_BLOCKED_AT = 0;/.test(code));
+//  Every branch that can pick must arm it on refusal, or that branch
+//  keeps spinning.
+ok('the bot branch arms the backoff',
+  /livePick[(]t[.]id, botChoose[(]t[.]id[)], 'bot'[)] === false[)] [{] PICK_BLOCKED_AT = now;/.test(code));
+ok('my-own-seat autopick arms the backoff',
+  /else [{] PICK_BLOCKED_AT = now; paintClock[(][)]; return; [}]/.test(code));
+ok('the covering branch arms the backoff',
+  /seatIsHuman [?] 'auto' : 'bot'[)] === false[)] [{]\s*PICK_BLOCKED_AT = now;/.test(code));
+(function () {
+  const ms = Number((code.match(/PICK_BACKOFF_MS = ([0-9]+)/) || [])[1]);
+  ok('the backoff outlasts a snapshot round trip', ms >= 1000, String(ms));
+  ok('the backoff is short enough not to look hung', ms <= 5000, String(ms));
+})();
+
+// ══ 10. The log can be diagnosed after the fact ══════════
+/*  The log recorded pick, team, player and how, but no time. So
+    "it autopicked five times in a row" was indistinguishable from
+    five managers each burning their full minute, and the only way
+    to tell was to be watching. */
+ok('every pick is timestamped', /at: nowSynced[(][)]/.test(code));
+ok('the timestamp is on the shared clock, not Date.now',
+  !/at: Date[.]now[(][)]/.test(code), 'skew would make the gaps meaningless');
 
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

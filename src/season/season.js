@@ -804,6 +804,19 @@
       covers its own seat rather than stalling the room.          */
   var WOKE_GAP_MS = 1500;
   var WOKE_WAIT_MS = 2500;
+
+  /*  How long after its scheduled time a draft may still auto-start.
+      Generous enough that a host arriving a bit late still gets the
+      scheduled start they asked for, short enough that a schedule
+      nobody attended does not fire the next morning. */
+  var SCHEDULE_STALE_MS = 2 * 60 * 60 * 1000;   // 2 hours
+
+  /*  Backoff after makePick refuses. Long enough for the snapshot
+      that will correct us to arrive, short enough that the draft
+      does not visibly hang. Without it draftTick retries the same
+      doomed pick four times a second. */
+  var PICK_BACKOFF_MS = 2000;
+  var PICK_BLOCKED_AT = 0;
   var DRAFT_TICK_AT = 0;
   var DRAFT_WOKE_AT = 0;
 
@@ -1455,7 +1468,12 @@
     t.roster.push(playerId);
     state.draft.log.push({
       pick: state.draft.pick, teamId: teamId, playerId: playerId,
-      how: how || 'bot'
+      how: how || 'bot',
+      /*  When, on the shared clock. The log had no timing at all,
+          so a report of "it autopicked five times in a row" could
+          not be told apart from five managers each taking their
+          full minute. One number makes that obvious. */
+      at: nowSynced()
     });
     state.draft.pick++;
     track('season_pick_made', {
@@ -1679,6 +1697,20 @@
     //  weeks ago — the exact bug the draft anchoring was added to fix,
     //  reintroduced by pressing Restart.
     d.completedAt = null;
+    /*  ── Clear the SCHEDULE too, or restart starts the draft ───
+        This is the same oversight as seasonStart above, one field
+        over. restartLeague puts status back to 'pre', and draftTick
+        fires a scheduled start whenever status is 'pre' and
+        scheduledAt has passed. A league that was scheduled for 8pm
+        and then restarted at 9pm therefore went live again on the
+        host's very next tick — a quarter of a second later, with
+        nobody ready and the first picks already on the clock.
+
+        A restart means "back to before the draft", and that
+        includes not being scheduled. The commissioner can set a new
+        time, or just press Start.                               */
+    d.scheduledAt = null;
+    d.soonSent = false;        // so a new schedule can warn again
     state.league.seasonStart = null;
     state.realWeeks = null;
     state.phase = 'draft'; state.week = 0; state.day = 0;
@@ -1764,6 +1796,25 @@
       //  'live' and the snapshot brings it to everyone.
       if (now0 >= at) {
         if (!isHost()) { paintClock(); return; }
+        /*  ── A long-expired schedule must not fire ─────────────
+            "Start at 8pm" means 8pm. If nobody had the app open at
+            8pm, this branch used to run whenever the host next
+            opened it — 9am the following morning, say — and the
+            draft went live instantly with the room empty and the
+            clock already running on pick one.
+
+            Past the window, drop the schedule and let the
+            commissioner decide. Pressing Start is one tap; an
+            unattended draft is not undoable.                    */
+        if (now0 - at > SCHEDULE_STALE_MS) {
+          state.draft.scheduledAt = null;
+          state.draft.soonSent = false;
+          save();
+          ui.toastMsg = 'The scheduled start time has passed. Set a new time or press Start when everyone is here.';
+          ui.toastType = 'info';
+          render();
+          return;
+        }
         startDraft(); ui.toastMsg = 'Scheduled start reached. The draft is live.'; ui.toastType = 'success'; render(); return;
       }
       var cd = root && root.querySelectorAll('[data-ss-countdown]');
@@ -1850,9 +1901,28 @@
 
     if (!mayAct) { paintClock(); return; }
 
+    /*  ── A refused pick must not be retried 4× a second ───────
+        makePick can now refuse a stale or out-of-turn pick. On a
+        refusal livePick returns before restartClock(), so endsAt
+        stays expired — and this tick runs every 250ms. The result
+        is a spin: "Autopicking" on screen, the clock frozen, a
+        refusal logged four times a second, and the draft stuck on
+        that seat until a snapshot happens to arrive.
+
+        That is a loop I introduced with the validation, and it is
+        exactly the shape of "it says autopicking and then it
+        restarts the timer for that person".
+
+        Back off for a beat instead. A refusal means our copy is
+        behind, so the only useful thing to do is wait for the
+        snapshot that will correct us.                           */
+    if (PICK_BLOCKED_AT && now - PICK_BLOCKED_AT < PICK_BACKOFF_MS) { paintClock(); return; }
+    PICK_BLOCKED_AT = 0;
+
     // Bot clock: only ever for a seat with nobody behind it.
     if (!seatIsHuman && d.botAt && now >= d.botAt) {
-      livePick(t.id, botChoose(t.id), 'bot'); afterPick(); return;
+      if (livePick(t.id, botChoose(t.id), 'bot') === false) { PICK_BLOCKED_AT = now; paintClock(); return; }
+      afterPick(); return;
     }
     if (now >= d.endsAt) {
       if (mineToPick) {
@@ -1864,7 +1934,7 @@
         //  who is on somebody else's roster.
         if (livePick(t.id, pid, 'auto') !== false) {
           ui.toastMsg = 'Time ran out. ' + (qid ? 'Took ' + P(pid).name + ' from your queue.' : 'Autopicked ' + P(pid).name + '.'); ui.toastType = 'info';
-        }
+        } else { PICK_BLOCKED_AT = now; paintClock(); return; }
       } else {
         //  Covering for a human who is away. Honour their queue the
         //  same way their own device would have, so a manager who
@@ -1872,7 +1942,9 @@
         var oq = (d.queue || []).filter(function (id) {
           return available().some(function (a) { return a.id === id; });
         })[0];
-        livePick(t.id, oq || botChoose(t.id), seatIsHuman ? 'auto' : 'bot');
+        if (livePick(t.id, oq || botChoose(t.id), seatIsHuman ? 'auto' : 'bot') === false) {
+          PICK_BLOCKED_AT = now; paintClock(); return;
+        }
       }
       afterPick(); return;
     }
