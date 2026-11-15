@@ -954,26 +954,62 @@ function showSplash(fromInit) {
 
   /*  ── Make sure the wordmark is drawn in the right face ─────
       The stylesheet loads Barlow Condensed with display=swap, so
-      the first paint uses Arial Narrow / system-ui. Those are
-      wider, so the word was laid out and centred at the fallback's
-      width and then reflowed when the webfont arrived — the
-      left-shift-then-snap everyone saw on mobile.
+      the first paint uses Arial Narrow / system-ui, which has
+      different metrics.
 
-      Kick the load as early as possible and mark the intro ready
-      when it resolves. CSS keeps .mm-intro-word visibility:hidden
-      until then, so the animation runs underneath and a late font
-      costs a slightly later fade-in rather than a visible jump.
+      The PREVIOUS fix held .mm-intro-word at visibility:hidden
+      until the font resolved, capped at 1200ms. But the word's
+      animation is cued at 1050ms, so whenever the font took longer
+      than a second the cap flipped visibility 150ms into a 450ms
+      animation whose easing is front-loaded — the word appeared
+      abruptly at about 85% of the way through, still a shade low
+      and still tracked open. That is the "off centre for a
+      fraction of a second" that survived the first fix: not a
+      reflow any more, a pop.
 
-      The cap matters: a font that never loads must not mean a
-      missing wordmark. 1200ms is past the word's 1.05s cue and
-      still inside the 1.70s hold, so the budget holds either way. */
+      Now the font gate owns the ANIMATION, not visibility, and the
+      delay is computed so it always plays from its first frame:
+
+        · font ready before the cue  -> delay stays 1.05s (normal)
+        · font ready after the cue   -> delay 0, plays immediately
+
+      Either way the animation is never revealed partway through.
+
+      The cap is 900ms so the common slow case still animates
+      exactly on schedule (900 + 150 = 1050). If the font never
+      loads at all, the word animates in the fallback face rather
+      than going missing — and because the wordmark is centred with
+      translateX(-50%), a later swap narrows the glyphs in place
+      instead of shifting them sideways.                          */
   if (intro) {
-    var markReady = function () { try { intro.classList.add('fonts-ready'); } catch (e) { } };
+    var WORD_CUE_MS = 1050;     // must match the CSS animation delay
+    var FONT_CAP_MS = 900;      // leaves 150ms before the cue
+    var _wordEl = intro.querySelector('.mm-intro-word');
+    var markReady = function () {
+      if (intro._fontsMarked) return;      // idempotent: race + cap both call
+      intro._fontsMarked = true;
+      try {
+        /*  intro._playAt is stamped where .playing is added, below.
+            If the font resolved BEFORE the intro started (a repeat
+            visit with a warm cache, the common case) there is no
+            elapsed time to subtract and the CSS cue stands. */
+        if (_wordEl && intro._playAt) {
+          var elapsed = (window.performance ? performance.now() : Date.now()) - intro._playAt;
+          var delay = Math.max(0, WORD_CUE_MS - elapsed);
+          _wordEl.style.animationDelay = (delay / 1000).toFixed(3) + 's';
+        }
+        intro.classList.add('fonts-ready');
+      } catch (e) {
+        //  The word is invisible until fonts-ready, so a failure
+        //  here must still end with the class applied.
+        try { intro.classList.add('fonts-ready'); } catch (_) { }
+      }
+    };
     if (document.fonts && document.fonts.load) {
-      var cap = setTimeout(markReady, 1200);
+      var cap = setTimeout(markReady, FONT_CAP_MS);
       Promise.race([
         document.fonts.load('600 1em "Barlow Condensed"'),
-        new Promise(function (r) { setTimeout(r, 1200); })
+        new Promise(function (r) { setTimeout(r, FONT_CAP_MS); })
       ]).then(function () { clearTimeout(cap); markReady(); })
        .catch(function () { clearTimeout(cap); markReady(); });
     } else {
@@ -987,11 +1023,21 @@ function showSplash(fromInit) {
     intro.classList.remove('playing');
     intro.style.opacity = '';
     intro.style.transition = '';
+    /*  Clear the computed delay from a previous run, or a second
+        showSplash reuses the first run's catch-up value and the
+        word arrives at the wrong moment. The font is cached by
+        then, so the CSS cue is the right answer. */
+    var _w = intro.querySelector('.mm-intro-word');
+    if (_w) _w.style.animationDelay = '';
     void intro.offsetWidth; // flush pending styles
 
     // Show intro and kick off animations
     intro.style.display = 'flex';
     void intro.offsetWidth; // reflow so animations start clean
+    /*  Stamped BEFORE .playing so markReady can work out how far
+        into the timeline the font arrived. Everything in the CSS
+        timeline is measured from this instant. */
+    intro._playAt = (window.performance ? performance.now() : Date.now());
     intro.classList.add('playing');
 
     /*  BUDGET: 2.5s door to door, and these timers own most of it.

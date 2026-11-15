@@ -162,25 +162,118 @@ ok('reduced motion still shows the wordmark', /mm-intro-word \{[\s\S]{0,80}fade-
 ok('the stylesheet still uses display=swap', /display=swap/.test(html));
 ok('gstatic is preconnected', /preconnect[^>]*fonts\.gstatic/.test(html));
 
-const hidden = css.slice(css.indexOf('.mm-intro-word {'), css.indexOf('#mmIntro.fonts-ready'));
-ok('the word is hidden until the real face loads', /visibility:\s*hidden/.test(hidden));
-/*  visibility, NOT display or opacity: it keeps the element in
-    layout so the animation runs underneath, which turns a late
-    font into a later fade-in rather than a jump.               */
+const wordBase = css.slice(css.indexOf('.mm-intro-word {'), css.indexOf('.mm-glow {'));
+ok('the word is hidden before its animation runs', /opacity:\s*0/.test(wordBase));
 ok('it stays in layout while hidden',
-  !/\.mm-intro-word \{[^}]*display:\s*none/.test(css));
-ok('it is revealed by a fonts-ready class',
-  /#mmIntro\.fonts-ready \.mm-intro-word \{[^}]*visibility:\s*visible/.test(css));
+  !/\.mm-intro-word \{[^}]*display:\s*none/.test(css) &&
+  !/\.mm-intro-word \{[^}]*visibility:\s*hidden/.test(css));
 //  A synthesised bold on the fallback is wider still.
-ok('no faux-bold on the fallback', /font-synthesis:\s*none/.test(hidden));
+ok('no faux-bold on the fallback', /font-synthesis:\s*none/.test(wordBase));
 
-const fontGate = app.slice(app.indexOf('var markReady'), app.indexOf('if (fromInit && intro)'));
+/*  ── The second attempt, and why it also failed ────────────
+    The first fix held the word at visibility:hidden until the font
+    resolved, capped at 1200ms. But the word's animation is cued at
+    1050ms, so a font slower than a second meant visibility flipped
+    150ms INTO a 450ms animation. The easing is front-loaded, so it
+    appeared abruptly at ~85% progress — still low, still tracked
+    open. The reflow had become a pop, which is what was still
+    visible on the phone.
+
+    The invariant now is arithmetic, not vibes: the reveal can
+    never land mid-animation, because the gate is on the ANIMATION
+    and its delay is recomputed to absorb however late the font
+    was. These checks prove that property holds for every arrival
+    time, rather than asserting the shape of one implementation. */
+ok('the animation is gated on fonts-ready, not visibility',
+  /#mmIntro\.playing\.fonts-ready \.mm-intro-word \{\s*animation: mm-word-in/.test(css));
+ok('no rule reveals the word by visibility any more',
+  !/visibility:\s*visible/.test(css.slice(css.indexOf('#mmIntro {'), css.indexOf('.mm-glow {'))));
+
+const fontGate = app.slice(app.indexOf('var WORD_CUE_MS'), app.indexOf('if (fromInit && intro)'));
 ok('the font load is kicked explicitly', /document\.fonts\.load\('600 1em "Barlow Condensed"'\)/.test(fontGate));
+ok('the cue constant matches the CSS delay', (function () {
+  const js = (fontGate.match(/WORD_CUE_MS = (\d+)/) || [])[1];
+  const cssDelay = (css.match(/#mmIntro\.playing\.fonts-ready \.mm-intro-word \{\s*animation: mm-word-in [\d.]+s [^)]*\)\s*([\d.]+)s/) || [])[1];
+  return js && cssDelay && Math.abs(Number(js) / 1000 - Number(cssDelay)) < 0.001;
+})(), 'drifting these apart reintroduces the bug silently');
 //  A font that never resolves must not mean a missing wordmark.
-ok('the wait is capped', /setTimeout\(markReady, 1200\)/.test(fontGate));
+ok('the wait is capped', /setTimeout\(markReady, FONT_CAP_MS\)/.test(fontGate));
+ok('the cap lands before the cue, not after', (function () {
+  const cue = Number((fontGate.match(/WORD_CUE_MS = (\d+)/) || [])[1]);
+  const cap = Number((fontGate.match(/FONT_CAP_MS = (\d+)/) || [])[1]);
+  return cap < cue;
+})(), 'a cap past the cue is exactly what caused the pop');
+ok('markReady is idempotent', /if \(intro\._fontsMarked\) return;/.test(fontGate),
+  'the race and the cap both call it');
 ok('a rejected load still reveals it', /\.catch\(function \(\) \{ clearTimeout\(cap\); markReady\(\); \}\)/.test(fontGate));
 ok('a browser with no Font Loading API still reveals it',
   /\} else \{\s*markReady\(\);/.test(fontGate));
+ok('a throw inside markReady still applies the class',
+  /catch \(e\) \{[\s\S]{0,200}classList\.add\('fonts-ready'\)/.test(fontGate),
+  'the word is invisible without it');
+ok('the play instant is stamped before .playing',
+  /intro\._playAt = [\s\S]{0,80}\n\s*intro\.classList\.add\('playing'\)/.test(app));
+ok('a replay clears the previous run\'s computed delay',
+  /_w\.style\.animationDelay = '';/.test(app));
+
+/*  Run the real delay arithmetic for every font arrival time and
+    assert the animation never starts before its cue and never
+    starts partway through. */
+(function () {
+  const cue = Number((fontGate.match(/WORD_CUE_MS = (\d+)/) || [])[1]);
+  const cap = Number((fontGate.match(/FONT_CAP_MS = (\d+)/) || [])[1]);
+  //  The one line that decides it, lifted verbatim.
+  const expr = (fontGate.match(/var delay = (Math\.max\(0, WORD_CUE_MS - elapsed\));/) || [])[1];
+  ok('the delay expression is liftable', !!expr, fontGate.slice(0, 80));
+  if (!expr) return;
+  const delayFor = new Function('WORD_CUE_MS', 'elapsed', 'return ' + expr + ';');
+
+  let worstStart = 0, everMidFlight = false, everMissing = false;
+  for (let fontAt = 0; fontAt <= 4000; fontAt += 10) {
+    //  markReady runs at whichever comes first: the font, or the cap.
+    const markAt = Math.min(fontAt, cap);
+    const delay = delayFor(cue, markAt);
+    const startsAt = markAt + delay;
+    //  Invariant 1: never begins before the designed cue.
+    if (startsAt < cue - 0.001) everMidFlight = true;
+    //  Invariant 2: the element becomes animatable exactly when the
+    //  animation begins, so it can never be revealed part-way.
+    if (markAt > startsAt + 0.001) everMidFlight = true;
+    //  Invariant 3: it always runs.
+    if (!(startsAt >= 0 && isFinite(startsAt))) everMissing = true;
+    worstStart = Math.max(worstStart, startsAt);
+  }
+  ok('the animation never starts before its cue, for any font arrival', !everMidFlight);
+  ok('the word always animates, for any font arrival', !everMissing);
+  //  The 450ms animation plus the worst start must finish inside the
+  //  1700ms hold, or the word is still moving when the crossfade begins.
+  ok('worst case still lands inside the 1.70s hold', worstStart + 450 <= 1700,
+    'worst start ' + worstStart + 'ms -> ends ' + (worstStart + 450) + 'ms');
+  ok('normal case lands exactly on the designed cue', delayFor(cue, 0) + 0 === cue,
+    String(delayFor(cue, 0)));
+})();
+
+/*  Reduced motion must not clobber the computed delay. `animation:
+    ... !important` as a shorthand sets animation-delay !important
+    too, which beats the inline catch-up value — the fade would
+    then start 1.0s after the class landed rather than 1.0s into
+    the timeline, finishing after the intro had crossfaded away. */
+(function () {
+  /*  There is more than one reduced-motion block in this
+      stylesheet now, and indexOf found an unrelated one. Anchor on
+      the block that actually contains the intro rules. */
+  const rmStart = css.lastIndexOf('@media (prefers-reduced-motion: reduce)',
+    css.indexOf('#mmIntro.playing .mm-path'));
+  ok('the intro reduced-motion block was located', rmStart > 0);
+  const rm = css.slice(rmStart, css.indexOf('@keyframes mm-logo-rise'));
+  const block = rm.slice(rm.indexOf('.mm-intro-word'), rm.indexOf('}', rm.indexOf('.mm-intro-word')) + 1);
+  ok('reduced motion still shows the wordmark', /animation-name:\s*fade-in/.test(block));
+  ok('reduced motion uses the same two-class gate',
+    /#mmIntro\.playing\.fonts-ready \.mm-intro-word/.test(rm));
+  ok('reduced motion does not force the delay',
+    !/animation-delay:[^;]*!important/.test(block) && !/animation:\s*fade-in[^;]*!important/.test(block),
+    'an !important delay overrides the catch-up');
+})();
 
 /*  The cap has to sit past the word's own cue but inside the hold,
     or a slow font either shows the word mid-flight for no reason

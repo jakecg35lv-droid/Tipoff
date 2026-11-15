@@ -1447,35 +1447,37 @@ select:focus {
   filter: drop-shadow(0 0 5px rgba(242, 107, 33, 0.6));
 }
 
-/*  ── Two separate gates, for two separate reasons ──────────
-    opacity:0 — hidden until .playing, so a cold paint never
-    flashes the wordmark before the court has drawn.
+/*  ── One gate: opacity, owned by the animation ─────────────
+    The word's animation carries `both`, so from the moment it is
+    applied it owns opacity from its own first frame. This rule
+    only keeps the wordmark off a cold paint before that.
 
-    visibility:hidden — hidden until the REAL face has loaded. The
-    stylesheet asks Google Fonts for Barlow Condensed with
-    display=swap, so the first paint uses 'Arial Narrow'/system-ui.
-    Those are materially wider than Barlow Condensed, so the word
-    rendered at one width, got centred, and then reflowed to a
-    narrower width the instant the webfont landed — reading as the
-    wordmark sitting slightly left for a fraction of a second and
-    then snapping into place. Worse on a phone, where the font
-    request competes with everything else.
+    THIS USED TO ALSO SET visibility:hidden, flipped to visible by
+    a .fonts-ready class, to hide the webfont swap. That cure was
+    worse than the disease. The word is cued at 1.05s and
+    showSplash capped the font wait at 1.2s, so on any load where
+    the font took over a second — routine on a phone's first visit
+    — visibility flipped 150ms INTO the animation. The easing is
+    heavily front-loaded, so the word appeared abruptly at roughly
+    85% of the way through: a couple of pixels low, tracking still
+    open, popping into view rather than fading. A reflow had been
+    traded for a pop, which is what Jake kept seeing.
 
-    visibility, not display or opacity: it keeps the element in
-    layout so the animation is already running underneath, which
-    means a late font produces a slightly later fade-in rather than
-    a jump. showSplash() caps the wait so the word can never be
-    missing outright.                                            */
+    The gate now sits on the ANIMATION instead, and showSplash
+    computes its delay so it can never begin before its real cue.
+    See the .fonts-ready rule in the timeline below.
+
+    Why the swap itself is survivable now: this element is centred
+    with left:50% plus translateX(-50%), so it re-centres at
+    whatever width it happens to have. A change of face narrows the
+    glyphs in place rather than shifting the word sideways. The
+    original left-shift came from the old text-indent centring,
+    which is long gone.                                          */
 .mm-intro-word {
   opacity: 0;
-  visibility: hidden;
   /*  Stop the browser synthesising a faux-bold on the fallback,
-      which widens it further and makes the swap jump larger. */
+      which widens it further and makes any swap more obvious. */
   font-synthesis: none;
-}
-
-#mmIntro.fonts-ready .mm-intro-word {
-  visibility: visible;
 }
 
 .mm-glow {
@@ -1623,8 +1625,17 @@ select:focus {
 }
 
 /*  The resolve. Starts while the court is still dimming so the
-    two read as one movement, and lands at 1.50s. */
-#mmIntro.playing .mm-intro-word {
+    two read as one movement, and lands at 1.50s.
+
+    Gated on .fonts-ready as well as .playing, so the wordmark
+    never animates in a face it is about to swap out of. The delay
+    below is the design cue for the normal case; showSplash
+    overwrites it inline when the font arrives late, so the
+    animation always plays from its first frame and can never be
+    revealed partway through. Both classes are guaranteed to land
+    — showSplash caps the font wait — so the word cannot go
+    missing if the font never loads at all.                     */
+#mmIntro.playing.fonts-ready .mm-intro-word {
   animation: mm-word-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) 1.05s both;
 }
 
@@ -1660,8 +1671,22 @@ select:focus {
   #mmIntro.playing .mm-bsv {
     animation: mm-court-dim 0.4s ease 0.9s both !important;
   }
-  #mmIntro.playing .mm-intro-word {
-    animation: fade-in 0.4s ease 1.0s both !important;
+  /*  Same two-class gate as the full-motion rule, or a
+      reduced-motion user gets no wordmark at all.
+
+      Written out longhand on purpose. `animation: ... !important`
+      as a shorthand also sets animation-delay !important, which
+      beats the inline catch-up delay showSplash computes — so with
+      a late font the fade would start 1.0s after the class landed
+      rather than 1.0s into the timeline, and finish after the
+      intro had already crossfaded away. Leaving the delay out of
+      the !important list lets the computed value win.           */
+  #mmIntro.playing.fonts-ready .mm-intro-word {
+    animation-name: fade-in !important;
+    animation-duration: 0.4s !important;
+    animation-timing-function: ease !important;
+    animation-fill-mode: both !important;
+    animation-delay: 1.0s;
   }
 }
 

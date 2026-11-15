@@ -508,8 +508,43 @@
 
       if (!doc.exists) return;
       var d = doc.data() || {};
-      if (typeof d.rev !== 'number' || d.rev <= SYNC.rev) return;   // stale or our own echo
+      if (typeof d.rev !== 'number') return;
       if (!d.state) return;
+
+      /*  ── Same revision, different author: a COLLISION ──────
+          Two devices that both hold rev N each write rev N+1, and
+          set() is last-write-wins, so one state silently replaces
+          the other. Both then receive the echo at rev N+1 — and the
+          old guard was `d.rev <= SYNC.rev`, so BOTH ignored it as
+          "our own echo". The loser kept its own version for ever.
+
+          That is not a lost pick, it is a SPLIT LEAGUE: the two
+          devices disagree about who is on which roster, which means
+          they disagree about who is still available, which means the
+          same player can be drafted twice. Nothing healed it until
+          somebody happened to write rev N+2.
+
+          Reachable in one specific and very ordinary way: a
+          manager's phone is locked past the autopick grace, the host
+          covers the seat at endsAt+20s, and in that same second the
+          manager unlocks their phone — the visibility kick fires
+          draftTick, the clock reads expired, and their own device
+          autopicks for its own seat. Two writes, one revision.
+
+          The server is the single authority. If its state at our
+          revision was written by somebody else, ours is the copy
+          that lost, so take theirs. One pick may be gone (the player
+          returns to the pool and gets drafted again), which is
+          recoverable; a split league is not.                      */
+      var mine = myUid() || 'anon';
+      var sameRevOther = d.rev === SYNC.rev && d.updatedBy && d.updatedBy !== mine;
+      if (sameRevOther) {
+        console.warn('[Season] write collision at rev ' + d.rev +
+          ' (ours lost to ' + d.updatedBy + '); adopting the server copy.');
+        track('season_write_collision', { rev: d.rev, phase: (state && state.phase) || null });
+      } else if (d.rev <= SYNC.rev) {
+        return;   // genuinely stale, or our own echo
+      }
 
       SYNC.rev = d.rev;
 
@@ -752,6 +787,25 @@
       a different seat on the clock, so it stands down.            */
   var ANY_TAKEOVER_MS = 45000;
   var ANY_TAKEOVER_STAGGER_MS = 4000;
+
+  /*  Waking-device guard. draftTick runs every 250ms, so a gap much
+      larger than that means this device's timers were throttled or
+      stopped — a locked phone, a background tab, a closed laptop. A
+      woken device holds stale state and must not act on it until one
+      fresh server snapshot has landed. See the long note in
+      draftTick for the two bugs this prevents.
+
+      1500ms for the gap: comfortably above normal jitter and well
+      below the 4× throttle browsers apply to a merely-backgrounded
+      tab, so an ordinary tab switch is not treated as a sleep.
+
+      2500ms for the wait: longer than any plausible Firestore round
+      trip, short enough that a device with a dead listener still
+      covers its own seat rather than stalling the room.          */
+  var WOKE_GAP_MS = 1500;
+  var WOKE_WAIT_MS = 2500;
+  var DRAFT_TICK_AT = 0;
+  var DRAFT_WOKE_AT = 0;
 
   function multiplayer() {
     return !!(syncDb() && state && state.league && state.league.code && SYNC.unsub);
@@ -1358,6 +1412,46 @@
   //  looks identical either way.
   function makePick(teamId, playerId, how) {
     var t = team(teamId);
+
+    /*  ── Last line of defence ──────────────────────────────
+        This function had no validation whatsoever: it pushed
+        whatever it was handed onto whatever roster it was handed.
+        Every caller happened to be correct, so it worked — but
+        "every caller is correct" is not a property you get to keep
+        in a multi-device draft.
+
+        The two invariants that must never break, because neither is
+        repairable once the season starts:
+
+          1. no player sits on two rosters
+          2. a pick belongs to the team actually on the clock
+
+        A device holding state that is one pick stale breaks both at
+        once: it drafts a player somebody else already took, for a
+        seat that has already moved on. Refusing here costs that
+        device one tick — the next snapshot corrects it and whoever
+        is really on the clock picks — whereas accepting it puts a
+        duplicate player in the league permanently.             */
+    if (!t || !P(playerId)) {
+      console.warn('[Season] refused a pick for an unknown team or player:', teamId, playerId);
+      return false;
+    }
+    if (drafted()[playerId]) {
+      //  Not an error worth shouting about: it means our copy was
+      //  behind, which the listener is already fixing.
+      console.warn('[Season] refused an already-drafted player:', playerId,
+        '- this device was behind; resyncing.');
+      track('season_pick_refused', { reason: 'taken', how: how || 'bot' });
+      return false;
+    }
+    var onClockId = (state.draft.order || [])[state.draft.pick];
+    if (onClockId && onClockId !== teamId) {
+      console.warn('[Season] refused a pick out of turn: slot', state.draft.pick,
+        'belongs to', onClockId, 'not', teamId);
+      track('season_pick_refused', { reason: 'out-of-turn', how: how || 'bot' });
+      return false;
+    }
+
     t.roster.push(playerId);
     state.draft.log.push({
       pick: state.draft.pick, teamId: teamId, playerId: playerId,
@@ -1682,6 +1776,47 @@
       now >= d.endsAt + ANY_TAKEOVER_MS + myIdx * ANY_TAKEOVER_STAGGER_MS;
 
     var mayAct = !mp || mineToPick || hostCovers || anyCovers;
+
+    /*  ── A device that has just woken may not act on stale state ──
+        This tick runs 4× a second, so two consecutive calls are
+        250ms apart. A much larger gap means the timer was throttled
+        or stopped outright: a locked phone, a backgrounded tab, a
+        laptop that was shut.
+
+        Such a device wakes holding whatever it last heard, which can
+        be a minute old. Acting on that is how two separate bugs
+        happen:
+
+          · it autopicks immediately against an expired endsAt that
+            the rest of the league has long since moved past — the
+            "my first pick got taken instantly" report
+          · it collides with the host's takeover. The host covers an
+            absent seat at endsAt+20s; if the seat-holder's phone
+            wakes in that same second, both write the same revision
+            and the league splits (see the collision note in
+            subscribeSeason)
+
+        Both disappear if a woken device simply waits for one fresh
+        server snapshot before it is allowed to pick. That is at most
+        a few hundred milliseconds, it is the correct behaviour
+        regardless of the collision, and it cannot stall anything:
+        if no snapshot ever arrives the device is offline, in which
+        case the host or another device covers the seat anyway.
+
+        Rendering continues throughout — only ACTING is deferred. */
+    var sinceTick = now - (DRAFT_TICK_AT || now);
+    DRAFT_TICK_AT = now;
+    if (mp && sinceTick > WOKE_GAP_MS) {
+      //  Require a snapshot that lands AFTER this moment, not merely
+      //  a recent one: the last sync may itself predate the sleep.
+      DRAFT_WOKE_AT = now;
+    }
+    if (mp && DRAFT_WOKE_AT && SYNC.lastServerSync <= DRAFT_WOKE_AT) {
+      //  Give up waiting eventually, or a league whose Firestore
+      //  listener is dead could never autopick at all.
+      if (now - DRAFT_WOKE_AT < WOKE_WAIT_MS) { paintClock(); return; }
+    }
+    DRAFT_WOKE_AT = 0;
 
     if (!mayAct) { paintClock(); return; }
 
