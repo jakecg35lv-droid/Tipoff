@@ -26,6 +26,18 @@
 //    match /databases/{database}/documents {
 //      match /users/{uid} {
 //        allow read, write: if request.auth != null && request.auth.uid == uid;
+//        // Web push subscriptions. Only the owner may list or change
+//        // them; Cloud Functions read them through the admin SDK,
+//        // which bypasses rules entirely. A broader read here would
+//        // expose every endpoint in the database, and an endpoint is
+//        // all anyone needs to send that device a notification.
+//        match /pushSubs/{subId} {
+//          allow read, write: if request.auth != null && request.auth.uid == uid;
+//        }
+//      }
+//      // Push dedupe markers, written only by Cloud Functions.
+//      match /pushSent/{key} {
+//        allow read, write: if false;
 //      }
 //      match /leagues/{leagueCode} {
 //        allow read:   if request.auth != null;
@@ -62,6 +74,32 @@
 //     → Click Publish
 //
 // ═══════════════════════════════════════════════════════════════
+
+/* ── WEB PUSH (VAPID) ──────────────────────────────────────────
+   The PUBLIC half of the VAPID key pair. This belongs in the client
+   and is safe to commit: it only identifies us to the browser's push
+   service. The PRIVATE half must never appear in this repo — it lives
+   in a Cloud Functions secret.
+
+   GENERATE THE PAIR (once, ever — rotating it invalidates every
+   existing subscription and silently stops notifications for
+   everyone until each device re-subscribes):
+
+     cd functions
+     npm install
+     npx web-push generate-vapid-keys
+
+   Then:
+     1. Paste the PUBLIC key below.
+     2. Store the PRIVATE key as a secret, from the repo root:
+          firebase functions:secrets:set VAPID_PRIVATE_KEY
+        (paste the private key when prompted, then press Enter)
+     3. firebase deploy --only functions
+
+   Leaving this empty is safe: enablePush() returns 'no-key', the
+   toggle explains that push is not configured, and local in-app
+   notifications carry on working exactly as before.            */
+window.TIPOFF_VAPID_PUBLIC_KEY = 'BN6ueT1oTMAH5ln1iLPs7JgN-A0HE9rVld5j1HNRrxHAdM3YVDQvwaofnmM4RmC7nCl0fvEFkGk6mTyXNjP7KbM';
 
 // ↓ PASTE YOUR CONFIG HERE (from Firebase Console → Project Settings → Your apps)
 const firebaseConfig = {

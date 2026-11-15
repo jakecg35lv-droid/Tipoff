@@ -2602,6 +2602,87 @@ select:focus {
   margin: 0;
 }
 
+/* ── iOS Home Screen gate (push prerequisite) ──────────────
+   Deliberately styled as guidance rather than an error. It is not a
+   failure state: it is the one step between the user and working
+   alerts, so it reads as an instruction card in brand orange rather
+   than a red warning they will dismiss.                          */
+.push-install {
+  margin-top: 14px;
+  padding: 14px 16px 16px;
+  border: 1px solid rgba(242, 107, 33, 0.3);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(242, 107, 33, 0.1) 0%, rgba(242, 107, 33, 0.03) 100%);
+}
+
+.push-install-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+}
+
+.push-install-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 8px;
+  background: rgba(242, 107, 33, 0.16);
+  color: var(--orange);
+}
+
+.push-install-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.push-install-why {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/*  Numbered because the order matters and the third step is the one
+    people miss: opening the installed icon, not the Safari tab they
+    are still looking at. */
+.push-install-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.push-install-steps strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.push-install-steps::marker {
+  color: var(--orange);
+}
+
+/*  A disabled master toggle needs to look disabled, or the iPhone
+    user taps it repeatedly and concludes the app is broken. */
+.toggle-label input.custom-cb-real:disabled ~ .custom-cb-box {
+  opacity: 0.35;
+}
+
+.toggle-label:has(input.custom-cb-real:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}
+
 /* ── Notification preferences ── */
 .notif-prefs {
   margin-top: 18px;

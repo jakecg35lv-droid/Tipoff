@@ -19,6 +19,31 @@ service cloud.firestore {
     //  any business knowing which leagues a person belongs to.
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      //  ── Web push subscriptions ──────────────────────────────
+      //  A rule on users/{uid} does NOT cascade to subcollections,
+      //  so without this block every subscribe() write is denied and
+      //  push silently never works — savePushSubscription logs a
+      //  permission error nobody reads and the toggle looks fine.
+      //
+      //  Owner-only, and deliberately not readable by anyone else: a
+      //  push endpoint plus its two keys is a capability. Whoever
+      //  holds them can put a notification on that person's lock
+      //  screen, with no further authentication. The sender runs in
+      //  Cloud Functions on the Admin SDK, which bypasses rules.
+      match /pushSubs/{subId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // ── Push dedupe markers ──────────────────────────────────
+    //  Firestore triggers are at-least-once, so the sender claims a
+    //  one-shot marker per (league, pick) before notifying. Written
+    //  only by the function, via the Admin SDK. Closed to clients:
+    //  a client that could create these could pre-claim a pick and
+    //  suppress a rival's on-the-clock alert.
+    match /pushSent/{key} {
+      allow read, write: if false;
     }
 
     // ── Leagues ──────────────────────────────────────────────

@@ -1169,6 +1169,11 @@ function resumeTimerIfRunning() {
 
 // ── AUTH ──────────────────────────────────────────────────
 function _afterLoginNav() {
+  //  File this device's push subscription under the uid that just
+  //  signed in. The boot path does the same for a returning session;
+  //  this covers a fresh sign-in, where onAuthStateChanged has
+  //  already fired and will not run its boot branch again.
+  try { window.TipoffPush && window.TipoffPush.refresh(); } catch (e) { }
   const loginScreen = document.getElementById('loginScreen');
   loginScreen.style.transition = 'opacity 0.4s ease';
   loginScreen.style.opacity = '0';
@@ -7917,6 +7922,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   function doSignOut() {
     if (_leagueUnsubscribe) { _leagueUnsubscribe(); _leagueUnsubscribe = null; }
+    //  Before signOut, while we still have a uid to delete under.
+    //  A subscription left behind on a shared phone would keep
+    //  buzzing the previous account's draft picks to whoever has the
+    //  device next — their name, their league, on someone else's
+    //  lock screen. Fire-and-forget: sign-out must not wait on it.
+    try { window.TipoffPush && window.TipoffPush.disable(); } catch (e) { }
     if (window._auth && window._auth.currentUser) {
       window._auth.signOut().catch(e => console.warn('[Auth] signOut error:', e));
     }
@@ -8397,6 +8408,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(user.uid); } catch (e) { }
         try { subscribeAccountLeagues(); } catch (e) { }
+        //  Push endpoints rotate and stored copies get lost, so a
+        //  subscription enabled weeks ago can be silently dead. Re-
+        //  assert it now that we have a uid to file it under. No-ops
+        //  unless the user already opted in.
+        try { window.TipoffPush && window.TipoffPush.refresh(); } catch (e) { }
         if (!differentUser && loadState() && state.leagueId && !cameFromExternalLink() && !lastViewWantsSeason()) { _subscribeLeague(state.leagueCode); enterLeague(); }
         else { showSplash(true); }
       } else {
@@ -8515,17 +8531,41 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('notifToggle')?.addEventListener('change', async e => {
     if (e.target.checked) {
       const granted = await requestNotifPermission();
-      if (!granted) { e.target.checked = false; }
+      if (!granted) { e.target.checked = false; syncNotifUI(); return; }
+      //  Permission alone only buys local notifications, which cannot
+      //  fire on a locked phone. The subscription is what makes the
+      //  toggle mean what its label says.
+      await _turnOnPush();
     } else {
       setNotifPref(false);
+      await window.TipoffPush.disable();
     }
     syncNotifUI();
   });
   document.getElementById('notifEnableBtn')?.addEventListener('click', async () => {
-    await requestNotifPermission();
+    const granted = await requestNotifPermission();
+    if (granted) await _turnOnPush();
     syncNotifUI();
   });
   syncNotifUI();
+
+  //  Subscribe, and say something useful when it does not work. A
+  //  toggle that silently flicks back off is the single most common
+  //  way this feature fails for users.
+  async function _turnOnPush() {
+    const r = await window.TipoffPush.enable();
+    if (r === 'ok') return true;
+    const msgs = {
+      'needs-install': 'Add Tipoff to your Home Screen first — iPhone only allows alerts for installed apps.',
+      'denied': 'Notifications are blocked for this site. Allow them in your browser settings, then try again.',
+      'no-key': 'Push is not configured on this build yet.',
+      'no-store': 'Could not save this device. Alerts will only work while the app is open.',
+      'unsupported': 'This browser cannot deliver background alerts.',
+      'error': 'Could not set up background alerts. They will still work while the app is open.'
+    };
+    toast(msgs[r] || msgs.error, r === 'needs-install' ? 'info' : 'error');
+    return false;
+  }
 
   // ── NEW FEATURE HOOKS ─────────────────────────────────────
   initDraftInnerTabs();
@@ -8669,6 +8709,230 @@ async function showOTCNotification(pick) {
   }
 }
 
+/* ══════════════════════════════════════════════════════════
+   🔔 WEB PUSH  —  reaching a phone that is not looking at us
+   ══════════════════════════════════════════════════════════
+   showOTCNotification above is a LOCAL notification: it only fires
+   while this page is running. That is the opposite of what an
+   on-the-clock alert is for. The draft clock is a setInterval, and
+   both iOS and Android throttle or stop timers on a locked phone,
+   so the alert arrived only for people already staring at the draft
+   room.
+
+   Real push needs three parts, and this is the first: a
+   subscription, handed to the browser's push service and stored
+   server-side so a Cloud Function can send to it later. The second
+   is the `push` handler in sw.js. The third is the sender in
+   functions/index.js.
+
+   ── THE iOS RULE, which decides whether any of this works ──
+   Safari on iPhone cannot subscribe to push from a normal tab. The
+   site must be installed to the Home Screen first; until it is,
+   pushManager.subscribe rejects and Notification.requestPermission
+   does not even prompt. That has been true since iOS 16.4 and is
+   still true — Declarative Web Push (iOS 18.4+) simplified the
+   plumbing but did not lift the requirement.
+
+   So on iPhone the honest order is: install, then ask. Asking first
+   burns the one permission prompt we get and teaches the user the
+   feature is broken. iosNeedsInstall() below is what the settings
+   panel uses to show an install card instead of a dead toggle.    */
+
+//  Set in firebase-config.js. Public half of the VAPID pair — safe to
+//  ship, it is meant to be in the client. The private half lives in a
+//  Cloud Functions secret and must never appear here.
+function vapidPublicKey() {
+  return (window.TIPOFF_VAPID_PUBLIC_KEY || '').trim();
+}
+
+function pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+//  Standalone = launched from the Home Screen rather than a tab.
+//  navigator.standalone is the iOS-only signal; the media query is
+//  the standard one every other browser answers.
+function isStandalone() {
+  try {
+    if (window.navigator.standalone === true) return true;
+    return window.matchMedia('(display-mode: standalone)').matches;
+  } catch (e) { return false; }
+}
+
+function isIOS() {
+  try {
+    const ua = navigator.userAgent || '';
+    //  iPadOS 13+ reports itself as a Mac, so the touch-point count
+    //  is the only way to tell an iPad from a desktop Safari.
+    const iPadOS = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+    return /iPad|iPhone|iPod/.test(ua) || iPadOS;
+  } catch (e) { return false; }
+}
+
+//  True when this device CAN have push but only after being installed.
+function iosNeedsInstall() {
+  return isIOS() && !isStandalone();
+}
+
+//  VAPID keys travel as base64url; subscribe() wants a Uint8Array.
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+//  A stable, filename-safe document id per endpoint, so re-subscribing
+//  on the same device overwrites its own row instead of adding a new
+//  one every time the app loads. Endpoints are URLs and far too long
+//  for a Firestore id (1500-byte ceiling), hence the hash.
+function endpointId(endpoint) {
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  for (let i = 0; i < endpoint.length; i++) {
+    const c = endpoint.charCodeAt(i);
+    h1 = (h1 ^ c) * 0x01000193 >>> 0;
+    h2 = (h2 + c * (i + 1)) >>> 0;
+  }
+  return ('00000000' + h1.toString(16)).slice(-8) + ('00000000' + h2.toString(16)).slice(-8);
+}
+
+async function savePushSubscription(sub) {
+  const uid = _uid();
+  if (!uid || !window._db || !sub) return false;
+  const json = sub.toJSON ? sub.toJSON() : sub;
+  if (!json || !json.endpoint || !json.keys) return false;
+  try {
+    await window._db.collection('users').doc(uid)
+      .collection('pushSubs').doc(endpointId(json.endpoint))
+      .set({
+        endpoint: json.endpoint,
+        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+        //  Kept so a stale device can be recognised later, and so the
+        //  sender can tell an iPhone banner from a desktop one.
+        standalone: isStandalone(),
+        platform: isIOS() ? 'ios' : (/Android/.test(navigator.userAgent || '') ? 'android' : 'other'),
+        updatedAt: Date.now()
+      }, { merge: true });
+    return true;
+  } catch (e) {
+    console.warn('[Push] could not store subscription:', e && e.code, e && e.message);
+    return false;
+  }
+}
+
+async function removePushSubscription(endpoint) {
+  const uid = _uid();
+  if (!uid || !window._db || !endpoint) return;
+  try {
+    await window._db.collection('users').doc(uid)
+      .collection('pushSubs').doc(endpointId(endpoint)).delete();
+  } catch (e) {
+    console.warn('[Push] could not remove subscription:', e && e.message);
+  }
+}
+
+/*  Subscribe this device. Returns a reason string rather than a bare
+    false, because the settings panel needs to say WHY — "install to
+    your Home Screen first" and "notifications are blocked" need very
+    different copy, and a silent false produced a toggle that flicked
+    back off with no explanation.                                   */
+async function enablePush() {
+  if (!pushSupported()) return 'unsupported';
+  if (iosNeedsInstall()) return 'needs-install';
+  if (!vapidPublicKey()) return 'no-key';
+
+  if (Notification.permission === 'denied') return 'denied';
+  if (Notification.permission !== 'granted') {
+    const res = await Notification.requestPermission();
+    if (res !== 'granted') return 'denied';
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    //  An existing subscription is reused, EXCEPT when it was made
+    //  with a different VAPID key — which happens the first time the
+    //  key is rotated or set. Such a subscription looks valid here and
+    //  fails to decrypt on the way out, so it has to be replaced.
+    let sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      const want = urlBase64ToUint8Array(vapidPublicKey());
+      const have = new Uint8Array(sub.options && sub.options.applicationServerKey || []);
+      const same = have.length === want.length && have.every((b, i) => b === want[i]);
+      if (!same) { try { await sub.unsubscribe(); } catch (_) { } sub = null; }
+    }
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        //  Required on Chrome, and it is also the honest contract:
+        //  every push we send shows a notification.
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey())
+      });
+    }
+    const stored = await savePushSubscription(sub);
+    if (!stored) return 'no-store';
+    track('push_enabled', { platform: isIOS() ? 'ios' : 'other', standalone: isStandalone() });
+    return 'ok';
+  } catch (e) {
+    console.warn('[Push] subscribe failed:', e && e.name, e && e.message);
+    return 'error';
+  }
+}
+
+async function disablePush() {
+  if (!pushSupported()) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    const endpoint = sub.endpoint;
+    //  Remove the stored row FIRST. If unsubscribe succeeds and the
+    //  delete then fails, the server keeps sending to a dead endpoint
+    //  forever; the reverse just means one wasted send that prunes
+    //  itself on the 410.
+    await removePushSubscription(endpoint);
+    try { await sub.unsubscribe(); } catch (_) { }
+    track('push_disabled', {});
+  } catch (e) {
+    console.warn('[Push] unsubscribe failed:', e && e.message);
+  }
+}
+
+/*  Re-register on every signed-in load.
+
+    Push endpoints are not permanent: browsers rotate them, and a
+    subscription survives in the browser while its stored copy can be
+    lost (cleared site data, a different device, a failed write the
+    first time). Without this, a user who enabled push months ago
+    quietly stops receiving anything and has no reason to suspect it.
+
+    Cheap and idempotent — one small write when the endpoint is
+    already known, nothing at all when permission was never granted. */
+async function refreshPushSubscription() {
+  if (!pushSupported()) return;
+  if (Notification.permission !== 'granted') return;
+  if (!getNotifPref()) return;
+  if (!vapidPublicKey()) return;
+  if (!_uid()) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await savePushSubscription(sub);
+    else await enablePush();
+  } catch (e) { /* nothing the user can act on */ }
+}
+
+window.TipoffPush = {
+  enable: enablePush,
+  disable: disablePush,
+  refresh: refreshPushSubscription,
+  supported: pushSupported,
+  needsInstall: iosNeedsInstall,
+  standalone: isStandalone,
+  isIOS: isIOS
+};
+
 // Listen for SW telling us to jump to draft (notification tap when tab was open).
 // Ignored during startup so a queued message can never override the Home landing page.
 if ('serviceWorker' in navigator) {
@@ -8698,11 +8962,23 @@ function syncNotifUI() {
     pill.textContent = enabled ? 'On' : 'Off';
     pill.className = 'status-pill ' + (enabled ? 'status-active' : 'status-off');
   }
+  /*  The iPhone case comes first because it overrides everything
+      else: on a non-installed iOS Safari the toggle cannot work at
+      all, so describing it as "allow notifications" sends the user
+      into Settings to look for a switch that is not there. What they
+      actually need is Share → Add to Home Screen.                 */
+  const needsInstall = window.TipoffPush && window.TipoffPush.needsInstall();
+  const card = document.getElementById('pushInstallCard');
+  if (card) card.style.display = needsInstall ? '' : 'none';
+  if (toggle) toggle.disabled = !!needsInstall;
+
   if (desc) {
-    if (perm === 'denied') desc.textContent = 'Notifications are blocked in your browser. Check your browser settings to enable them.';
-    else desc.textContent = 'Get a browser notification when it\'s your pick, even if the app is in the background.';
+    if (needsInstall) desc.textContent = 'iPhone only delivers alerts to apps saved on your Home Screen. Add Tipoff first and alerts will work even when the app is closed.';
+    else if (perm === 'denied') desc.textContent = 'Notifications are blocked in your browser. Check your browser settings to enable them.';
+    else if (enabled) desc.textContent = 'You\'ll get an alert when it\'s your pick, even with the app closed and your phone locked.';
+    else desc.textContent = 'Get an alert when it\'s your pick, even with the app closed and your phone locked.';
   }
-  if (btn) btn.style.display = (perm === 'default') ? '' : 'none';
+  if (btn) btn.style.display = (perm === 'default' && !needsInstall) ? '' : 'none';
 
   syncNotifPrefsUI(enabled);
 }

@@ -26,8 +26,8 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
     rel="stylesheet" />
   <!-- ?v= must match the scripts below and CACHE_NAME in sw.js. -->
-  <link rel="stylesheet" href="src/styles.css?v=259" />
-  <link rel="stylesheet" href="src/season/season.css?v=259" />
+  <link rel="stylesheet" href="src/styles.css?v=260" />
+  <link rel="stylesheet" href="src/season/season.css?v=260" />
 </head>
 
 <body>
@@ -1276,6 +1276,29 @@
           </p>
           <button class="btn-ghost btn-sm" id="notifEnableBtn" style="margin-top:10px;display:none;">Enable Notifications</button>
 
+          <!-- ══ iOS HOME SCREEN GATE ══
+               Shown only on an iPhone or iPad that is NOT running
+               from the Home Screen. Safari refuses push subscriptions
+               from a normal tab, so the toggle above is disabled and
+               this replaces it with the step that actually unblocks
+               things. Hidden everywhere else by syncNotifUI(). -->
+          <div id="pushInstallCard" class="push-install" style="display:none;">
+            <div class="push-install-head">
+              <span class="push-install-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 16v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/>
+                </svg>
+              </span>
+              <span class="push-install-title">Add Tipoff to your Home Screen</span>
+            </div>
+            <p class="push-install-why">iPhone only sends alerts to apps saved on your Home Screen. One-time setup, then you'll get pick alerts with the app closed.</p>
+            <ol class="push-install-steps">
+              <li>Tap the <strong>Share</strong> button in Safari's toolbar</li>
+              <li>Scroll down and tap <strong>Add to Home Screen</strong></li>
+              <li>Open Tipoff from your Home Screen, then turn this on</li>
+            </ol>
+          </div>
+
           <!-- Everything below depends on the master toggle above -->
           <div id="notifPrefsGroup" class="notif-prefs">
             <div class="notif-prefs-head">Alert me about</div>
@@ -1779,7 +1802,7 @@
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <script defer src="firebase-config.js?v=259"></script>
+  <script defer src="firebase-config.js?v=260"></script>
 
   <!-- ══════════════════════════════════════════════════════════
        ?v= IS NOT DECORATION. BUMP IT ON EVERY RELEASE.
@@ -1802,14 +1825,14 @@
        its STATIC_ASSETS list, or the service worker precaches URLs
        the page never asks for.
   ══════════════════════════════════════════════════════════ -->
-  <script defer src="data/bracket.js?v=259"></script>
-  <script defer src="data/players.js?v=259"></script>
+  <script defer src="data/bracket.js?v=260"></script>
+  <script defer src="data/players.js?v=260"></script>
   <!-- Loaded before app.js so window.Analytics exists at first call.
        No-ops until a PostHog key is set in analytics.js. -->
-  <script defer src="src/analytics.js?v=259"></script>
-  <script defer src="src/app.js?v=259"></script>
-  <script defer src="data/conference-players.js?v=259"></script>
-  <script defer src="src/season/season.js?v=259"></script>
+  <script defer src="src/analytics.js?v=260"></script>
+  <script defer src="src/app.js?v=260"></script>
+  <script defer src="data/conference-players.js?v=260"></script>
+  <script defer src="src/season/season.js?v=260"></script>
 
   <!-- Service Worker Registration -->
   <script>

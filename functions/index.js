@@ -2176,5 +2176,300 @@ exports.seasonSyncNow = onRequest(
   }
 );
 
+
+/* ═══════════════════════════════════════════════════════════════
+   🔔 WEB PUSH  —  the sender
+   ═══════════════════════════════════════════════════════════════
+   Everything the client can do by itself stops at the moment the
+   page closes. The whole point of the on-the-clock alert is to
+   reach someone whose phone is locked in a pocket, and only a
+   server-sent push can do that.
+
+   ── WHY A FIRESTORE TRIGGER AND NOT A SCHEDULE ──
+   A scheduled function would have to poll every league every minute
+   to notice a turn change, and would still be up to a minute late on
+   a 60-second pick clock. The league document is already written on
+   every pick by whichever device made it, so the write itself is the
+   event. onDocumentWritten fires within a second or two and costs
+   nothing when nobody is drafting.
+
+   This also puts the decision in the one place that is always
+   awake. The draft clock is client-side: the autopick is performed
+   by whichever device happens to be watching. If notifying were the
+   client's job too, a league where everybody has the app closed —
+   exactly the case that needs the alert — would notify nobody.
+
+   ── THE PRIVATE KEY ──
+   VAPID_PRIVATE_KEY is a Cloud Functions secret, declared per
+   function below and read at runtime. It is never in source. The
+   matching public key is in firebase-config.js, where it belongs.
+═══════════════════════════════════════════════════════════════ */
+const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { defineSecret } = require('firebase-functions/params');
+const webpush = require('web-push');
+
+const VAPID_PRIVATE_KEY = defineSecret('VAPID_PRIVATE_KEY');
+
+//  Must match window.TIPOFF_VAPID_PUBLIC_KEY in firebase-config.js.
+//  A mismatch is silent: every send returns 403 and nobody is told,
+//  so sendToUser logs it loudly rather than swallowing the failure.
+const VAPID_PUBLIC_KEY = 'BN6ueT1oTMAH5ln1iLPs7JgN-A0HE9rVld5j1HNRrxHAdM3YVDQvwaofnmM4RmC7nCl0fvEFkGk6mTyXNjP7KbM';
+const VAPID_SUBJECT = 'mailto:support@tipofffantasy.com';
+
+let _vapidReady = false;
+function initVapid() {
+  if (_vapidReady) return true;
+  const priv = VAPID_PRIVATE_KEY.value();
+  if (!VAPID_PUBLIC_KEY || !priv) {
+    console.warn('[Push] VAPID keys not configured; no notifications will be sent.');
+    return false;
+  }
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, priv);
+  _vapidReady = true;
+  return true;
+}
+
+/*  Send one payload to every device a user has registered.
+
+    Pruning is the part that is easy to skip and expensive to skip.
+    Endpoints die constantly — app uninstalled, site data cleared,
+    browser rotated the endpoint — and a dead one returns 404 or 410
+    forever. Without pruning, a league that ran a draft in November
+    is still costing a failed HTTP request per pick next March, and
+    the logs fill with errors that look like a bug.
+
+    403 is different and must NOT prune: it means the VAPID key does
+    not match the one the subscription was created with. The
+    subscription is fine; the server is misconfigured. Deleting on
+    403 would quietly wipe every subscription in the database the
+    first time somebody rotated a key.                            */
+async function sendToUser(uid, payload) {
+  if (!uid) return { sent: 0, pruned: 0, failed: 0 };
+  if (!initVapid()) return { sent: 0, pruned: 0, failed: 0, reason: 'no-keys' };
+
+  const snap = await db.collection('users').doc(uid).collection('pushSubs').get();
+  if (snap.empty) return { sent: 0, pruned: 0, failed: 0, reason: 'no-subs' };
+
+  const body = JSON.stringify(payload);
+  let sent = 0, pruned = 0, failed = 0;
+
+  await Promise.all(snap.docs.map(async (doc) => {
+    const d = doc.data() || {};
+    if (!d.endpoint || !d.keys) { await doc.ref.delete(); pruned++; return; }
+    try {
+      await webpush.sendNotification(
+        { endpoint: d.endpoint, keys: { p256dh: d.keys.p256dh, auth: d.keys.auth } },
+        body,
+        //  TTL matters for a pick clock. If the push service cannot
+        //  reach the device within the pick window the alert is
+        //  worthless and actively confusing — "you're on the clock"
+        //  arriving twenty minutes after the pick was autodrafted.
+        //  Let it expire instead.
+        { TTL: payload.ttl || 600, urgency: payload.urgent ? 'high' : 'normal' }
+      );
+      sent++;
+    } catch (e) {
+      const code = e && e.statusCode;
+      if (code === 404 || code === 410) {
+        await doc.ref.delete();
+        pruned++;
+      } else if (code === 403) {
+        failed++;
+        console.error('[Push] 403 from push service — VAPID public key in functions/index.js ' +
+                      'does not match the one in firebase-config.js. No pushes will work until they agree.');
+      } else {
+        failed++;
+        console.warn('[Push] send failed', code, e && e.message);
+      }
+    }
+  }));
+
+  return { sent, pruned, failed };
+}
+
+/*  Dedupe guard.
+
+    Firestore triggers are at-least-once: the same write can be
+    delivered twice, and a retry after a transient error will
+    re-deliver it. Two identical "you're on the clock" buzzes for one
+    pick is the kind of detail that makes an app feel broken.
+
+    The marker is keyed on what makes the event unique — league plus
+    pick number — and written with create(), which fails if the
+    document already exists. That makes the check atomic, so two
+    concurrent deliveries cannot both pass it.                     */
+async function claimOnce(key) {
+  const ref = db.collection('pushSent').doc(key);
+  try {
+    await ref.create({ at: admin.firestore.FieldValue.serverTimestamp() });
+    return true;
+  } catch (e) {
+    //  ALREADY_EXISTS (6) is the normal "someone else got here
+    //  first" answer. Anything else is a real error, and we would
+    //  rather send a duplicate than drop the alert entirely.
+    if (e && (e.code === 6 || e.code === 'already-exists')) return false;
+    console.warn('[Push] claim check failed, sending anyway:', e && e.message);
+    return true;
+  }
+}
+
+const APP_URL = 'https://app.tipofffantasy.com/';
+
+/* ── SEASON MODE: on the clock ─────────────────────────────────
+   seasonLeagues/{code} holds the whole league as one blob:
+     state.draft  = { order:[teamId], pick:int, status, endsAt }
+     state.teams  = [{ id, name, uid|null, ... }]
+   A bot seat has no uid. The team on the clock is
+   state.draft.order[state.draft.pick].                          */
+exports.onSeasonDraftTurn = onDocumentWritten(
+  {
+    document: 'seasonLeagues/{code}',
+    secrets: [VAPID_PRIVATE_KEY],
+    //  Draft writes are bursty — ten managers refreshing one league.
+    //  A low cap keeps a runaway league from eating the whole
+    //  project's function quota.
+    maxInstances: 10,
+  },
+  async (event) => {
+    const before = event.data && event.data.before && event.data.before.data();
+    const after = event.data && event.data.after && event.data.after.data();
+    if (!after) return;
+
+    const sd = (after.state && after.state.draft) || null;
+    const pd = (before && before.state && before.state.draft) || null;
+    if (!sd || sd.status !== 'live') return;
+
+    const pick = Number(sd.pick);
+    if (!Number.isFinite(pick)) return;
+    //  Only a CHANGE of turn is news. The league doc is rewritten on
+    //  every roster edit, chat message and clock tick; without this
+    //  the same manager gets notified over and over for one pick.
+    if (pd && Number(pd.pick) === pick && pd.status === 'live') return;
+
+    const teams = (after.state && after.state.teams) || [];
+    const teamId = (sd.order || [])[pick];
+    const seat = teams.filter(t => t && t.id === teamId)[0];
+    //  No uid = a bot seat. Nobody to tell.
+    if (!seat || !seat.uid) return;
+
+    const code = event.params.code;
+    if (!await claimOnce('season:' + code + ':' + pick)) return;
+
+    const numTeams = (after.state.league && after.state.league.numTeams) || teams.length || 1;
+    const round = Math.floor(pick / numTeams) + 1;
+    const leagueName = (after.state.league && after.state.league.name) || 'your league';
+    //  Seconds, from the shared clock the league writes.
+    const left = sd.endsAt ? Math.max(0, Math.round((sd.endsAt - Date.now()) / 1000)) : null;
+
+    const res = await sendToUser(seat.uid, {
+      title: "You're on the clock",
+      body: 'Round ' + round + ' in ' + leagueName +
+            (left ? ' · ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' to pick.' : '.'),
+      tag: 'otc-' + code,
+      kind: 'onClock',
+      urgent: true,
+      //  Expire with the pick clock. A stale alert is worse than none.
+      ttl: left && left > 0 ? left + 30 : 180,
+      url: APP_URL
+    });
+    console.log('[Push] season otc', code, 'pick', pick, JSON.stringify(res));
+  }
+);
+
+/* ── TOURNAMENT MODE: on the clock ─────────────────────────────
+   leagues/{code} is shaped differently and predates uids entirely:
+     managers        = ["Jake", "Luke"]        (display names)
+     managerUids     = { Jake: "abc…" }        (added at join time)
+     currentPickIndex = int
+   The draft order is snake, rebuilt from managers, so the manager on
+   the clock is derived rather than stored. buildDraftOrder() in
+   app.js is the source of truth for that shape; this mirrors it.  */
+function managerOnClock(managers, idx) {
+  const n = (managers || []).length;
+  if (!n || !Number.isFinite(idx) || idx < 0) return null;
+  const round = Math.floor(idx / n);          // 0-based
+  const slot = idx % n;
+  //  Snake: even rounds run forward, odd rounds reverse.
+  const list = round % 2 === 0 ? managers : managers.slice().reverse();
+  return list[slot] || null;
+}
+
+exports.onTournamentDraftTurn = onDocumentWritten(
+  {
+    document: 'leagues/{code}',
+    secrets: [VAPID_PRIVATE_KEY],
+    maxInstances: 10,
+  },
+  async (event) => {
+    const before = event.data && event.data.before && event.data.before.data();
+    const after = event.data && event.data.after && event.data.after.data();
+    if (!after) return;
+
+    const idx = Number(after.currentPickIndex);
+    if (!Number.isFinite(idx)) return;
+    if (before && Number(before.currentPickIndex) === idx) return;
+
+    const managers = Array.isArray(after.managers) ? after.managers.filter(Boolean) : [];
+    //  `rounds`, not `rosterSize`. The tournament state calls it
+    //  rounds (freshState → rounds: 8) and that is what gets
+    //  persisted, so reading rosterSize gave 0 and the completion
+    //  guard below never fired — meaning the manager holding the
+    //  first slot got told he was on the clock once more after the
+    //  final pick. Caught by the push suite, which runs the real
+    //  buildDraftOrder from app.js against this file's arithmetic.
+    const rounds = Number(after.rounds) || 0;
+    if (rounds && idx >= managers.length * rounds) return;   // complete
+
+    const name = managerOnClock(managers, idx);
+    if (!name) return;
+    const uid = (after.managerUids || {})[name];
+    //  A manager who joined before uid claiming existed, or a seat
+    //  being run locally. Nothing to send to, and that is fine.
+    if (!uid) return;
+
+    const code = event.params.code;
+    if (!await claimOnce('tourn:' + code + ':' + idx)) return;
+
+    const round = Math.floor(idx / managers.length) + 1;
+    const res = await sendToUser(uid, {
+      title: "You're on the clock",
+      body: 'Pick ' + (idx + 1) + ' · Round ' + round + ' in ' +
+            (after.leagueName || 'your league') + '. Tap to draft.',
+      tag: 'otc-' + code,
+      kind: 'onClock',
+      urgent: true,
+      ttl: 180,
+      url: APP_URL
+    });
+    console.log('[Push] tournament otc', code, 'pick', idx, JSON.stringify(res));
+  }
+);
+
+/*  Manual send, for proving the pipeline end to end before a draft.
+      /pushTest?uid=<your uid>
+    Returns the per-device result, so "sent: 0, reason: no-subs"
+    tells you the subscription never stored, while "sent: 1" and no
+    banner points at the service worker instead. Without this you are
+    debugging four moving parts through one silent symptom.        */
+exports.pushTest = onRequest(
+  { secrets: [VAPID_PRIVATE_KEY], timeoutSeconds: 60 },
+  async (req, res) => {
+    const uid = String(req.query.uid || '');
+    if (!uid) { res.status(400).json({ ok: false, error: 'pass ?uid=' }); return; }
+    try {
+      const out = await sendToUser(uid, {
+        title: 'Tipoff test alert',
+        body: 'If you can read this on your lock screen, push is working.',
+        tag: 'tipoff-test',
+        kind: 'test',
+        url: APP_URL
+      });
+      res.status(200).json({ ok: true, uid, result: out });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+);
+
 // Tipoff Trivia: Stripe webhook → Unlimited entitlements (see stripe.js)
 Object.assign(exports, require('./stripe'));

@@ -1589,6 +1589,26 @@
     try { localStorage.setItem(NOTIF_KEY, JSON.stringify(o)); } catch (e) { /* ignore */ }
   }
   function canNotify() { return typeof Notification !== 'undefined' && Notification.permission === 'granted'; }
+
+  /*  Subscribe this device for server-sent push, and explain the one
+      failure that is the user's to fix. On iPhone the site must be on
+      the Home Screen before Safari will allow a subscription at all,
+      so that case gets real instructions instead of a silent no.   */
+  function ssEnablePush() {
+    var P = window.TipoffPush;
+    if (!P) return;
+    try {
+      P.enable().then(function (r) {
+        if (r === 'ok' || r === 'no-key' || r === 'unsupported') return;
+        notify(r === 'needs-install'
+          ? 'Add Tipoff to your Home Screen to get alerts with the app closed. Tap Share, then Add to Home Screen.'
+          : r === 'denied'
+            ? 'Notifications are blocked for this site. Allow them in your browser settings, then try again.'
+            : 'Alerts will work while the app is open, but background alerts could not be set up.',
+          r === 'needs-install' ? 'info' : 'error');
+      }).catch(function () { });
+    } catch (e) { /* push is optional; never break the toggle */ }
+  }
   // Only when the tab is in the background, same as the tournament.
   function deviceNotify(kind, title, body) {
     var pr = notifPrefs();
@@ -5934,12 +5954,28 @@
     // Notifications
     var pills = { granted: ['On', 'status-on'], denied: ['Blocked', 'status-off'], 'default': ['Off', 'status-off'], unsupported: ['Not supported', 'status-off'] };
     var on = pr.master && notifState === 'granted';
+    /*  On an iPhone that has not been added to the Home Screen the
+        toggle cannot work, because Safari refuses push subscriptions
+        from a tab. Disable it and show the step that fixes that,
+        rather than copy about allowing notifications in settings —
+        there is no such switch to find, and sending someone looking
+        for one is how a feature earns a reputation for being broken. */
+    var needsInstall = false;
+    try { needsInstall = !!(window.TipoffPush && window.TipoffPush.needsInstall()); } catch (e) { }
     html += '<div class="set-label">Notifications</div><div class="panel">' +
-      '<div class="sc-settings-row"><label class="toggle-label"><input type="checkbox" class="custom-cb-real" data-act="notifmaster"' + (on ? ' checked' : '') + (notifState === 'unsupported' || notifState === 'denied' ? ' disabled' : '') + ' />' +
+      '<div class="sc-settings-row"><label class="toggle-label"><input type="checkbox" class="custom-cb-real" data-act="notifmaster"' + (on ? ' checked' : '') + (needsInstall || notifState === 'unsupported' || notifState === 'denied' ? ' disabled' : '') + ' />' +
         '<span class="custom-cb-box" aria-hidden="true">' + CB_SVG + '</span>“On the Clock” alerts</label>' +
         '<span class="status-pill ' + (on ? 'status-on' : pills[notifState][1]) + '">' + (on ? 'On' : pills[notifState][0]) + '</span></div>' +
-      '<p class="muted" style="margin-top:8px;font-size:13px;">' + (notifState === 'denied' ? 'Notifications are blocked for this site. Allow them in your browser’s site settings, then come back.' :
-        'Get a browser notification when it’s your pick or a lock decision is waiting, even if the app is in the background.') + '</p>' +
+      '<p class="muted" style="margin-top:8px;font-size:13px;">' + (needsInstall ? 'iPhone only delivers alerts to apps saved on your Home Screen.' :
+        notifState === 'denied' ? 'Notifications are blocked for this site. Allow them in your browser’s site settings, then come back.' :
+        'Get an alert when it’s your pick or a lock decision is waiting, even with the app closed and your phone locked.') + '</p>' +
+      (needsInstall ? '<div class="push-install"><div class="push-install-head">' +
+        '<span class="push-install-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 16v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg></span>' +
+        '<span class="push-install-title">Add Tipoff to your Home Screen</span></div>' +
+        '<p class="push-install-why">One-time setup, then you’ll get pick alerts with the app closed.</p>' +
+        '<ol class="push-install-steps"><li>Tap the <strong>Share</strong> button in Safari’s toolbar</li>' +
+        '<li>Scroll down and tap <strong>Add to Home Screen</strong></li>' +
+        '<li>Open Tipoff from your Home Screen, then turn this on</li></ol></div>' : '') +
       '<div class="notif-prefs' + (on ? '' : ' ss-np-off') + '"><div class="notif-prefs-head">Alert me about</div>' +
       [['draftSoon', 'Draft starting soon', '15 minutes before the scheduled start'],
        ['onClock', 'Your pick', 'You’re on the clock in the draft'],
@@ -6280,12 +6316,25 @@
         if (tm * 60 + ts < 15) { notify('The pick timer needs at least 15 seconds.', 'error'); return; }
         draftCfg().timerSecs = tm * 60 + ts; save();
         ui.toastMsg = 'Pick timer set to ' + fmtClock(tm * 60 + ts) + (draftLive() ? '. It starts with the next pick.' : '.'); ui.toastType = 'success'; break;
+      /*  Permission is only half of it. Without a push subscription
+          this toggle buys in-page notifications, which cannot fire
+          while the phone is locked — the exact moment a draft alert
+          matters. TipoffPush lives in app.js, which always loads
+          before this module, and every branch below is a no-op when
+          push is unavailable or unconfigured.                      */
       case 'notifmaster':
         if (el.checked && typeof Notification !== 'undefined' && Notification.permission === 'default') {
-          Notification.requestPermission().then(function (perm) { setNotifPref('master', perm === 'granted'); render(); });
+          Notification.requestPermission().then(function (perm) {
+            setNotifPref('master', perm === 'granted');
+            if (perm === 'granted') ssEnablePush();
+            render();
+          });
           return;
         }
-        setNotifPref('master', el.checked && canNotify()); break;
+        setNotifPref('master', el.checked && canNotify());
+        if (el.checked && canNotify()) ssEnablePush();
+        else if (!el.checked) { try { window.TipoffPush && window.TipoffPush.disable(); } catch (e) { } }
+        break;
       case 'rounds':
         var want = state.league.rosterSize + +el.getAttribute('data-dir');
         if (!setRounds(want)) { notify('Not enough players in your conferences for ' + want + ' rounds.', 'error'); return; }

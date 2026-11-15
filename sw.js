@@ -13,12 +13,12 @@
     a fix without changing it and users keep running the old build with
     no error, no warning, and no way to tell. If you change any file in
     STATIC_ASSETS, change this line in the same commit.             */
-const CACHE_NAME = 'tipoff-v259';
+const CACHE_NAME = 'tipoff-v260';
 //  MUST match the ?v= on the <script> and <link> tags in index.html.
 //  The page requests the versioned URL, so precaching the bare one
 //  would store a file nothing ever asks for while the real request
 //  falls through to the network.
-const BUILD = '259';
+const BUILD = '260';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -78,21 +78,80 @@ self.addEventListener('activate', event => {
   );
 });
 
+/* ── PUSH: the only path that reaches a sleeping phone ──────
+   Everything else in this app notifies from JavaScript running in an
+   open page, which means it cannot fire when it matters most: phone
+   locked, app closed, draft clock running down. iOS stops timers on
+   a locked device outright, so the local path was telling people to
+   look at the app only while they were already looking at it.
+
+   This handler runs with no page open at all. The server decides a
+   notification is warranted and the browser wakes the worker.
+
+   Two hard rules, both learned the hard way by everyone who ships
+   this:
+
+   1. event.waitUntil is mandatory. showNotification returns a
+      promise, and without waitUntil the worker can be killed before
+      it resolves — the notification silently never appears.
+
+   2. A push event MUST produce a visible notification. The
+      subscription is userVisibleOnly, so a browser that receives a
+      push and shows nothing counts it as a violation; enough of
+      those and Chrome revokes the subscription. So every bail-out
+      path below still shows something rather than returning early.  */
+self.addEventListener('push', event => {
+  //  Defensive to the point of paranoia on purpose: a malformed
+  //  payload must still notify (see rule 2), so parsing failure
+  //  falls through to a generic message instead of throwing.
+  let d = {};
+  try {
+    if (event.data) d = event.data.json() || {};
+  } catch (e) {
+    try { d = { body: event.data && event.data.text() }; } catch (_) { d = {}; }
+  }
+
+  const title = d.title || 'Tipoff Fantasy';
+  const opts = {
+    body: d.body || 'Open Tipoff to see what changed.',
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    //  Collapses repeats of the same kind of alert instead of
+    //  stacking six "on the clock" banners from six retries.
+    tag: d.tag || 'tipoff',
+    renotify: true,
+    //  A draft pick is time-critical: on Android this keeps the
+    //  banner up until acted on rather than auto-dismissing while
+    //  the phone is in a pocket.
+    requireInteraction: !!d.urgent,
+    //  Vibrate only for urgent things. Default pattern is fine.
+    vibrate: d.urgent ? [200, 100, 200] : undefined,
+    data: { url: d.url || './', kind: d.kind || '' }
+  };
+
+  event.waitUntil(self.registration.showNotification(title, opts));
+});
+
 // ── NOTIFICATION CLICK: focus or open the app ────────────
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const targetUrl = (event.notification.data && event.notification.data.url) || './';
+  const data = event.notification.data || {};
+  //  This was computed and then thrown away: the open-window branch
+  //  below hardcoded './'. Harmless while every notification pointed
+  //  at the app root, but push payloads name a destination, so a tap
+  //  from a cold start landed on Home instead of the draft room.
+  const targetUrl = data.url || './';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
       // Focus an existing open tab
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.postMessage({ type: 'OTC_FOCUS_DRAFT' });
+          client.postMessage({ type: 'OTC_FOCUS_DRAFT', kind: data.kind || '' });
           return client.focus();
         }
       }
       // No open tab, opening a new one
-      if (clients.openWindow) return clients.openWindow('./');
+      if (clients.openWindow) return clients.openWindow(targetUrl);
     })
   );
 });
