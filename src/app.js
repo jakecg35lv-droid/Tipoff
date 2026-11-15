@@ -1686,13 +1686,40 @@ function _syncLeagueEmptyState() {
     if (msg) msg.remove();
     return;
   }
+
+  /*  "No leagues yet" is a factual claim, and we were making it
+      before we had the facts. ACCOUNT_LEAGUES === null means the
+      account document has not come back yet — on a cold Home Screen
+      launch that can be several seconds, and if the listener never
+      attached it is forever.
+
+      A signed-in user with leagues was therefore told, in plain
+      words, that they had none. That is worse than a spinner: it
+      reads as data loss, and it is the message Jake saw after
+      installing to the Home Screen. Say "loading" until we actually
+      know, and only then say "none".                              */
+  /*  Read defensively. The season module calls this through
+      window.TipoffLeagues.syncEmpty inside its own try/catch, so a
+      throw in here does not surface as an error — it silently skips
+      the message and leaves a genuinely blank screen, which is the
+      bug this function exists to prevent. Guard the state read so
+      the worst case is the wrong wording, not no wording.        */
+  let stillLoading = false;
+  try {
+    stillLoading = (typeof ACCOUNT_LEAGUES !== 'undefined' && ACCOUNT_LEAGUES === null) && !!_uid();
+  } catch (e) { stillLoading = false; }
+  const text = stillLoading
+    ? 'Loading your leagues…'
+    : 'No leagues yet. Create or join one above.';
+
   if (!msg) {
     msg = document.createElement('p');
     msg.id = 'noLeaguesMsg';
     msg.className = 'no-leagues';
-    msg.textContent = 'No leagues yet. Create or join one above.';
     wrap.appendChild(msg);
   }
+  msg.textContent = text;
+  msg.classList.toggle('no-leagues-loading', stillLoading);
 }
 
 //  The season module paints the other half of this screen, so it has
@@ -1735,6 +1762,8 @@ window.TipoffLeagues = { syncEmpty: _syncLeagueEmptyState };
     keeps it current without a refresh.                              */
 let ACCOUNT_LEAGUES = null;      // null = not read yet, [] = genuinely none
 let _accountUnsub = null;
+let _accountRetry = null;        // pending retry while auth resolves
+let _accountRetries = 0;
 
 function accountLeagues() { return ACCOUNT_LEAGUES || []; }
 
@@ -1767,8 +1796,24 @@ function _leagueOrder(a, b) {
 //  everywhere.
 function subscribeAccountLeagues() {
   if (_accountUnsub) { try { _accountUnsub(); } catch (e) { } _accountUnsub = null; }
+  if (_accountRetry) { clearTimeout(_accountRetry); _accountRetry = null; }
   const ref = userDocRef();
-  if (!ref) { ACCOUNT_LEAGUES = null; return; }
+  /*  No uid yet. This used to set ACCOUNT_LEAGUES = null and return
+      forever: a single call made one tick before Firebase resolved
+      currentUser meant the listener was never attached at all, and
+      the only way back was a sign-out and sign-in. Keep trying for a
+      few seconds, then stop — if auth has not landed by then the
+      user is genuinely signed out and _wireAuthedUser will call us
+      again when that changes.                                     */
+  if (!ref) {
+    ACCOUNT_LEAGUES = null;
+    if (_accountRetries < 10) {
+      _accountRetries++;
+      _accountRetry = setTimeout(subscribeAccountLeagues, 500);
+    }
+    return;
+  }
+  _accountRetries = 0;
   _accountUnsub = ref.onSnapshot(function (snap) {
     const data = (snap.exists && snap.data()) || {};
     ACCOUNT_LEAGUES = Array.isArray(data.leagues) ? data.leagues : [];
@@ -1785,7 +1830,47 @@ function subscribeAccountLeagues() {
 }
 function unsubscribeAccountLeagues() {
   if (_accountUnsub) { try { _accountUnsub(); } catch (e) { } _accountUnsub = null; }
+  //  Cancel any pending auth-wait retry too, or a sign-out leaves a
+  //  timer that re-attaches the listener a moment later.
+  if (_accountRetry) { clearTimeout(_accountRetry); _accountRetry = null; }
+  _accountRetries = 0;
   ACCOUNT_LEAGUES = null;
+}
+
+/*  ── Re-attach on resume ────────────────────────────────────
+    iOS suspends a Home Screen web app aggressively and does not
+    always resume its network listeners. A Firestore onSnapshot that
+    was torn down while the app was in the background simply stops
+    delivering, with no error and no callback — so the league list
+    freezes at whatever it last saw, or stays empty forever if the
+    app was backgrounded before the first snapshot arrived.
+
+    Nothing in this file listened for a resume at all. The symptom is
+    indistinguishable from "my leagues disappeared", which is why it
+    reads as data loss rather than a dead socket.
+
+    Re-subscribing is cheap (one document listener) and idempotent:
+    subscribeAccountLeagues tears the old one down first. Gated on
+    actually being signed in, and on the page being visible, so a
+    hidden tab does no work.                                      */
+function _rewireAccountOnResume() {
+  if (document.visibilityState === 'hidden') return;
+  if (!_uid()) return;
+  //  A live listener that is genuinely still delivering will simply
+  //  re-fire its snapshot, which is a no-op repaint.
+  try { subscribeAccountLeagues(); } catch (e) { }
+  //  The active league's own listener dies the same way, and a stale
+  //  draft board is worse than a stale league list.
+  try { if (state && state.leagueCode) _subscribeLeague(state.leagueCode); } catch (e) { }
+}
+
+if (!window._accountResumeWired) {
+  window._accountResumeWired = true;
+  document.addEventListener('visibilitychange', _rewireAccountOnResume);
+  window.addEventListener('focus', _rewireAccountOnResume);
+  //  pageshow with persisted=true is the back/forward cache restore,
+  //  which is how iOS most often brings a web app back.
+  window.addEventListener('pageshow', _rewireAccountOnResume);
 }
 
 function renderSavedLeagues() {
@@ -8379,13 +8464,69 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   })();
 
-  // ── BOOT ──────────────────────────────────────────────────
+  /* ── BOOT ──────────────────────────────────────────────────
+     onAuthStateChanged does NOT fire once. Firebase can report
+     null first and then deliver the restored user a moment later,
+     once it has read its own IndexedDB persistence. That window is
+     short on a warm desktop and long on a cold start — which is
+     exactly what a freshly installed Home Screen web app is.
+
+     This handler used to latch on the very first fire:
+
+         if (_authBootFired) { window._fbUser = user; return; }
+
+     So when the first fire was null, the second one — carrying the
+     real, signed-in user — set window._fbUser and returned. It never
+     reached subscribeAccountLeagues(), TipoffSeason.onAuthChanged()
+     or the push refresh. The account listener was therefore never
+     attached, ACCOUNT_LEAGUES stayed null, and the screen showed no
+     leagues at all.
+
+     Signing out and back in went through handleLogin(), which calls
+     subscribeAccountLeagues() itself — which is precisely why
+     sign-out-then-in "fixed" it, and why it looked like a data
+     problem rather than a wiring one.
+
+     The fix separates the two jobs that were tangled together:
+       · per-account WIRING runs on every uid transition
+       · NAVIGATION still happens once, so a late fire cannot yank
+         somebody out of the page they are already looking at    */
   let _authBootFired = false;
+  //  undefined = never wired. Distinct from null, which is a real
+  //  signed-out state we may legitimately need to wire for.
+  let _authWiredUid = undefined;
+  let _authNavUid = undefined;
+
+  function _wireAuthedUser(uid) {
+    if (_authWiredUid === uid) return;          // idempotent per account
+    _authWiredUid = uid;
+    try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(uid || null); } catch (e) { }
+    if (uid) {
+      try { subscribeAccountLeagues(); } catch (e) { }
+      //  Push endpoints rotate and stored copies get lost, so a
+      //  subscription enabled weeks ago can be silently dead. Re-
+      //  assert it now that we have a uid to file it under. No-ops
+      //  unless the user already opted in.
+      try { window.TipoffPush && window.TipoffPush.refresh(); } catch (e) { }
+    } else {
+      try { unsubscribeAccountLeagues(); } catch (e) { }
+    }
+  }
+
+  //  Did we give up and show the "sign in or create an account"
+  //  screen? If a real user turns up afterwards, that screen is now
+  //  wrong and we must move off it.
+  function _landingIsShowing() {
+    const el = document.getElementById('landingScreen');
+    if (!el) return false;
+    return el.style.display !== 'none' && getComputedStyle(el).display !== 'none';
+  }
+
   if (window._auth) {
     window._auth.onAuthStateChanged(function (user) {
-      if (_authBootFired) { window._fbUser = user; return; } // ignore post-login/logout re-fires here
-      _authBootFired = true;
       window._fbUser = user;
+      const uid = user ? user.uid : null;
+
       if (user) {
         const sess = getSession();
         //  Same breadcrumb fallback as the sign-in path: after a
@@ -8394,36 +8535,48 @@ document.addEventListener('DOMContentLoaded', () => {
         //  previous one's leagues, brackets, chats and season league.
         let prevUid = (sess && sess.uid) || null;
         if (!prevUid) { try { prevUid = localStorage.getItem('mmfantasy-last-uid') || null; } catch (e) { } }
-        const differentUser = !!(prevUid && prevUid !== user.uid);
+        const differentUser = !!(prevUid && prevUid !== uid);
         if (differentUser) {
           // A different user logged in on this device — wipe the previous user's local data
           clearUserScopedStorage();
           state = freshState();
           state.players = poolForCurrentTournament();
         }
-        try { localStorage.setItem('mmfantasy-last-uid', user.uid); } catch (e) { }
+        try { localStorage.setItem('mmfantasy-last-uid', uid); } catch (e) { }
         if (!sess || differentUser) {
           const name = (user.displayName) || user.email.split('@')[0];
-          setSession(name, user.email, user.uid);
+          setSession(name, user.email, uid);
         }
-        try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(user.uid); } catch (e) { }
-        try { subscribeAccountLeagues(); } catch (e) { }
-        //  Push endpoints rotate and stored copies get lost, so a
-        //  subscription enabled weeks ago can be silently dead. Re-
-        //  assert it now that we have a uid to file it under. No-ops
-        //  unless the user already opted in.
-        try { window.TipoffPush && window.TipoffPush.refresh(); } catch (e) { }
-        if (!differentUser && loadState() && state.leagueId && !cameFromExternalLink() && !lastViewWantsSeason()) { _subscribeLeague(state.leagueCode); enterLeague(); }
-        else { showSplash(true); }
+        _wireAuthedUser(uid);
+
+        /*  Navigate on the boot pass, and also when a late-arriving
+            user rescues a Landing screen we only showed because
+            Firebase had said "nobody" a moment earlier. Guarded on
+            the uid so a repeat fire for the same account cannot
+            re-navigate somebody mid-draft.                        */
+        const rescue = _landingIsShowing() && _authNavUid !== uid;
+        if (!_authBootFired || rescue) {
+          _authBootFired = true;
+          _authNavUid = uid;
+          if (!differentUser && loadState() && state.leagueId && !cameFromExternalLink() && !lastViewWantsSeason()) { _subscribeLeague(state.leagueCode); enterLeague(); }
+          else { showSplash(true); }
+        }
       } else {
         // Firebase says no user — check localStorage session (offline/testing fallback)
-        try { window.TipoffSeason && window.TipoffSeason.onAuthChanged(null); } catch (e) { }
-        try { unsubscribeAccountLeagues(); } catch (e) { }
-        const session = getSession();
-        if (session) {
-          if (loadState() && state.leagueId && !cameFromExternalLink() && !lastViewWantsSeason()) { enterLeague(); }
-          else { showSplash(true); }
-        } else { showLanding(); }
+        _wireAuthedUser(null);
+        /*  Only the boot pass may navigate here. A spurious null
+            mid-session must not throw a signed-in user back to the
+            landing screen; if the sign-out is real, doSignOut() has
+            already navigated.                                     */
+        if (!_authBootFired) {
+          _authBootFired = true;
+          _authNavUid = null;
+          const session = getSession();
+          if (session) {
+            if (loadState() && state.leagueId && !cameFromExternalLink() && !lastViewWantsSeason()) { enterLeague(); }
+            else { showSplash(true); }
+          } else { showLanding(); }
+        }
       }
     });
   } else {

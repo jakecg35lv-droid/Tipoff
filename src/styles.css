@@ -1291,6 +1291,23 @@ select:focus {
   padding: 24px;
 }
 
+/*  While the account document is still in flight we say "loading"
+    rather than "no leagues yet" — claiming someone has no leagues
+    before we know reads as data loss. The pulse makes it obvious
+    this is a waiting state and not a verdict. */
+.no-leagues-loading {
+  animation: no-leagues-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes no-leagues-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .no-leagues-loading { animation: none; opacity: 0.7; }
+}
+
 .saved-league-card {
   background: var(--panel);
   backdrop-filter: blur(16px);

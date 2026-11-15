@@ -34,8 +34,18 @@ function ok(name, cond, detail) {
 // ── A DOM small enough to reason about ───────────────────
 function makeDom() {
   function el(id, cls) {
+    //  classList is real in every browser, but the fake lacked it and
+    //  the suite died on the first .toggle() rather than asserting.
+    //  A fake that is missing what the code uses tests nothing.
+    const classes = new Set((cls || '').split(/\s+/).filter(Boolean));
     return {
-      id: id, className: cls || '', innerHTML: '', children: [],
+      id: id, className: cls || '', innerHTML: '', children: [], textContent: '',
+      classList: {
+        add: function (c) { classes.add(c); },
+        remove: function (c) { classes.delete(c); },
+        contains: function (c) { return classes.has(c); },
+        toggle: function (c, on) { if (on === undefined) on = !classes.has(c); on ? classes.add(c) : classes.delete(c); return on; }
+      },
       querySelector: function (sel) {
         //  Only the two selectors the code actually uses.
         if (sel === '.saved-league-card') return /saved-league-card/.test(this.innerHTML) ? {} : null;
@@ -156,8 +166,19 @@ ok('showSplash still syncs the empty state', /_syncLeagueEmptyState\(\)/.test(sh
 // ── Exactly one owner of the message ─────────────────────
 ok('index.html no longer hardcodes a second message',
   !/<p class="no-leagues"/.test(html));
-const owners = (app.match(/no-leagues/g) || []).length;
-ok('app.js references the message class once', owners === 1, String(owners));
+/*  The point of this check is that ONE place owns the message
+    element — not that the string appears once. Counting the raw
+    string broke as soon as a sibling class (.no-leagues-loading)
+    was added for the loading state. Assert the ownership instead. */
+const assigns = (app.match(/className = 'no-leagues'/g) || []).length;
+ok('exactly one place creates the message element', assigns === 1, String(assigns));
+const creates = (app.match(/id = 'noLeaguesMsg'/g) || []).length;
+ok('exactly one place assigns its id', creates === 1, String(creates));
+//  The loading variant must be a modifier on that one element, never
+//  a second element competing for the same slot.
+const loadingUses = (app.match(/no-leagues-loading/g) || []).length;
+ok('the loading state is a modifier, not a rival element',
+  loadingUses === 1 && /classList\.toggle\('no-leagues-loading'/.test(app), String(loadingUses));
 
 // ── Shipped ──────────────────────────────────────────────
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
