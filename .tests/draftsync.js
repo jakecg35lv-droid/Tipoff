@@ -335,8 +335,13 @@ ok('an empty note collapses', /\.rp-un-turn:empty \{ display: none; \}/.test(sea
     else if (code[k] === '}') { dep--; if (dep === 0) { end = k; break; } }
   }
   const src = code.slice(i, end + 1);
+  //  backToBackNote now also reports the takeover wait, so it needs
+  //  seatIsMine, nowSynced and HOST_TAKEOVER_MS. A clock far in the
+  //  future keeps these cases on the snake-turn path.
   const run = new Function('env', `
-    var state, draftCfg, team;
+    var state, draftCfg, team, HOST_TAKEOVER_MS = 8000;
+    function nowSynced() { return 1000; }
+    function seatIsMine(t) { return !!(t && t.isUser); }
     ${src}
     return function (st, cfg, teams) {
       state = st;
@@ -354,7 +359,7 @@ ok('an empty note collapses', /\.rp-un-turn:empty \{ display: none; \}/.test(sea
   const teams = { t7: { name: 'Jackson davis', isUser: false }, t6: { name: 'River', isUser: false },
                   t0: { name: 'JC', isUser: true } };
   const st = { phase: 'draft', league: { numTeams: 8 } };
-  const cfg = (pick) => ({ status: 'live', order, pick });
+  const cfg = (pick) => ({ status: 'live', order, pick, endsAt: 999999 });
 
   ok('mid-round shows no note', run(st, cfg(5), teams) === '');
   ok('the round turn is named', /second pick in a row/.test(run(st, cfg(8), teams)),
@@ -625,6 +630,96 @@ ok('a confirmed pick is made for the on-clock seat',
   /livePick[(]onClock[(][)], cp, 'user'[)];/.test(code));
 ok('a manual autopick is made for the on-clock seat',
   /livePick[(]onClock[(][)], ap, 'auto'[)];/.test(code));
+
+
+// ══ 12. The visible stall ════════════════════════════════
+/*  Reported: "it virtually lags out on the screen for 20 seconds".
+    20 is not a coincidence — it was HOST_TAKEOVER_MS. The
+    seat-holder's own device was not autopicking (the markMine seat-0
+    bug above), so nothing moved until the host covered at exactly
+    endsAt + 20s, and every other screen sat on "Autopicking". */
+(function () {
+  const host = Number((code.match(/HOST_TAKEOVER_MS = ([0-9]+)/) || [])[1]);
+  const woke = Number((code.match(/WOKE_WAIT_MS = ([0-9]+)/) || [])[1]);
+  const any = Number((code.match(/ANY_TAKEOVER_MS = ([0-9]+)/) || [])[1]);
+  ok('the host grace is no longer 20s', host < 20000, String(host));
+  /*  It still has to outlast the seat-holder's own worst case, or
+      the host robs a live manager: tick 250 + woke wait + push 60 +
+      a round trip. Anything under that steals picks. */
+  ok('the host grace still outlasts a woken device acting',
+    host > woke + 1250, host + ' vs woke ' + woke);
+  ok('the host grace is short enough to not look hung', host <= 10000, String(host));
+  ok('the last-resort takeover still comes after the host', any > host, any + ' vs ' + host);
+  ok('the host grace is well inside a pick clock', host < 60000);
+})();
+
+/*  A pick sat in the idle 400ms debounce, which is pure dead air on
+    every single pick and widened the race the host grace covers. */
+const sched = code.slice(code.indexOf('function schedulePush'), code.indexOf('function subscribeSeason'));
+ok('a draft pick is pushed promptly', /var wait = draftLive\(\) \? 60 : 400;/.test(sched));
+ok('writes are still coalesced', /clearTimeout\(SYNC\.timer\)/.test(sched),
+  'makePick and restartClock must still collapse into one write');
+ok('idle season traffic keeps the longer debounce', /: 400;/.test(sched));
+
+/*  The woken guard waited for a snapshot that, during an idle room,
+    nobody was going to write — so it burned its full cap on the very
+    autopick it existed to protect. */
+ok('a woken device forces a read instead of idling',
+  /_ref\.get\(\)\.catch/.test(code));
+ok('that read is inside the wake branch',
+  /sinceTick > WOKE_GAP_MS\)[\s\S]{0,700}?_ref\.get\(\)/.test(code));
+
+// ── The wait must be legible ─────────────────────────────
+ok('the wait names who it is waiting on', /Waiting for ' \+ \(\(t && t\.name\)/.test(code));
+ok('the wait counts the takeover down', /autopicking in ' \+ left \+ 's'/.test(code));
+(function () {
+  const i = code.indexOf('function backToBackNote');
+  const open = code.indexOf('{', i);
+  let dep = 0, end = -1;
+  for (let k = open; k < code.length; k++) {
+    if (code[k] === '{') dep++;
+    else if (code[k] === '}') { dep--; if (dep === 0) { end = k; break; } }
+  }
+  const run = new Function('st', 'cfg', 'teams', 'now', 'mine', 'HOST_TAKEOVER_MS', [
+    'var state = st;',
+    'function draftCfg() { return cfg; }',
+    'function team(id) { return teams[id]; }',
+    'function nowSynced() { return now; }',
+    'function seatIsMine(t) { return !!(t && t.id === mine); }',
+    code.slice(i, end + 1),
+    'return backToBackNote();'
+  ].join('\n'));
+
+  //  A real snake, so pick 4 is t3 again (the round-1/round-2 turn).
+  //  The first version was two forward rounds, which has no
+  //  back-to-back pick at all, so the turn case proved nothing.
+  const order = ['t0','t1','t2','t3','t3','t2','t1','t0'];
+  const teams = { t0:{id:'t0',name:'JC'}, t1:{id:'t1',name:'Sperm'},
+                  t2:{id:'t2',name:'SamSose'}, t3:{id:'t3',name:'River'} };
+  const st = { phase:'draft', league:{numTeams:4} };
+  const live = (pick, endsAt) => ({ status:'live', order, pick, endsAt });
+
+  //  Clock still running on somebody else: nothing to say.
+  ok('a running clock shows no wait note',
+    run(st, live(2, 10000), teams, 5000, 't0', 8000) === '');
+  //  Expired on SamSose, 3s into the grace.
+  const w = run(st, live(2, 5000), teams, 8000, 't0', 8000);
+  ok('an expired clock names the manager', /Waiting for SamSose/.test(w), w);
+  ok('it counts down the remaining grace', /autopicking in 5s/.test(w), w);
+  //  Past the grace entirely.
+  ok('past the grace it says autopicking now',
+    /autopicking now/.test(run(st, live(2, 5000), teams, 20000, 't0', 8000)));
+  //  My OWN expired clock must not tell me to wait for myself.
+  ok('my own expired clock shows no wait note',
+    run(st, live(2, 5000), teams, 8000, 't2', 8000) === '',
+    'it would be telling me to wait for me');
+  //  The snake turn still reported when the clock is healthy.
+  ok('the snake turn still shows at a round turn',
+    /River.{0,40}second pick in a row/.test(run(st, live(4, 99999), teams, 1000, 't1', 8000)),
+    run(st, live(4, 99999), teams, 1000, 't1', 8000));
+  ok('a paused draft stays silent',
+    run(st, { status:'paused', order, pick:2, endsAt:5000 }, teams, 8000, 't0', 8000) === '');
+})();
 
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

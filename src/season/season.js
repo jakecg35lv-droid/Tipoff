@@ -498,7 +498,17 @@
   // in a row, and each one does not need its own round trip.
   function schedulePush() {
     if (SYNC.timer) clearTimeout(SYNC.timer);
-    SYNC.timer = setTimeout(function () { SYNC.timer = null; pushState(); }, 400);
+    /*  400ms is right for idle season traffic — it coalesces a burst
+        of lineup edits into one write. It is wrong during a draft,
+        where it is pure dead air on every single pick: makePick and
+        restartClock both call save(), so the room waited 400ms to
+        find out a pick had happened.
+
+        Stay debounced (both of those saves still collapse into ONE
+        write) but at a fraction of the delay. This also shrinks the
+        race that HOST_TAKEOVER_MS exists to cover.               */
+    var wait = draftLive() ? 60 : 400;
+    SYNC.timer = setTimeout(function () { SYNC.timer = null; pushState(); }, wait);
   }
 
   function subscribeSeason(code) {
@@ -791,7 +801,26 @@
   //  20 seconds is still well short of a 60-second pick timer, so a
   //  genuinely disconnected manager cannot stall the room for long,
   //  but a live one is no longer robbed by ordinary network latency.
-  var HOST_TAKEOVER_MS = 20000;
+  /*  ── Why this came DOWN from 20 seconds ───────────────────
+      20s was chosen when a pick took 400ms of debounce plus a round
+      trip, on a phone that might have just woken — lose that race
+      and the host drafts for a manager whose own screen still shows
+      time left. Real, and worth 20 seconds at the time.
+
+      But the cost landed on everyone else: when a seat-holder's
+      device genuinely did not act, the whole room watched
+      "Autopicking" for a full 20 seconds with nothing moving. That
+      is the "it lags out for 20 seconds" report, and 20s is the
+      exact number because this constant is what produced it.
+
+      Two things changed. Draft pushes no longer wait on the 400ms
+      debounce (see schedulePush), and a woken device now forces a
+      read instead of idling. The budget for a seat-holder's own
+      device to act is roughly: tick 250ms + woke wait up to 2.5s +
+      push ~60ms + round trip under 1s, so comfortably inside 4
+      seconds. 8 seconds keeps double that margin and cuts the
+      visible stall by three fifths.                              */
+  var HOST_TAKEOVER_MS = 8000;
   /*  If the HOST's device is also asleep, nobody covers and the draft
       sits on 0:00 forever. After this longer window any live client
       may step in, staggered by seat index so they fire one at a time
@@ -1953,6 +1982,16 @@
       //  Require a snapshot that lands AFTER this moment, not merely
       //  a recent one: the last sync may itself predate the sleep.
       DRAFT_WOKE_AT = now;
+      /*  And go and GET one. Waiting passively was the flaw: during
+          a draft, snapshots only arrive when somebody writes, so a
+          device that woke while the room was idle sat out its full
+          2.5s cap every time — delay this guard added to the very
+          autopick it was meant to make safe. A one-shot read
+          refreshes lastServerSync in a few hundred ms instead.   */
+      try {
+        var _ref = seasonDoc(state.league.code);
+        if (_ref) _ref.get().catch(function () { });
+      } catch (e) { }
     }
     if (mp && DRAFT_WOKE_AT && SYNC.lastServerSync <= DRAFT_WOKE_AT) {
       //  Give up waiting eventually, or a league whose Firestore
@@ -4900,11 +4939,28 @@
   function backToBackNote() {
     if (!state || state.phase !== 'draft') return '';
     var d = draftCfg(), o = d.order || [], n = state.league.numTeams || 1;
-    if (d.status !== 'live' || d.pick <= 0 || d.pick >= o.length) return '';
-    if (o[d.pick] !== o[d.pick - 1]) return '';
+    if (d.status !== 'live' || d.pick >= o.length) return '';
     var t = team(o[d.pick]);
+
+    /*  —— Say what the wait IS ——
+        When somebody else's clock expires and their own device has
+        not acted, every other screen showed "Autopicking" and then
+        nothing at all for the whole takeover window. With no
+        explanation and nothing moving that reads as the app
+        hanging, which is exactly how it was reported.
+
+        Name who we are waiting on and count the takeover down, so
+        the pause is legible instead of looking broken.          */
+    if (d.endsAt && nowSynced() >= d.endsAt && !seatIsMine(t)) {
+      var left = Math.max(0, Math.ceil((d.endsAt + HOST_TAKEOVER_MS - nowSynced()) / 1000));
+      return 'Waiting for ' + ((t && t.name) || 'that manager') + '’s device' +
+        (left > 0 ? ' — autopicking in ' + left + 's' : ' — autopicking now');
+    }
+
+    //  Otherwise: flag a snake turn, where one manager picks twice.
+    if (d.pick <= 0 || o[d.pick] !== o[d.pick - 1]) return '';
     var roundNow = Math.floor(d.pick / n) + 1;
-    return (t && t.isUser ? 'Your' : ((t && t.name ? t.name + '’s' : 'A'))) +
+    return (seatIsMine(t) ? 'Your' : ((t && t.name ? t.name + '’s' : 'A'))) +
       ' second pick in a row — end of round ' + (roundNow - 1) +
       ' into round ' + roundNow + '.';
   }
