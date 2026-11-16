@@ -261,6 +261,10 @@
 
   var state = null;
   var ui = { page: 'home', wiz: null, sheet: false, swapSlot: null, filterPos: '', filterConf: '', search: '', stamp: null, setup: null, toastMsg: '', toastType: '', sel: {}, mview: null,
+    //  Which week the Matchups page is LOOKING at. null means follow
+    //  the live week, so a rollover pulls the view forward with it
+    //  rather than stranding someone on a week that just ended.
+    viewWeek: null,
     // Player pool browser: rows shown, drafted/undrafted filter, sort.
     poolShow: 100, poolAvail: '', poolSort: 'proj' };
   var root = null;
@@ -2863,7 +2867,15 @@
     for (var i = 0; i < g.length; i++) if (g[i].day === day) return g[i];
     return null;
   }
-  function slotsOf(teamId, week) { return state.lineups[week || state.week][teamId]; }
+  /*  Defensive on both lookups. This indexed straight through and
+      threw a TypeError for any week with no lineups — fine while
+      only the live week was ever asked for, not fine now that the
+      Matchups page can ask for an earlier one that a freshly loaded
+      device has not got. An empty roster renders as an empty
+      matchup; a thrown error blanks the page.                    */
+  function slotsOf(teamId, week) {
+    return (state.lineups[week || state.week] || {})[teamId] || [];
+  }
 
   // Play one day: every unlocked starter who plays that day gets an
   // eligible game; that game becomes the pending lock decision.
@@ -5663,12 +5675,66 @@
     return w.length > 1 ? w[0].charAt(0) + '. ' + w.slice(1).join(' ') : n;
   }
 
+  /*  ── Which week the Matchups page is showing ───────────────
+      ui.viewWeek null means follow the live week. Clamped to the
+      season so far on every read, so a stale value cannot point at
+      a week that was never played — and so a rollover pulls the
+      view forward instead of stranding someone on a dead week.  */
+  function shownWeek() {
+    var w = ui.viewWeek;
+    if (!w) return state.week;
+    return Math.max(1, Math.min(state.week, w));
+  }
+
+  /*  A finished week's score is the one that was RECORDED, not one
+      recomputed from games now. finalizeWeek wrote homePts/awayPts
+      at the moment the week closed; recomputing could disagree with
+      the standings if a feed correction landed afterwards, and the
+      result in the table is the one that counted.                */
+  function recordedResult(week, a, b) {
+    var rs = state.results || [];
+    for (var i = 0; i < rs.length; i++) {
+      var r = rs[i];
+      if (r && r.week === week && r.home === a && r.away === b) return r;
+    }
+    return null;
+  }
+
   function viewMatchup() {
-    var u = userTeam(), games = state.schedule[state.week - 1] || [];
+    var wk = shownWeek();
+    var past = wk < state.week;
+    var u = userTeam(), games = state.schedule[wk - 1] || [];
+    /*  Scores come from the record for a finished week and from the
+        live tally for the current one. One function so every row,
+        the switcher and the header all agree.                    */
+    var scoreOf = function (id) {
+      if (!past) return teamScore(id, wk);
+      for (var i = 0; i < games.length; i++) {
+        var m = games[i], r = recordedResult(wk, m[0], m[1]);
+        if (!r) continue;
+        if (m[0] === id) return r.homePts;
+        if (m[1] === id) return r.awayPts;
+      }
+      return teamScore(id, wk);   // not recorded: fall back to the tally
+    };
     var mineIdx = -1;
     games.forEach(function (m, i) { if (m[0] === u.id || m[1] === u.id) mineIdx = i; });
     var cur = ui.mview != null && ui.mview < games.length ? ui.mview : mineIdx;
-    var head = '<div class="page-header"><h2>Matchups</h2><div class="ss-ph-r"><button class="ss-help" data-act="exshow" aria-label="How lock-in works">?</button><span class="muted-badge">' + weekLabel() + ' · ' + weekDates(state.week) + '</span></div></div>';
+    /*  Week navigator. Bounded at 1 and the live week, so there is
+        never an arrow that leads nowhere. Disabled rather than
+        hidden at the ends, or the row jumps width as you page. */
+    var canBack = wk > 1, canFwd = wk < state.week;
+    var nav = '<div class="mx-wknav">' +
+      '<button class="mx-wk-arrow" data-act="weekback"' + (canBack ? '' : ' disabled') +
+        ' aria-label="Previous week">‹</button>' +
+      '<span class="mx-wk-lab"><b>' + esc(weekLabel(wk)) + '</b><em>' + esc(weekDates(wk)) + '</em></span>' +
+      '<button class="mx-wk-arrow" data-act="weekfwd"' + (canFwd ? '' : ' disabled') +
+        ' aria-label="Next week">›</button>' +
+      (past ? '<button class="mx-wk-live" data-act="weeklive">Live</button>' : '') +
+    '</div>';
+    var head = '<div class="page-header"><h2>Matchups</h2><div class="ss-ph-r">' +
+      (past ? '<span class="mx-final-tag">Final</span>' : '<button class="ss-help" data-act="exshow" aria-label="How lock-in works">?</button>') +
+      '</div></div>' + nav;
 
     // Switcher: every matchup this week, yours first.
     var order = games.map(function (m, i) { return i; });
@@ -5676,15 +5742,16 @@
     var switcher = '<div class="mx-switch" role="tablist" aria-label="Matchups this week">' + order.map(function (i) {
       var m = games[i], mine = i === mineIdx;
       var l = mine && m[1] === u.id ? m[1] : m[0], r = l === m[0] ? m[1] : m[0];
-      var ls = teamScore(l), rs = teamScore(r);
+      var ls = scoreOf(l), rs = scoreOf(r);
       //  Before anything tips, the live score is 0-0 for every matchup
       //  in the list, which makes the whole switcher useless. Show the
       //  projection alongside it so the rows mean something.
-      var lpr = teamProjected(l), rpr = teamProjected(r);
-      var anyLive = (ls + rs) > 0;
+      var lpr = past ? ls : teamProjected(l, wk), rpr = past ? rs : teamProjected(r, wk);
+      //  A finished week always shows its real numbers, even a 0-0.
+      var anyLive = past || (ls + rs) > 0;
       var sub = function (v) { return '<em class="mx-sw-proj">' + f1(v) + '</em>'; };
       return '<button role="tab" aria-selected="' + (i === cur) + '" class="mx-sw' + (i === cur ? ' on' : '') + (mine ? ' mine' : '') + '" data-act="mview" data-i="' + i + '">' +
-        (mine || matchKind(state.week, i) !== 'reg' ? '<span class="mx-sw-tag' + (mine ? '' : ' k') + '">' + (mine ? 'Your matchup' : '') + (mine && matchKind(state.week, i) !== 'reg' ? ' · ' : '') + KIND_LABEL(matchKind(state.week, i)) + '</span>' : '') +
+        (mine || matchKind(wk, i) !== 'reg' ? '<span class="mx-sw-tag' + (mine ? '' : ' k') + '">' + (mine ? 'Your matchup' : '') + (mine && matchKind(wk, i) !== 'reg' ? ' · ' : '') + KIND_LABEL(matchKind(wk, i)) + '</span>' : '') +
         '<span class="mx-sw-row' + ((anyLive ? ls >= rs : lpr >= rpr) ? ' lead' : '') + '">' + avatarHTML(team(l).name, 22) + '<span class="mx-sw-n">' + esc(team(l).name) + '</span>' + (anyLive ? '<b>' + f1(ls) + '</b>' : sub(lpr)) + '</span>' +
         '<span class="mx-sw-row' + ((anyLive ? rs > ls : rpr > lpr) ? ' lead' : '') + '">' + avatarHTML(team(r).name, 22) + '<span class="mx-sw-n">' + esc(team(r).name) + '</span>' + (anyLive ? '<b>' + f1(rs) + '</b>' : sub(rpr)) + '</span>' +
       '</button>';
@@ -5693,17 +5760,22 @@
     if (cur < 0) return head + switcher + '<div class="ss-card"><p class="rp-empty">You have a bye this week. Pick a matchup above to follow it.</p></div>';
     var m = games[cur], isMine = cur === mineIdx;
     var lId = isMine && m[1] === u.id ? m[1] : m[0], rId = lId === m[0] ? m[1] : m[0];
-    var L = team(lId), R = team(rId), a = slotsOf(lId), b = slotsOf(rId);
-    var ls = teamScore(lId), rs = teamScore(rId);
-    var dec = isMine ? a.filter(function (s) { return s.pending && !s.locked; }).length : 0;
+    var L = team(lId), R = team(rId), a = slotsOf(lId, wk), b = slotsOf(rId, wk);
+    var ls = scoreOf(lId), rs = scoreOf(rId);
+    //  No decisions to make in a week that is already over.
+    var dec = (isMine && !past) ? a.filter(function (s) { return s.pending && !s.locked; }).length : 0;
 
     //  Projected totals and win probability. Shown whenever the week
     //  is not finished, which is exactly when "0.0 to 0.0" used to be
     //  the only thing on screen.
-    var lp = teamProjected(lId), rp = teamProjected(rId);
-    var lwin = Math.round(winProbability(lId, rId) * 100);
-    var settledPct = Math.round(((settledFraction(lId) + settledFraction(rId)) / 2) * 100);
-    var weekOver = settledPct >= 100;
+    var lp = past ? ls : teamProjected(lId, wk), rp = past ? rs : teamProjected(rId, wk);
+    var lwin = past ? (ls >= rs ? 100 : 0) : Math.round(winProbability(lId, rId) * 100);
+    var settledPct = past ? 100
+      : Math.round(((settledFraction(lId, wk) + settledFraction(rId, wk)) / 2) * 100);
+    //  A finished week is settled by definition, so the projection
+    //  row and the win bar are suppressed rather than showing a
+    //  forecast for something that already happened.
+    var weekOver = past || settledPct >= 100;
     var projRow = weekOver ? '' :
       '<div class="mx-proj">' +
         '<div class="mx-proj-side"><span class="mx-proj-lab">Projected</span><b>' + f1(lp) + '</b></div>' +
@@ -5739,7 +5811,7 @@
     }).join('') || '<p class="feed-empty">Finished weeks show up here.</p>';
     if (theme() === 'glass') { board = gScoreboard(L, R, a, b, ls, rs, isMine, cur); }
     return head + switcher + board + (theme() === 'glass' && isMine ? '' : weekBar()) +
-      '<div class="mx-starters-head"><h3>' + (KIND_LABEL(matchKind(state.week, cur)) ? '<span class="mx-kind">' + KIND_LABEL(matchKind(state.week, cur)) + '</span>' : '') + (isMine ? 'Starters' : 'Starters, ' + esc(L.name) + ' vs ' + esc(R.name)) + (dec ? '<span class="ss-decide">' + dec + ' to decide</span>' : '') + '</h3>' +
+      '<div class="mx-starters-head"><h3>' + (KIND_LABEL(matchKind(wk, cur)) ? '<span class="mx-kind">' + KIND_LABEL(matchKind(wk, cur)) + '</span>' : '') + (isMine ? 'Starters' : 'Starters, ' + esc(L.name) + ' vs ' + esc(R.name)) + (dec ? '<span class="ss-decide">' + dec + ' to decide</span>' : '') + '</h3>' +
         (isMine ? '' : '<button class="btn-sm btn-ghost" data-act="mview" data-i="' + mineIdx + '">Back to my matchup</button>') + '</div>' +
       pairs +
       '<div class="home-section"><h3 class="section-title">Your Results</h3><div class="activity-feed">' + past + '</div></div>';
@@ -6475,7 +6547,10 @@
     var i = +el.getAttribute('data-i');
     switch (act) {
       case 'exit': close(); return;
-      case 'nav': ui.page = el.getAttribute('data-page'); ui.swapSlot = null; ui.sheet = false; ui.mview = null; ui.confirmDrop = null; ui.confirmAct = null; break;
+      //  viewWeek resets with navigation too: leaving Matchups and
+      //  coming back should land on the live week, not on whatever
+      //  historic week was last browsed.
+      case 'nav': ui.page = el.getAttribute('data-page'); ui.swapSlot = null; ui.sheet = false; ui.mview = null; ui.viewWeek = null; ui.confirmDrop = null; ui.confirmAct = null; break;
       case 'sheet': ui.sheet = !ui.sheet; break;
       case 'wizopen': ui.wiz = 0; break;
       case 'wiznext': if (el.disabled) return; ui.wiz = Math.min(wizSteps().length - 1, ui.wiz + 1); break;
@@ -6612,6 +6687,16 @@
       case 'pass': passSlot(userTeam().id, i); break;
       case 'swap': ui.swapSlot = ui.swapSlot === i ? null : i; break;
       case 'mview': ui.mview = +el.getAttribute('data-i'); break;
+      /*  Week navigation on the Matchups page. mview is reset with
+          every move because matchup index 3 in one week is a
+          different pairing in the next — keeping it would land you
+          on a stranger's game. */
+      case 'weekback': ui.viewWeek = Math.max(1, shownWeek() - 1); ui.mview = null; break;
+      case 'weekfwd':
+        ui.viewWeek = Math.min(state.week, shownWeek() + 1);
+        if (ui.viewWeek >= state.week) ui.viewWeek = null;   // back to following live
+        ui.mview = null; break;
+      case 'weeklive': ui.viewWeek = null; ui.mview = null; break;
       case 'selgame': ui.sel[el.getAttribute('data-k')] = +el.getAttribute('data-g'); break;
       case 'swapto': swapInto(i, el.getAttribute('data-id')); ui.swapSlot = null; break;
       case 'ptab': ui.ptab = el.getAttribute('data-v'); ui.poolShow = 100; break;
