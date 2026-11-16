@@ -2202,6 +2202,22 @@ select:focus {
   display: none;
   padding: 28px 32px 60px;
   max-width: 1200px;
+  /*  ── Let the page actually shrink ──────────────────────────
+      .main-content is display:flex with overflow-x:hidden, and a
+      flex item defaults to min-width:auto — meaning it refuses to
+      shrink below its content's intrinsic width. When some piece of
+      content pushes that width up (a long unbreakable headline, a
+      wide table, a URL with no spaces), the page stops shrinking
+      and the parent CLIPS it.
+
+      Silently. overflow-x:hidden gives no scrollbar, so the cut-off
+      text is simply unreachable — which is what the News page
+      looked like: headlines sliced at a hard vertical edge with no
+      way to scroll to the rest.
+
+      min-width:0 is the standard release valve for a flex child.
+      It costs nothing when the content already fits.           */
+  min-width: 0;
 }
 
 .page.active-page {
@@ -5742,6 +5758,7 @@ select:focus {
 }
 
 .news-featured-title {
+  overflow-wrap: anywhere;
   font-size: 20px;
   font-weight: 800;
   color: var(--text);
@@ -5879,6 +5896,11 @@ select:focus {
 }
 
 .news-card-title {
+  /*  A headline is third-party text. One long unbreakable token —
+      a hyphen-free name, a URL, a hashtag — would otherwise set the
+      card's intrinsic width and push the whole page past the clip
+      edge. Break it rather than let it dictate the layout. */
+  overflow-wrap: anywhere;
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
@@ -5891,6 +5913,7 @@ select:focus {
 }
 
 .news-card-body {
+  overflow-wrap: anywhere;
   font-size: 13px;
   color: var(--text-2);
   line-height: 1.55;
