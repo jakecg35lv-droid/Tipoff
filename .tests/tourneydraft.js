@@ -188,6 +188,88 @@ ok('the roster rule is re-checked at confirm time',
   /const rule = checkRosterRule\(p, pick\.manager\);/.test(code));
 ok('the pick is persisted', /saveState\(\);/.test(lift('confirmDraftPick') || ''));
 
+
+// ══ 7. The clock, and who may cover it ═══════════════════
+/*  The autopick lived on exactly ONE device:
+
+        if (isCommissioner()) autoPickForCurrent();
+
+    Browsers throttle setInterval in a hidden tab and stop it on a
+    locked phone, so a commissioner who pocketed their phone froze
+    the draft on 0:00 for everyone, permanently. Single point of
+    failure on the person most likely to be doing something else. */
+ok('the autopick is no longer commissioner-only',
+  !/if \(isCommissioner\(\)\) autoPickForCurrent\(\)/.test(code),
+  'one device must not be the only one able to advance the draft');
+ok('a takeover delay exists', /function _autopickDelayMs/.test(code));
+ok('the commissioner still goes first', /if \(isCommissioner\(\)\) return 0;/.test(code));
+ok('the expiry moment is recorded', /_timerExpiredAt = Date\.now\(\)/.test(code));
+ok('it keeps ticking until someone covers',
+  /if \(Date\.now\(\) - _timerExpiredAt < _autopickDelayMs\(\)\) return;/.test(code));
+ok('the expiry marker resets while time remains', /if \(rem > 0\) \{ _timerExpiredAt = 0; return; \}/.test(code));
+ok('"time\'s up" is announced once, not every tick',
+  /if \(!_timerExpiredAt\) \{[\s\S]{0,160}toast\("Time's up!/.test(code));
+
+(function () {
+  const src = lift('_autopickDelayMs');
+  ok('_autopickDelayMs is liftable', !!src);
+  if (!src) return;
+  const TAKE = Number((code.match(/AUTOPICK_TAKEOVER_MS = (\d+)/) || [])[1]);
+  const STAG = Number((code.match(/AUTOPICK_STAGGER_MS = (\d+)/) || [])[1]);
+  const run = (isComm, me, mgrs) => new Function('state', 'isCommissioner', 'getSession',
+    'AUTOPICK_TAKEOVER_MS', 'AUTOPICK_STAGGER_MS',
+    src + '\nreturn _autopickDelayMs();')(
+      { managers: mgrs }, () => isComm, () => ({ name: me }), TAKE, STAG);
+
+  const mgrs = ['Jake', 'Luke', 'Sam', 'Ali'];
+  ok('the commissioner covers immediately', run(true, 'Jake', mgrs) === 0);
+  ok('the first manager waits the grace', run(false, 'Jake', mgrs) === TAKE);
+  ok('later managers are staggered', run(false, 'Sam', mgrs) === TAKE + 2 * STAG);
+  //  No two devices may fire together, or both autopick the same slot.
+  const delays = mgrs.map(m => run(false, m, mgrs));
+  ok('every manager has a distinct delay', new Set(delays).size === delays.length,
+    delays.join(','));
+  ok('the gap exceeds a Firestore round trip', STAG >= 2000, String(STAG));
+  //  An unknown name must not leapfrog the commissioner.
+  ok('an unknown manager still waits', run(false, 'Nobody', mgrs) >= TAKE,
+    String(run(false, 'Nobody', mgrs)));
+  ok('the grace is long enough to let the commissioner go first', TAKE >= 5000, String(TAKE));
+  ok('the whole room covers within a reasonable window',
+    TAKE + (mgrs.length - 1) * STAG <= 45000,
+    String(TAKE + (mgrs.length - 1) * STAG));
+})();
+
+// ══ 8. The countdown must not trust a foreign clock ══════
+/*  pickTimerStartedAt is an absolute Date.now() from whichever
+    device started the clock, compared against OUR Date.now(). A
+    device behind sees a longer countdown; one ahead opens its turn
+    already expired. Season hit both; this path never got the fix. */
+ok('a skew offset is measured from the writer', /_clockSkew = Math\.abs\(observed\) > 6 \* 3600e3 \? 0 : observed;/.test(code));
+ok('a wild clock is ignored rather than trusted', /Math\.abs\(observed\) > 6 \* 3600e3/.test(code));
+ok('the countdown reads the synced clock', /_nowSynced\(\) - state\.pickTimerStartedAt/.test(code));
+(function () {
+  const src = lift('getRemainingSeconds');
+  ok('getRemainingSeconds is liftable', !!src);
+  if (!src) return;
+  const run = (started, total, now, skew) => new Function('state', '_nowSynced',
+    src + '\nreturn getRemainingSeconds();')(
+      { pickTimerStartedAt: started, pickTimerSeconds: total }, () => now + skew);
+
+  const T = 1700000000000;
+  ok('a fresh clock shows the full timer', run(T, 90, T, 0) === 90);
+  ok('it counts down', run(T, 90, T + 30000, 0) === 60);
+  ok('it floors at zero', run(T, 90, T + 200000, 0) === 0);
+  ok('no timer means the configured length', run(null, 90, T, 0) === 90);
+  //  THE BUG: a device behind the writer saw more than the full timer.
+  ok('a device behind cannot show more than the pick timer',
+    run(T, 90, T, -120000) === 90,
+    'this is how a 90-second clock once read three and a half minutes');
+  ok('skew is corrected rather than clamped away',
+    run(T, 90, T + 30000, 0) === run(T, 90, T + 30000 - 45000, 45000),
+    'a corrected device agrees with the writer');
+  ok('a device ahead does not go negative', run(T, 90, T + 300000, 0) === 0);
+})();
+
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const build = (sw.match(/BUILD = '(\d+)'/) || [])[1];

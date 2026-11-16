@@ -508,6 +508,26 @@ function _subscribeLeague(code) {
           involved. So during a draft, trust THAT. The timestamp rule
           still governs everything else (settings, scoring, roster
           edits), where it is adequate and where no counter exists. */
+      /*  ── Measure this device's clock offset from the writer ──
+          pickTimerStartedAt is an absolute Date.now() taken from
+          whichever device started the clock, and getRemainingSeconds
+          compares it against OUR Date.now(). Phone and laptop clocks
+          routinely differ by tens of seconds, so a device running
+          behind sees a far longer countdown and one running ahead
+          opens its turn already expired. The season module hit both
+          and fixed them this way; this path never got it.
+
+          lastSaved is written by the same clock in the same write, so
+          the gap between it and ours when the snapshot lands IS that
+          writer's offset. Latency inflates it by a few hundred ms,
+          which is noise next to the drift this cancels.           */
+      if (typeof data.lastSaved === 'number' && data.lastSaved > 0) {
+        const observed = data.lastSaved - Date.now();
+        //  A wild value means a broken device clock; trusting it
+        //  would be worse than ignoring it.
+        _clockSkew = Math.abs(observed) > 6 * 3600e3 ? 0 : observed;
+      }
+
       const remoteIdx = typeof data.currentPickIndex === 'number' ? data.currentPickIndex : -1;
       const localIdx = typeof state.currentPickIndex === 'number' ? state.currentPickIndex : -1;
       const draftMovedOn = remoteIdx > localIdx;
@@ -6186,10 +6206,20 @@ function renderScoringSettings() {
 }
 
 // ── TIMER ─────────────────────────────────────────────────
+//  Milliseconds this device is BEHIND the one that last wrote the
+//  league. Measured on every snapshot; see _subscribeLeague.
+let _clockSkew = 0;
+function _nowSynced() { return Date.now() + _clockSkew; }
+
 function getRemainingSeconds() {
   if (!state.pickTimerStartedAt) return state.pickTimerSeconds;
-  const elapsed = Math.floor((Date.now() - state.pickTimerStartedAt) / 1000);
-  return Math.max(0, state.pickTimerSeconds - elapsed);
+  //  Synced clock: pickTimerStartedAt came from another device.
+  const elapsed = Math.floor((_nowSynced() - state.pickTimerStartedAt) / 1000);
+  //  Clamped at the top as well as the bottom. Without the upper
+  //  bound a device whose clock is behind shows a countdown LONGER
+  //  than the pick timer, which is how a 90-second clock once read
+  //  three and a half minutes.
+  return Math.max(0, Math.min(state.pickTimerSeconds, state.pickTimerSeconds - elapsed));
 }
 
 function formatTimer(secs) {
@@ -6276,16 +6306,59 @@ function resetTimer() {
   updateTimerDisplay();
 }
 
+/*  ── Somebody must always be able to autopick ──────────────
+    This used to be, in full:
+
+        if (rem <= 0) { clearInterval(...); ...
+          if (isCommissioner()) autoPickForCurrent(); }
+
+    So the autopick lived on exactly ONE device. If the commissioner
+    closed the app, locked their phone, or just backgrounded the tab
+    — browsers throttle setInterval to a crawl in a hidden tab and
+    stop it outright on a locked phone — nobody autopicked and the
+    draft froze on 0:00 for everyone, permanently, with no way out
+    but the commissioner coming back.
+
+    That is a single point of failure on the one person most likely
+    to be doing something else. The season module hit this and solved
+    it with a staggered takeover; this is the same shape.
+
+    The commissioner still goes first, immediately. Everyone else
+    waits a grace period plus a stagger by their position in the
+    manager list, so two devices cannot fire together — the gap is
+    far wider than a Firestore round trip, and the pick that lands
+    advances currentPickIndex, which every other device sees.     */
+const AUTOPICK_TAKEOVER_MS = 10000;   // before anyone but the commissioner acts
+const AUTOPICK_STAGGER_MS = 4000;     // between managers, by list order
+let _timerExpiredAt = 0;
+
+//  How long THIS device waits before covering an expired clock.
+function _autopickDelayMs() {
+  if (isCommissioner()) return 0;
+  const s = getSession();
+  const me = s ? s.name : null;
+  const idx = Math.max(0, (state.managers || []).indexOf(me));
+  return AUTOPICK_TAKEOVER_MS + idx * AUTOPICK_STAGGER_MS;
+}
+
 function tickTimer() {
   const rem = getRemainingSeconds();
   updateTimerDisplay();
-  if (rem <= 0) {
-    clearInterval(timerInterval);
-    state.timerRunning = false;
-    updateTimerBtnState();
+  if (rem > 0) { _timerExpiredAt = 0; return; }
+
+  //  Expired. Note when, so the takeover is measured from the
+  //  expiry rather than from whenever this device noticed.
+  if (!_timerExpiredAt) {
+    _timerExpiredAt = Date.now();
     toast("Time's up! " + (currentPick() ? currentPick().manager + ' auto-picks.' : ''), 'info');
-    if (isCommissioner()) autoPickForCurrent();
   }
+  if (Date.now() - _timerExpiredAt < _autopickDelayMs()) return;   // keep ticking
+
+  clearInterval(timerInterval);
+  state.timerRunning = false;
+  _timerExpiredAt = 0;
+  updateTimerBtnState();
+  autoPickForCurrent();
 }
 
 function updateTimerDisplay() {
