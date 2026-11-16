@@ -270,6 +270,64 @@ ok('the countdown reads the synced clock', /_nowSynced\(\) - state\.pickTimerSta
   ok('a device ahead does not go negative', run(T, 90, T + 300000, 0) === 0);
 })();
 
+
+// ══ 9. The draft order is frozen once it starts ══════════
+/*  buildDraftOrder read state.managers LIVE, and the snapshot
+    handler unions in any manager it sees, unconditionally, mid-draft
+    included. Nothing stopped anyone joining after the first pick.
+
+    Modelled on 4 managers / 3 rounds with 5 picks made: one joiner
+    changed ALL SEVEN remaining picks, broke the alignment of the
+    five completed ones, and left undoLastPick hunting a label that
+    had moved to a different slot.                                 */
+ok('the order is built from a frozen list', /state\.draftOrderManagers/.test(code));
+ok('it falls back for drafts already in progress',
+  /\? state\.draftOrderManagers\s*: state\.managers;/.test(code),
+  'a draft that began before this shipped must keep working');
+ok('the list is captured when the draft starts',
+  /state\.draftOrderManagers = \(state\.managers \|\| \[\]\)\.slice\(\);/.test(code));
+ok('only on the first start, not on resume',
+  /if \(firstPick && !\(state\.draftOrderManagers \|\| \[\]\)\.length\)/.test(code),
+  'resuming must not re-freeze against a changed list');
+ok('the lock is recorded in the activity feed', /Draft order locked with/.test(code));
+
+(function () {
+  const src = lift('buildDraftOrder');
+  const build = new Function('state', src + '\nreturn buildDraftOrder();');
+  const frozen = ['Jake', 'Luke', 'Sam', 'Ali'];
+  const withLate = frozen.concat(['Nic']);
+  const a = build({ draftOrderManagers: frozen, managers: withLate, rounds: 3 });
+  const b = build({ managers: frozen, rounds: 3 });
+  ok('a late joiner cannot reshape a frozen order',
+    JSON.stringify(a.map(p => p.manager)) === JSON.stringify(b.map(p => p.manager)));
+  ok('the frozen order keeps its original length', a.length === 12, String(a.length));
+  ok('the late joiner gets no picks', !a.some(p => p.manager === 'Nic'));
+  //  Without the freeze, every remaining pick moved.
+  const unfrozen = build({ managers: withLate, rounds: 3 });
+  const moved = b.slice(5).filter((p, k) => unfrozen[5 + k] && unfrozen[5 + k].manager !== p.manager).length;
+  ok('the model reproduces the damage without a freeze', moved === 7, String(moved));
+  //  An empty frozen list must not blank the draft.
+  ok('an empty frozen list falls back to managers',
+    build({ draftOrderManagers: [], managers: frozen, rounds: 2 }).length === 8);
+})();
+
+// ── And nobody may join a running draft ──────────────────
+ok('joining a started draft is refused',
+  /This league has already started drafting/.test(code));
+ok('"started" covers all three signals',
+  /saved\.timerRunning \|\| saved\.pickTimerStartedAt \|\|[\s\S]{0,120}saved\.currentPickIndex > 0/.test(code));
+ok('an existing manager can still rejoin', /if \(!already && draftRunning\)/.test(code),
+  'a reconnecting manager must not be locked out of their own league');
+
+// ══ 10. Undo keys off a stable value ═════════════════════
+ok('undo matches on pickNumber', /d\.pickNumber === lastOrder\.pickNumber/.test(code));
+ok('it still handles entries written before pickNumber existed',
+  /d\.pickNumber == null && d\.label === lastOrder\.label/.test(code));
+ok('undo is commissioner-only', /function undoLastPick[\s\S]{0,80}if \(!isCommissioner\(\)\) return;/.test(code));
+ok('undo refuses at the start of the draft', /if \(state\.currentPickIndex <= 0\)/.test(code));
+ok('undo gives the reinstated manager a fresh clock',
+  /if \(state\.timerRunning\) state\.pickTimerStartedAt = Date\.now\(\);/.test(code));
+
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const build = (sw.match(/BUILD = '(\d+)'/) || [])[1];

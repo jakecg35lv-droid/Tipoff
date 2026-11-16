@@ -558,7 +558,26 @@ function _subscribeLeague(code) {
 
 // ── DRAFT ORDER ───────────────────────────────────────────
 function buildDraftOrder() {
-  const mgrs = state.managers;
+  /*  ── The order is FROZEN once the draft starts ─────────────
+      This read state.managers live, and the snapshot handler
+      unions in any manager it sees — unconditionally, including
+      mid-draft. Nothing stopped somebody joining after the first
+      pick either.
+
+      One late joiner therefore reshaped the entire snake.
+      Modelled on a 4-manager, 3-round draft with 5 picks made:
+      ALL SEVEN remaining picks changed hands, the five completed
+      picks no longer matched their slots, and undoLastPick — which
+      finds its entry by label — looked for "R2P1 by Ali" at a slot
+      that had become "R1P5 by Nic".
+
+      draftOrderManagers is captured when the draft starts and is
+      what the order is built from thereafter. Falling back to
+      state.managers keeps any draft that began before this shipped
+      working exactly as it did.                                 */
+  const mgrs = (Array.isArray(state.draftOrderManagers) && state.draftOrderManagers.length)
+    ? state.draftOrderManagers
+    : state.managers;
   if (!mgrs || mgrs.length === 0) return [];
   const order = [];
   for (let r = 1; r <= state.rounds; r++) {
@@ -2364,6 +2383,20 @@ function handleJoin() {
       fail('This league is full (' + max + '/' + max + ' managers).');
       return;
     }
+    /*  ── No joining a draft that is already running ───────────
+        Nothing checked this. A newcomer was appended to managers,
+        and because the draft order was derived from that list
+        live, every remaining pick was reassigned to a different
+        manager mid-draft. The order is frozen now, so a late
+        joiner would instead sit in the league with no picks at
+        all — which is its own kind of broken. Turn them away with
+        a reason.                                              */
+    const draftRunning = !!(saved.timerRunning || saved.pickTimerStartedAt ||
+      (typeof saved.currentPickIndex === 'number' && saved.currentPickIndex > 0));
+    if (!already && draftRunning) {
+      fail('This league has already started drafting, so it cannot take new managers.');
+      return;
+    }
     if (!already) saved.managers.push(name);
 
     // Claim the name. Written separately from saveState because
@@ -3860,7 +3893,16 @@ function undoLastPick() {
   const lastOrder = order[state.currentPickIndex - 1];
   if (!lastOrder) return;
   // Find the player drafted at this slot
-  const entry = Object.entries(state.drafted).find(([, d]) => d.label === lastOrder.label && d.manager === lastOrder.manager);
+  /*  Match on pickNumber, which is a stable integer recorded on the
+      entry, rather than on the label — a display string like
+      "Round 3, Pick 2". Label matching worked only while the order
+      never changed; the frozen order makes that true now, but
+      keying off the number means a reworded label can never
+      silently break undo. Label stays as a fallback for entries
+      written before pickNumber was recorded. */
+  const entry = Object.entries(state.drafted).find(([, d]) =>
+    (typeof d.pickNumber === 'number' && d.pickNumber === lastOrder.pickNumber) ||
+    (d.pickNumber == null && d.label === lastOrder.label && d.manager === lastOrder.manager));
   if (!entry) { toast('Could not find last pick entry.', 'error'); return; }
   const pid = entry[0];
   const p = (state.players || []).find(x => x.id === pid);
@@ -6261,6 +6303,15 @@ function startTimer() {
     );
     if (!ok) return;
     addActivity('Draft started with ' + joined + ' of ' + max + ' managers.');
+  }
+
+  /*  Lock the draft order in. From here the snake is fixed, so a
+      manager arriving late cannot re-point everyone else's picks.
+      Only on the FIRST start: pausing and resuming must not
+      re-freeze against a list that has changed in between.     */
+  if (firstPick && !(state.draftOrderManagers || []).length) {
+    state.draftOrderManagers = (state.managers || []).slice();
+    addActivity('Draft order locked with ' + state.draftOrderManagers.length + ' managers.');
   }
 
   state.pickTimerStartedAt = Date.now();
