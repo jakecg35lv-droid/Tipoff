@@ -85,7 +85,14 @@ function loadSync() {
   //  between these two functions over time, and there is no `window`
   //  in Node — one such line killed the whole suite before its first
   //  assertion. The functions under test do not need them.
-  const src = app.slice(a, b).replace(/^window\.[\s\S]*?^\};$/gm, '');
+  //  Strip every `window.*` export in the slice, multi-line AND
+  //  single-line. The multi-line form was already handled; a
+  //  one-liner (window.TipoffFeedback = { open: openFeedback };)
+  //  slipped through and threw "window is not defined" before the
+  //  first assertion. Same cause the comment above describes.
+  const src = app.slice(a, b)
+    .replace(/^window\.[\s\S]*?^\};$/gm, '')
+    .replace(/^window\.[^\n]*;$/gm, '');
   const dom = makeDom();
   const fn = new Function('document', src + '\nreturn { sync: _syncLeagueEmptyState, has: _hasSeasonCard };');
   const api = fn(dom);

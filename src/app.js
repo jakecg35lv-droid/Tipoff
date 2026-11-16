@@ -1965,6 +1965,195 @@ window.TipoffLeagueGone = function (name, onDismiss) {
   setTimeout(function () { try { back.querySelector('#lgGoneOk').focus(); } catch (e) { } }, 30);
 };
 
+/* ══════════════════════════════════════════════════════════
+   FEEDBACK  —  getting a real bug report out of a real user
+   ══════════════════════════════════════════════════════════
+   Every problem in this app so far has been reported as a sentence
+   ("the draft button does not register", "it lags out for 20
+   seconds") and then cost a round of questions to pin down. What
+   actually resolved them was context: which build, which league,
+   which page, which device.
+
+   So the form collects that automatically — and SHOWS it to the
+   person before they send. A report that quietly harvests context
+   is worse than one that asks.
+
+   Delivery is two steps on purpose. The client writes ONLY to
+   `feedback`, and a Cloud Function copies it into the Trigger Email
+   extension's `mail` collection with the Admin SDK. If clients could
+   write to `mail` directly, anyone could send arbitrary email from
+   the domain — an open relay with the app's name on it.
+══════════════════════════════════════════════════════════ */
+const FEEDBACK_MAX = 1500;
+let _fbKind = 'bug';
+
+//  Everything that turned a vague report into a fixable one.
+function _feedbackContext() {
+  const ctx = {};
+  try { ctx.build = (document.querySelector('script[src*="app.js"]') || {}).src || ''; } catch (e) { }
+  ctx.build = (String(ctx.build).match(/\?v=(\d+)/) || [])[1] || 'unknown';
+  try {
+    //  Which half of the app, and where in it.
+    const inSeason = document.body.classList.contains('ss-open');
+    ctx.mode = inSeason ? 'season' : 'tournament';
+    if (inSeason) {
+      ctx.page = (window.TipoffSeason && window.TipoffSeason.currentPage &&
+        window.TipoffSeason.currentPage()) || 'unknown';
+      ctx.league = (window.TipoffSeason && window.TipoffSeason.currentCode &&
+        window.TipoffSeason.currentCode()) || '';
+    } else {
+      const active = document.querySelector('.page.active-page');
+      ctx.page = active ? active.id.replace(/Page$/, '') : 'unknown';
+      ctx.league = (state && state.leagueCode) || '';
+      ctx.commissioner = isCommissioner();
+      if (state && state.selectedTournament) ctx.tournament = state.selectedTournament.id;
+      if (state && typeof state.currentPickIndex === 'number') {
+        ctx.draftPick = state.currentPickIndex;
+        ctx.draftRunning = !!state.timerRunning;
+      }
+    }
+  } catch (e) { }
+  try {
+    ctx.screen = window.innerWidth + 'x' + window.innerHeight;
+    ctx.dpr = window.devicePixelRatio || 1;
+    //  Home Screen install vs a browser tab changes a lot of
+    //  behaviour, notifications especially.
+    ctx.standalone = !!(window.TipoffPush && window.TipoffPush.standalone());
+    ctx.ua = navigator.userAgent;
+    ctx.online = navigator.onLine;
+  } catch (e) { }
+  return ctx;
+}
+
+//  Shown to the user, so it has to read like English rather than a
+//  payload dump.
+function _feedbackContextText(ctx) {
+  const lines = [
+    'Build: v' + ctx.build + '   Mode: ' + ctx.mode + '   Page: ' + (ctx.page || '-'),
+  ];
+  if (ctx.league) lines.push('League: ' + ctx.league +
+    (ctx.commissioner ? ' (you are commissioner)' : ''));
+  if (ctx.tournament) lines.push('Tournament: ' + ctx.tournament);
+  if (typeof ctx.draftPick === 'number') {
+    lines.push('Draft: pick ' + ctx.draftPick + (ctx.draftRunning ? ', clock running' : ', clock stopped'));
+  }
+  lines.push('Screen: ' + ctx.screen + ' @' + ctx.dpr + 'x' +
+    (ctx.standalone ? '  (installed to Home Screen)' : '') +
+    (ctx.online === false ? '  (OFFLINE)' : ''));
+  lines.push('Device: ' + ctx.ua);
+  return lines.join('\n');
+}
+
+function openFeedback() {
+  const modal = document.getElementById('feedbackModal');
+  if (!modal) return;
+  const txt = document.getElementById('fbText');
+  const err = document.getElementById('fbError');
+  const diag = document.getElementById('fbDiag');
+  const count = document.getElementById('fbCount');
+
+  _fbKind = 'bug';
+  modal.querySelectorAll('.fb-kind').forEach(function (b) {
+    b.classList.toggle('is-on', b.dataset.fbKind === 'bug');
+  });
+  if (txt) txt.value = '';
+  if (count) count.textContent = '0';
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+  if (diag) diag.textContent = _feedbackContextText(_feedbackContext());
+
+  const btn = document.getElementById('fbSendBtn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Send report'; }
+
+  modal.style.display = 'flex';
+  setTimeout(function () { try { txt && txt.focus(); } catch (e) { } }, 40);
+  try { track('feedback_opened', {}); } catch (e) { }
+}
+
+function closeFeedback() {
+  const modal = document.getElementById('feedbackModal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function sendFeedback() {
+  const txt = document.getElementById('fbText');
+  const err = document.getElementById('fbError');
+  const btn = document.getElementById('fbSendBtn');
+  const body = ((txt && txt.value) || '').trim();
+
+  const fail = function (msg) {
+    if (err) { err.textContent = msg; err.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Send report'; }
+  };
+
+  if (body.length < 10) {
+    fail('Tell us a little more — even one sentence about what you were doing helps.');
+    return;
+  }
+  if (!window._db) {
+    fail('You appear to be offline. Try again once you have a connection.');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+  const ctx = _feedbackContext();
+  const s = getSession();
+  try {
+    await window._db.collection('feedback').add({
+      kind: _fbKind,
+      body: body.slice(0, FEEDBACK_MAX),
+      ctx: ctx,
+      //  Who to reply to. The uid is what ties it to an account; the
+      //  email is what makes a reply possible.
+      uid: _uid() || null,
+      name: (s && s.name) || null,
+      email: (s && s.email) || null,
+      createdAt: Date.now(),
+      status: 'new'
+    });
+    closeFeedback();
+    toast('Thanks — report sent. We read every one.', 'success');
+    try { track('feedback_sent', { kind: _fbKind, mode: ctx.mode, page: ctx.page }); } catch (e) { }
+  } catch (e) {
+    console.warn('[Feedback] send failed:', e && e.code, e && e.message);
+    /*  Never swallow this. Somebody reporting that the app is broken
+        and getting silence is the worst possible outcome, so if the
+        write fails we say so and give them the address directly. */
+    fail('That did not send (' + ((e && e.code) || 'error') +
+         '). Please email admin@tipofffantasy.com and we will pick it up there.');
+  }
+}
+
+function wireFeedback() {
+  const modal = document.getElementById('feedbackModal');
+  if (!modal || modal.dataset.wired === '1') return;
+  modal.dataset.wired = '1';
+
+  modal.querySelectorAll('.fb-kind').forEach(function (b) {
+    b.addEventListener('click', function () {
+      _fbKind = b.dataset.fbKind || 'bug';
+      modal.querySelectorAll('.fb-kind').forEach(function (x) {
+        x.classList.toggle('is-on', x === b);
+      });
+    });
+  });
+
+  const txt = document.getElementById('fbText');
+  const count = document.getElementById('fbCount');
+  if (txt && count) {
+    txt.addEventListener('input', function () { count.textContent = String(txt.value.length); });
+  }
+  document.getElementById('fbCancelBtn')?.addEventListener('click', closeFeedback);
+  document.getElementById('fbSendBtn')?.addEventListener('click', sendFeedback);
+  //  Backdrop click closes, but only on the backdrop itself — not on
+  //  a stray click inside the card, which would discard typing.
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeFeedback(); });
+  document.getElementById('openFeedbackBtn')?.addEventListener('click', openFeedback);
+}
+
+//  The season module shares this one dialog rather than building a
+//  second: one form, one collection, one place to read reports.
+window.TipoffFeedback = { open: openFeedback };
+
 window.TipoffLeagues = { syncEmpty: _syncLeagueEmptyState };
 
 /*  ── ONE source of truth for "which leagues exist" ──────────
@@ -10137,6 +10326,10 @@ function wireSettingsExtras() {
   }
 
   wireNotifPrefs();
+  //  Wired once at boot, not on demand: the dialog has to be ready
+  //  the moment somebody hits a wall, and that is exactly when they
+  //  are least willing to go hunting for it.
+  wireFeedback();
   wireAccentSwatches();
 }
 

@@ -2204,7 +2204,7 @@ exports.seasonSyncNow = onRequest(
    function below and read at runtime. It is never in source. The
    matching public key is in firebase-config.js, where it belongs.
 ═══════════════════════════════════════════════════════════════ */
-const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { onDocumentWritten, onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const webpush = require('web-push');
 
@@ -2467,6 +2467,104 @@ exports.pushTest = onRequest(
       res.status(200).json({ ok: true, uid, result: out });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   FEEDBACK  →  EMAIL
+   ═══════════════════════════════════════════════════════════════
+   The client writes a report to `feedback`. This copies it into the
+   Trigger Email extension's `mail` collection, which does the
+   sending.
+
+   WHY THE EXTRA HOP
+   The extension sends whatever it finds in `mail`. If clients could
+   write there, anyone with the app open could send arbitrary email
+   from this domain — an open relay carrying our name. So `mail` is
+   closed to clients in firestore.rules and only this function, on
+   the Admin SDK, may write to it.
+
+   SETUP (once):
+     1. Firebase console → Extensions → install "Trigger Email from
+        Firestore" (firebase/firestore-send-email).
+     2. Email documents collection:  mail
+     3. SMTP connection URI: for Gmail, create an App Password at
+        myaccount.google.com/apppasswords and use
+          smtps://admin@tipofffantasy.com:APP_PASSWORD@smtp.gmail.com:465
+     4. Default FROM: admin@tipofffantasy.com
+   Nothing here needs changing afterwards.
+═══════════════════════════════════════════════════════════════ */
+const FEEDBACK_TO = 'admin@tipofffantasy.com';
+
+function esc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+exports.onFeedbackCreated = onDocumentCreated(
+  { document: 'feedback/{reportId}', maxInstances: 5 },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const d = snap.data() || {};
+    const ctx = d.ctx || {};
+
+    const KIND = { bug: 'Bug', stuck: 'Stuck', idea: 'Suggestion' };
+    const kind = KIND[d.kind] || 'Report';
+    //  The subject carries the triage facts, so the inbox is sortable
+    //  without opening anything: what, where, which build.
+    const subject = '[Tipoff ' + kind + '] ' +
+      (ctx.mode || '?') + '/' + (ctx.page || '?') +
+      ' · v' + (ctx.build || '?') +
+      (ctx.league ? ' · ' + ctx.league : '');
+
+    const facts = [
+      ['From', (d.name || 'Unknown') + (d.email ? ' <' + d.email + '>' : ' (no email)')],
+      ['Kind', kind],
+      ['Build', 'v' + (ctx.build || '?')],
+      ['Mode / page', (ctx.mode || '?') + ' / ' + (ctx.page || '?')],
+      ['League', ctx.league ? (ctx.league + (ctx.commissioner ? ' (commissioner)' : '')) : '—'],
+      ['Tournament', ctx.tournament || '—'],
+      ['Draft', typeof ctx.draftPick === 'number'
+        ? ('pick ' + ctx.draftPick + (ctx.draftRunning ? ', clock running' : ', clock stopped'))
+        : '—'],
+      ['Screen', (ctx.screen || '?') + ' @' + (ctx.dpr || 1) + 'x' +
+        (ctx.standalone ? ' (Home Screen install)' : '') +
+        (ctx.online === false ? ' (OFFLINE)' : '')],
+      ['Device', ctx.ua || '—'],
+      ['uid', d.uid || '—'],
+      ['Report id', event.params.reportId],
+    ];
+
+    const text = d.body + '\n\n' + '-'.repeat(52) + '\n' +
+      facts.map(function (f) { return f[0] + ': ' + f[1]; }).join('\n');
+
+    const html =
+      '<div style="font:15px/1.55 -apple-system,Segoe UI,Roboto,sans-serif;color:#111">' +
+        '<p style="white-space:pre-wrap;margin:0 0 18px">' + esc(d.body) + '</p>' +
+        '<table style="border-collapse:collapse;font-size:13px;color:#444">' +
+          facts.map(function (f) {
+            return '<tr><td style="padding:3px 14px 3px 0;color:#888;vertical-align:top">' +
+              esc(f[0]) + '</td><td style="padding:3px 0">' + esc(f[1]) + '</td></tr>';
+          }).join('') +
+        '</table>' +
+      '</div>';
+
+    try {
+      await db.collection('mail').add({
+        to: [FEEDBACK_TO],
+        //  So hitting Reply in the mail client answers the person
+        //  rather than the app's own address.
+        replyTo: d.email || undefined,
+        message: { subject: subject, text: text, html: html },
+      });
+      //  Record that it was queued. If this flag is ever missing on a
+      //  report, the handoff failed and the report is still readable
+      //  in Firestore — which is why the client writes here first.
+      await snap.ref.update({ mailedAt: Date.now() });
+    } catch (e) {
+      console.error('[Feedback] could not queue mail for', event.params.reportId, e && e.message);
     }
   }
 );

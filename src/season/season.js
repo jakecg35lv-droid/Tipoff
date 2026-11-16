@@ -6571,6 +6571,12 @@
         for one is how a feature earns a reputation for being broken. */
     var needsInstall = false;
     try { needsInstall = !!(window.TipoffPush && window.TipoffPush.needsInstall()); } catch (e) { }
+    //  Same dialog app.js owns, reached from season's own settings.
+    html += '<div class="set-label">Help</div><div class="panel">' +
+      '<div class="sc-settings-row"><div><div class="set-row-title">Report a problem</div>' +
+      '<div class="set-row-sub">Something broken, or stuck on a step? Tell us and we will look.</div></div>' +
+      '<button class="set-row-btn" data-act="feedback">Report</button></div></div>';
+
     html += '<div class="set-label">Notifications</div><div class="panel">' +
       '<div class="sc-settings-row"><label class="toggle-label"><input type="checkbox" class="custom-cb-real" data-act="notifmaster"' + (on ? ' checked' : '') + (needsInstall || notifState === 'unsupported' || notifState === 'denied' ? ' disabled' : '') + ' />' +
         '<span class="custom-cb-box" aria-hidden="true">' + CB_SVG + '</span>“On the Clock” alerts</label>' +
@@ -7024,6 +7030,10 @@
         });
         ui.toastMsg = 'Draft scheduled for ' + fmtWhen(when) + '.'; ui.toastType = 'success'; break;
       case 'clearschedule': draftCfg().scheduledAt = null; save(); break;
+      case 'feedback':
+        try { window.TipoffFeedback && window.TipoffFeedback.open(); }
+        catch (e) { notify('Could not open the report form. Email admin@tipofffantasy.com.', 'error'); }
+        return;
       case 'copycode': copyText(state.league.code, 'League code copied.'); return;
       case 'copyinvite': copyText(location.origin + location.pathname + '?join=' + state.league.code, 'Invite link copied.'); return;
       case 'restart':
@@ -8049,6 +8059,12 @@
 
   window.TipoffSeason = {
     open: open, close: close,
+    //  Used by the shared feedback dialog in app.js so a report from
+    //  season mode says which page and league it came from.
+    currentPage: function () { try { return ui.page; } catch (e) { return null; } },
+    currentCode: function () {
+      try { return (state && state.league && state.league.code) || null; } catch (e) { return null; }
+    },
     onAuthChanged: onAuthChanged,
     //  app.js owns the live users/{uid} listener and hands the list
     //  here, so both league lists on the splash come from one source.

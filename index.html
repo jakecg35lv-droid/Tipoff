@@ -26,8 +26,8 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
     rel="stylesheet" />
   <!-- ?v= must match the scripts below and CACHE_NAME in sw.js. -->
-  <link rel="stylesheet" href="src/styles.css?v=279" />
-  <link rel="stylesheet" href="src/season/season.css?v=279" />
+  <link rel="stylesheet" href="src/styles.css?v=280" />
+  <link rel="stylesheet" href="src/season/season.css?v=280" />
 </head>
 
 <body>
@@ -1130,6 +1130,17 @@
         </button>
 
         <!-- ══ ACCOUNT ══ -->
+        <div class="set-label">Help</div>
+        <div class="panel">
+          <div class="set-row">
+            <div class="set-row-main">
+              <span class="set-row-title">Report a problem</span>
+              <span class="set-row-sub">Something broken, or stuck on a step? Tell us and we will look.</span>
+            </div>
+            <button class="set-row-btn" id="openFeedbackBtn">Report</button>
+          </div>
+        </div>
+
         <div class="set-label">Account</div>
         <div class="panel set-panel">
           <div class="set-row">
@@ -1619,6 +1630,42 @@
   </div>
 
   <!-- Restart League Confirm Modal -->
+  <!-- ══ FEEDBACK / BUG REPORT ══
+       Reachable from Settings in both modes, and from the season
+       module via window.TipoffFeedback.open(). The diagnostics block
+       is filled in at open time and shown to the user before they
+       send, because a report that silently harvests context is worse
+       than one that asks. -->
+  <div id="feedbackModal" class="modal-backdrop" style="display:none;">
+    <div class="modal-card fb-card">
+      <h3>Report a problem</h3>
+      <p class="modal-sub">Tell us what went wrong or what you were trying to do. This goes straight to the person who can fix it.</p>
+
+      <div class="fb-kinds" role="radiogroup" aria-label="What kind of report">
+        <button type="button" class="fb-kind is-on" data-fb-kind="bug">Something is broken</button>
+        <button type="button" class="fb-kind" data-fb-kind="stuck">I am stuck</button>
+        <button type="button" class="fb-kind" data-fb-kind="idea">Suggestion</button>
+      </div>
+
+      <label class="fb-label" for="fbText">What happened?</label>
+      <textarea id="fbText" class="fb-text" rows="5" maxlength="1500"
+        placeholder="The draft button did nothing when it was my turn&#10;&#10;What were you doing just before? What did you expect to happen?"></textarea>
+      <div class="fb-count"><span id="fbCount">0</span>/1500</div>
+
+      <details class="fb-diag">
+        <summary>What gets sent with this <span class="fb-diag-hint">(tap to see)</span></summary>
+        <pre id="fbDiag" class="fb-diag-body"></pre>
+      </details>
+
+      <p class="fb-err" id="fbError" style="display:none;"></p>
+
+      <div class="modal-actions">
+        <button id="fbCancelBtn" class="btn-ghost">Cancel</button>
+        <button id="fbSendBtn" class="btn-primary">Send report</button>
+      </div>
+    </div>
+  </div>
+
   <div id="restartModal" class="modal-backdrop" style="display:none;">
     <div class="modal-card">
       <h3>Restart League</h3>
@@ -1802,7 +1849,7 @@
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <script defer src="firebase-config.js?v=279"></script>
+  <script defer src="firebase-config.js?v=280"></script>
 
   <!-- ══════════════════════════════════════════════════════════
        ?v= IS NOT DECORATION. BUMP IT ON EVERY RELEASE.
@@ -1825,14 +1872,14 @@
        its STATIC_ASSETS list, or the service worker precaches URLs
        the page never asks for.
   ══════════════════════════════════════════════════════════ -->
-  <script defer src="data/bracket.js?v=279"></script>
-  <script defer src="data/players.js?v=279"></script>
+  <script defer src="data/bracket.js?v=280"></script>
+  <script defer src="data/players.js?v=280"></script>
   <!-- Loaded before app.js so window.Analytics exists at first call.
        No-ops until a PostHog key is set in analytics.js. -->
-  <script defer src="src/analytics.js?v=279"></script>
-  <script defer src="src/app.js?v=279"></script>
-  <script defer src="data/conference-players.js?v=279"></script>
-  <script defer src="src/season/season.js?v=279"></script>
+  <script defer src="src/analytics.js?v=280"></script>
+  <script defer src="src/app.js?v=280"></script>
+  <script defer src="data/conference-players.js?v=280"></script>
+  <script defer src="src/season/season.js?v=280"></script>
 
   <!-- Service Worker Registration -->
   <script>

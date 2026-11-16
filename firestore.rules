@@ -101,6 +101,33 @@ service cloud.firestore {
       }
     }
 
+    /*  ── Feedback and bug reports ─────────────────────────────
+        Create-only, exactly like contentReports. A client may file a
+        report and nothing else: it cannot read other people's
+        reports, amend its own, or delete one after the fact.
+
+        Note what is NOT here: the Trigger Email extension's `mail`
+        collection. If clients could write there, anyone could send
+        arbitrary email from the app's domain — an open relay with
+        our name on it. A Cloud Function copies each report across
+        with the Admin SDK instead.                               */
+    match /feedback/{reportId} {
+      allow create: if request.auth != null
+                    && request.resource.data.body is string
+                    && request.resource.data.body.size() > 0
+                    && request.resource.data.body.size() <= 1500
+                    && request.resource.data.status == 'new'
+                    && request.resource.data.kind in ['bug', 'stuck', 'idea'];
+      allow read, update, delete: if false;
+    }
+
+    /*  Written only by the feedback function, read only by the
+        Trigger Email extension, which uses the Admin SDK and
+        bypasses these rules. Closed to every client. */
+    match /mail/{mailId} {
+      allow read, write: if false;
+    }
+
     // ── Content reports ──────────────────────────────────────
     //  Section 9 of the Terms says we act on reports we receive. That
     //  needs a durable record, and the record must be write-only:
