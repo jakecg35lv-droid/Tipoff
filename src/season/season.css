@@ -1018,7 +1018,30 @@ body.ss-open:has(#seasonApp.ss-glass) { background: #0a1220; }
 .g-ck-in { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .g-ck-in b { font-size: 38px; font-weight: 300; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 .g-ck-in b.urgency { color: var(--red); }
-.g-ck-in span { font-size: 12px; color: var(--text-2); max-width: 120px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/*  ── The label has to stay inside a CIRCLE ─────────────────
+    This was max-width: 120px, a fixed value sized for the 156-168px
+    desktop clock. .dg-clock drops to 104px on a phone, so the label
+    was allowed to be SIXTEEN PIXELS WIDER THAN THE WHOLE CIRCLE —
+    long team names ran out over the ring and across the countdown
+    digits.
+
+    A percentage tracks the clock at every size. 72% is derived, not
+    guessed: the ring is 9 units thick on a 160 viewBox (r=70), so
+    the usable inner radius is 65.5/80 = 0.82 of the half-width, and
+    the label sits roughly 0.27R below centre where the chord
+    narrows to about 77% of the diameter. 72% leaves margin.
+
+    Ellipsis still truncates anything genuinely too long, which is
+    now the only thing that can happen rather than an overflow. */
+.g-ck-in span {
+  font-size: 12px;
+  color: var(--text-2);
+  max-width: 72%;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .g-ctrl.center { justify-content: center; margin-top: auto; padding-top: 10px; }
 .g-ochips { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
 .g-ochip { flex: none; width: 92px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 18px; background: rgba(255,255,255,.05); border: 1px solid var(--border); }
@@ -1331,7 +1354,16 @@ button.ss-lab-chip[aria-expanded="true"] { box-shadow: 0 0 0 2px rgba(246, 197, 
   .dg-hero { grid-template-columns: 1fr auto; gap: 14px; padding: 16px; }
   .dg-hl h1 { font-size: 26px; }
   .dg-clock { width: 104px; height: 104px; }
-  .dg-clock .g-ck-in b { font-size: 26px; }
+  /*  26px digits plus a 12px label is 40px of text stacked inside a
+      104px circle, which leaves almost nothing for the curve. Tighten
+      both, and give the label a little less width than the shared
+      72% because this is the smallest clock in the app. */
+  .dg-clock .g-ck-in b { font-size: 26px; line-height: 1.04; }
+  .dg-clock .g-ck-in span { font-size: 10px; max-width: 68%; }
+  /*  "Autopicking" and the takeover note replace the digits in this
+      same element. At 0.62em of 26px they sit tight against the ring
+      on the small clock, so shrink them further here. */
+  .dg-clock .g-ck-in b.ss-clock-wait { font-size: 11px; letter-spacing: .02em; }
   .dg-hl .g-ctrl { grid-column: span 2; }
   .dg-side { grid-template-columns: 1fr; }
   .dg-recent { grid-column: auto; }
