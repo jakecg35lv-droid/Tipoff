@@ -78,7 +78,14 @@ ok('the waiting state is styled', /\.ss-clock-wait \{/.test(scss));
 //  Autopicking a human's seat with botChoose() throws away a queue
 //  they deliberately set. Their own device would have used it.
 ok('a covered human gets their queue', /oq \|\| botChoose\(t\.id\)/.test(tick));
-ok('it only takes available players', /available\(\)\.some/.test(tick));
+//  And it is HIS queue now, not the league's shared one.
+ok('and it is his own queue', /var oq = queueChoice\(t\.id\);/.test(tick));
+/*  The availability filter moved INTO queueChoice, which already
+    skips drafted players and anything the roster rules forbid. The
+    guarantee is stronger than before — it used to check only that
+    the player was undrafted. */
+ok('it only takes available players', /function queueChoice\(teamId\)/.test(season) &&
+  /if \(!taken\[id\] && P\(id\) && pickAllowed\(u, id\)\.ok\) return id;/.test(season));
 ok('the pick is labelled auto, not bot', /seatIsHuman \? 'auto' : 'bot'/.test(tick));
 
 // ── The pick still advances and syncs ────────────────────

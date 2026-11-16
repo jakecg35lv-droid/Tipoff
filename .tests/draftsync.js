@@ -267,8 +267,12 @@ ok('the last-resort takeover is staggered by seat',
   //  Two devices must not fire within a round trip of each other.
   ok('the stagger exceeds a round trip', stagger >= 2000, String(stagger));
 })();
+/*  This always SAID it honoured the absent manager's queue. With
+    one shared array for the whole league it could not; it read
+    whatever anybody had starred. queueChoice(teamId) makes the
+    claim true. */
 ok('covering a human honours their queue',
-  /oq = \(d\.queue \|\| \[\]\)\.filter/.test(code));
+  /var oq = queueChoice\(t\.id\);/.test(code));
 ok('the clock is read on the shared scale, not Date.now',
   !/now >= d\.endsAt \+ HOST_TAKEOVER_MS/.test(code.replace(/var now = nowSynced\(\);/, '')) ||
   /nowSynced\(\)/.test(code));
@@ -433,7 +437,7 @@ ok('restart keeps the teams and their seats',
     draft: {
       round1: ['t0', 't1'], order: ['t0', 't1', 't1', 't0'], pick: 3, log: [{ pick: 0 }],
       status: 'live', endsAt: 123, botAt: 456, completedAt: 789,
-      scheduledAt: Date.now() - 3600000, soonSent: true, queue: ['p9']
+      scheduledAt: Date.now() - 3600000, soonSent: true, queues: { t0: ['p9'] }
     },
     games: { 1: {} }, lineups: { 1: {} }, results: [1]
   };
@@ -448,7 +452,14 @@ ok('restart keeps the teams and their seats',
     after.draft.order.length === 4 && after.draft.order[1] === after.draft.order[2]);
   ok('after restart the season anchor is cleared', after.league.seasonStart === null);
   ok('after restart the week is back to zero', after.week === 0 && after.day === 0);
-  ok('after restart the queue is cleared', (after.draft.queue || []).length === 0);
+  /*  queues (per team) replaced the single shared array. Only the
+      queues object is asserted here: this harness stubs draftCfg(),
+      so the legacy-field migration does not run in it. That path is
+      covered properly in .tests/queue.js, which lifts the real
+      draftCfg. */
+  ok('after restart every queue is cleared',
+    JSON.stringify(after.draft.queues) === '{}',
+    JSON.stringify(after.draft.queues));
 })();
 
 // A schedule nobody attended must not fire hours later either.

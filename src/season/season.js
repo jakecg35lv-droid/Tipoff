@@ -1610,8 +1610,60 @@
     var d = state.draft;
     if (!d.status) { d.status = d.pick > 0 ? 'live' : 'pre'; }
     if (!d.timerSecs) d.timerSecs = 90;
-    if (!d.queue) d.queue = [];
+
+    /*  ── The queue is PER TEAM ─────────────────────────────────
+        It used to be one array, d.queue, living in the shared league
+        document. Every manager wrote to it and every manager read
+        it, so the moment anybody starred a player he appeared in
+        everyone else's "Your queue" — which is what looked like the
+        queue auto-populating.
+
+        Worse than cosmetic: queueChoice() feeds the autopick, so a
+        manager's clock running out could hand him a player somebody
+        else had lined up. And the host-covering branch claimed to
+        "honour their queue" while actually reading the shared blob.
+
+        Migration has to be deterministic, because every device runs
+        it independently and they must all reach the same answer. A
+        solo or unclaimed league has exactly one owner for that
+        array, so it carries over. In a league where two or more
+        seats are claimed the entries are unattributable, so they are
+        dropped rather than guessed at — losing a queue is a minor
+        annoyance, inheriting a stranger's is the bug.            */
+    if (!d.queues) {
+      d.queues = {};
+      if (Array.isArray(d.queue) && d.queue.length) {
+        var claimedSeats = (state.teams || []).filter(function (t) { return t && t.uid; }).length;
+        if (claimedSeats <= 1 && state.teams && state.teams[0]) {
+          d.queues[state.teams[0].id] = d.queue.slice();
+        }
+      }
+      delete d.queue;
+    }
     return d;
+  }
+
+  //  One team's queue, created on demand. Never returns undefined, so
+  //  no caller has to guard before pushing.
+  function queueOf(teamId) {
+    var d = draftCfg();
+    if (!d.queues[teamId]) d.queues[teamId] = [];
+    return d.queues[teamId];
+  }
+  //  Mine. userTeam() can fall back to seat 0 before auth resolves,
+  //  so anything that WRITES goes through myQueueId() instead, which
+  //  refuses rather than writing into somebody else's list.
+  function myQueueId() {
+    var t = userTeam();
+    if (!t) return null;
+    var uid = myUid();
+    //  In a claimed league, only act on a seat this account holds.
+    if (uid && t.uid && t.uid !== uid) return null;
+    return t.id;
+  }
+  function myQueue() {
+    var id = myQueueId();
+    return id ? queueOf(id) : [];
   }
   function draftLive() { return state && state.phase === 'draft' && draftCfg().status === 'live'; }
   function restartClock() {
@@ -1703,28 +1755,46 @@
     }
     return { ok: true };
   }
-  function queueChoice() {
-    var d = draftCfg(), taken = drafted(), u = userTeam().id;
-    for (var i = 0; i < d.queue.length; i++) {
-      var id = d.queue[i];
+  //  The first still-available, still-legal player in a given team's
+  //  queue. Defaults to mine, but the covering branch passes the
+  //  ABSENT manager's id so his own list is honoured, which is what
+  //  that code always claimed to do.
+  function queueChoice(teamId) {
+    var taken = drafted(), u = teamId || myQueueId();
+    if (!u) return null;
+    var q = queueOf(u);
+    for (var i = 0; i < q.length; i++) {
+      var id = q[i];
       if (!taken[id] && P(id) && pickAllowed(u, id).ok) return id;
     }
     return null;
   }
   function toggleQueue(pid) {
-    var q = draftCfg().queue, at = q.indexOf(pid);
+    var id = myQueueId();
+    //  No seat, no queue. Silently writing into seat 0's list was
+    //  how a spectator or a pre-auth device could edit a stranger's.
+    if (!id) return;
+    var q = queueOf(id), at = q.indexOf(pid);
     if (at >= 0) q.splice(at, 1); else q.push(pid);
     save();
   }
   function moveQueue(pid, dir) {
-    var q = draftCfg().queue, at = q.indexOf(pid), to = at + dir;
+    var q = myQueue(), at = q.indexOf(pid), to = at + dir;
     if (at < 0 || to < 0 || to >= q.length) return;
     q.splice(at, 1); q.splice(to, 0, pid); save();
   }
   // One pick, announced, then the next clock starts.
   function livePick(teamId, pid, how) {
     var p = P(pid);
-    var q = draftCfg().queue, at = q.indexOf(pid); if (at >= 0) q.splice(at, 1);
+    /*  A drafted player is gone from the pool, so he must leave
+        EVERY queue, not just the queue of whoever took him. Leaving
+        him in seven other lists means seven autopicks that skip
+        over a dead entry. */
+    var qs = draftCfg().queues || {};
+    Object.keys(qs).forEach(function (tid) {
+      var arr = qs[tid] || [], at = arr.indexOf(pid);
+      if (at >= 0) arr.splice(at, 1);
+    });
     /*  makePick now validates and can refuse — a stale device trying
         to take a player who is already gone, or to pick for a seat
         the draft has moved past. A refusal must not be announced or
@@ -1779,7 +1849,7 @@
   function restartLeague() {
     state.teams.forEach(function (t) { t.roster = []; });
     var d = draftCfg();
-    d.pick = 0; d.log = []; d.status = 'pre'; d.queue = []; d.endsAt = null; d.botAt = null;
+    d.pick = 0; d.log = []; d.status = 'pre'; d.queues = {}; d.endsAt = null; d.botAt = null;
     d.order = snake(round1(), state.league.rosterSize);
     //  Clear the draft stamp and the calendar anchor, or a restart
     //  keeps the ORIGINAL week 1. Restart a league in December and
@@ -2044,9 +2114,9 @@
         //  Covering for a human who is away. Honour their queue the
         //  same way their own device would have, so a manager who
         //  set one up is not punished for a dead tab.
-        var oq = (d.queue || []).filter(function (id) {
-          return available().some(function (a) { return a.id === id; });
-        })[0];
+        //  His queue, not the room's. This is what the shared array
+        //  made impossible.
+        var oq = queueChoice(t.id);
         if (livePick(t.id, oq || botChoose(t.id), seatIsHuman ? 'auto' : 'bot') === false) {
           PICK_BLOCKED_AT = now; paintClock(); return;
         }
@@ -4547,7 +4617,7 @@
     var first = sessionName() === 'You' ? '' : ', ' + esc(sessionName().split(' ')[0]);
     var title = dc.status === 'pre' ? 'Draft day' + first : mine ? 'You’re on the clock' : esc(clock.name) + ' is picking';
     var pickPct = Math.round(d.pick / total * 100), rosterPct = Math.round(u.roster.length / state.league.rosterSize * 100);
-    var qn = dc.queue.filter(function (id) { return !drafted()[id]; }).length;
+    var qn = myQueue().filter(function (id) { return !drafted()[id]; }).length;
     var head = '<div class="g-hero"><div class="g-hero-l"><h1>' + title + '</h1><div class="g-bars">' +
         '<div class="g-bar dark"><span style="width:' + Math.max(10, pickPct) + '%"></span><em>' + (dc.status === 'pre' ? 'Not started' : 'Round ' + round + ', pick ' + inRound) + '</em></div>' +
         '<div class="g-bar gold"><span style="width:' + Math.max(8, rosterPct) + '%"></span><em>' + u.roster.length + '/' + state.league.rosterSize + ' drafted</em></div>' +
@@ -4575,7 +4645,7 @@
       }).join('') + '</div>');
 
     var best = available().slice().sort(function (a, b) { return b.proj - a.proj; }).slice(0, 7);
-    var q = {}; dc.queue.forEach(function (id) { q[id] = true; });
+    var q = {}; myQueue().forEach(function (id) { q[id] = true; });
     var bestCard = gCard('g-tall g-stand', 'Best Available', gArrow('draft'),
       '<div class="g-inner">' + best.map(function (p, i) {
         return '<div class="g-srow"><span class="n">' + (i + 1) + '</span>' + logoHTML(p.college, 24) + '<span class="t" data-act="pcard" data-id="' + p.id + '">' + esc(shortName(p.name)) + ' <em class="g-pos">' + p.pos + '</em></span><b>' + f1(p.proj) + '</b>' +
@@ -4824,7 +4894,7 @@
       if (ui.search && (p.name + ' ' + p.college).toLowerCase().indexOf(ui.search.toLowerCase()) < 0) return false;
       return true;
     }).slice(0, 80);
-    var q = d.queue;
+    var q = myQueue();
     var rows = list.map(function (p, k) {
       var qPos = q.indexOf(p.id) + 1;
       var locked = !pickAllowed(u.id, p.id).ok;
@@ -6039,7 +6109,7 @@
     var acts = [];
     if (draft) {
       if (!owner) {
-        var qd = draftCfg().queue.indexOf(pid) >= 0;
+        var qd = myQueue().indexOf(pid) >= 0;
         //  This is what renders the Draft button at all. Keyed off
         //  the cached flag, a device with the wrong one simply had no
         //  button to press — the most literal form of "it does not
@@ -6669,7 +6739,9 @@
         resumeDraft(); break;
       case 'queue': toggleQueue(el.getAttribute('data-id')); break;
       case 'qmove': moveQueue(el.getAttribute('data-id'), +el.getAttribute('data-dir')); break;
-      case 'qclear': draftCfg().queue = []; save(); break;
+      //  Clears MINE. It used to empty the shared array, so one
+      //  manager tidying up wiped the whole league's queues.
+      case 'qclear': (function () { var id = myQueueId(); if (id) draftCfg().queues[id] = []; })(); save(); break;
       case 'simday': simDay(); ui.sel = {}; break;
       case 'simweek':
         ui.sel = {};
