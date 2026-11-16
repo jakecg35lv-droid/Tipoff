@@ -13692,6 +13692,12 @@ select:focus {
 /* ══════════════════════════════════════════════════════════
    FEEDBACK / BUG REPORT DIALOG
 ══════════════════════════════════════════════════════════ */
+/*  Above everything either mode can put on screen. .modal-backdrop
+    alone is z-index 200, but season's own layers go to 900 (.ss-wiz),
+    1100 (.ss-confirm) and 1200 (.ss-pa) — so without this the report
+    dialog opened *underneath* whatever the person was stuck on, which
+    for a bug-report form is the same as not opening. */
+#feedbackModal { z-index: 1300; }
 .fb-card { max-width: 480px; }
 
 .fb-kinds {

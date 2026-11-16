@@ -13,7 +13,19 @@
 ══════════════════════════════════════════════════════════ */
 
 /* ── While open, hide the rest of the app (toasts stay) ── */
-body.ss-open > *:not(#seasonApp):not(script):not(#toastContainer):not(.mode-backdrop):not(.ss-pa) { display: none !important; }
+/*  Season mode hides every body-level sibling so the tournament shell
+    cannot bleed through. The exceptions are the things that must work
+    from inside season mode, and #feedbackModal is one of them: it is a
+    single shared dialog in index.html that season opens through
+    window.TipoffFeedback.open(). Without the exception the Report
+    button fired, openFeedback() ran, set display:flex, and this
+    `!important` overrode it — a button that did nothing at all, with
+    no error anywhere, for the one feature whose entire job is to be
+    reachable when something is broken.
+
+    Anything added at body level that season must be able to show has
+    to be listed here too. */
+body.ss-open > *:not(#seasonApp):not(script):not(#toastContainer):not(.mode-backdrop):not(.ss-pa):not(#feedbackModal) { display: none !important; }
 
 /* ── Shell: same layout as #mainApp ───────────────────── */
 .ss-shell { display: flex; min-height: 100dvh; }

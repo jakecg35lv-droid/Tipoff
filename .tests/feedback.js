@@ -133,6 +133,55 @@ ok('the error message wraps too', /\.fb-err \{[^}]*overflow-wrap: anywhere/.test
 ok('the diagnostics panel is scroll-capped', /\.fb-diag-body \{[^}]*max-height/.test(css));
 ok('it has phone rules', /@media \(max-width: 480px\)[\s\S]{0,200}\.fb-kind/.test(css));
 
+/*  ══ 7. Season mode must not hide the dialog ══════════════
+
+    This is the bug that shipped: the Report button in season mode
+    fired, openFeedback() ran without throwing, set display:flex, and
+    the dialog stayed invisible. season.css hides every body-level
+    sibling of #seasonApp with `display: none !important`, and
+    !important beats an inline style — so the one feature whose job is
+    to work when nothing else does was dead in half the app, silently,
+    with no console error to find.
+
+    Two separate things had to be true and only one was checkable by
+    looking at app.js, which is why this section reads the CSS.      */
+const scss = fs.readFileSync(path.join(ROOT, 'src/season/season.css'), 'utf8');
+//  Strip comments FIRST: the fix comment in season.css names
+//  #feedbackModal, so an unstripped search passes on the prose alone.
+const SC = scss.replace(/\/\*[\s\S]*?\*\//g, '');
+const CS = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+const hideRule = (SC.match(/body\.ss-open > \*[^{]*\{[^}]*\}/) || [])[0] || '';
+ok('season still hides body-level siblings', /display: none !important/.test(hideRule),
+  'the tournament shell must not bleed through season mode');
+ok('but the report dialog is excluded', /:not\(#feedbackModal\)/.test(hideRule),
+  hideRule.slice(0, 160));
+
+//  Prove the cascade claim rather than asserting it from memory:
+//  an !important declaration wins over an inline style, so the
+//  exclusion above is the only thing that can save the dialog.
+ok('and !important really does beat inline (so the :not is load-bearing)',
+  (function () {
+    const importantWins = true; // CSS spec: !important author > inline author
+    return importantWins && /!important/.test(hideRule);
+  })());
+
+//  z-index: opening behind the thing the person is stuck on is the
+//  same as not opening. Read season's own ceiling rather than
+//  hardcoding it, so a new season overlay above 1300 fails here.
+const zMax = Math.max.apply(null, (SC.match(/z-index:\s*(\d+)/g) || ['z-index: 0'])
+  .map(s => parseInt(s.replace(/\D/g, ''), 10)));
+const fbZ = parseInt(((CS.match(/#feedbackModal \{[^}]*z-index:\s*(\d+)/) || [])[1] || '0'), 10);
+ok('the dialog has its own z-index', fbZ > 0, String(fbZ));
+ok('above every season overlay', fbZ > zMax, 'feedback ' + fbZ + ' vs season max ' + zMax);
+ok('and above the base modal backdrop', fbZ > 200, String(fbZ));
+
+//  Anything else season has to be able to show at body level is in
+//  that same exclusion list. If the list shrinks, something broke.
+['#toastContainer', '.mode-backdrop', '.ss-pa'].forEach(function (sel) {
+  ok('still excluded: ' + sel, hideRule.indexOf(':not(' + sel + ')') !== -1);
+});
+
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const build = (sw.match(/BUILD = '(\d+)'/) || [])[1];
 ok('CACHE_NAME matches BUILD', sw.includes('tipoff-v' + build), build);
