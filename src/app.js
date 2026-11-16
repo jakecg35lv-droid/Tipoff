@@ -224,6 +224,9 @@ let poolSortDir = 'desc';
 let playerPoolSortCol = 'fpts';
 let playerPoolSortDir = 'desc';
 let pendingPickPlayerId = null;
+//  The pickNumber the confirm modal was opened for, so the confirm can
+//  refuse if the draft has moved on since.
+let pendingPickNumber = null;
 let tutStep = 0;
 let simPrevRankings = [];
 let expandedTeams = new Set();
@@ -484,12 +487,39 @@ function _subscribeLeague(code) {
       const remoteTs = data.lastSaved || 0;
       const localTs = state.lastSaved || 0;
 
-      if (remoteTs > localTs + 1000) { // 1s buffer to avoid echo
+      /*  ── A draft must not depend on two laptops agreeing ──────
+          The rule below is `remoteTs > localTs + 1000`, and
+          lastSaved is Date.now() from whichever DEVICE wrote it.
+          The comment above already notes that this compares two
+          different computers' clocks — which is why MANAGERS are
+          unioned separately. Picks were never given the same
+          protection.
+
+          Modelled: with clocks 30 seconds apart and picks 20 seconds
+          apart, the device whose clock is BEHIND writes a lastSaved
+          lower than what the other already holds, so its pick is
+          ignored outright and the two devices permanently disagree
+          about who has been drafted. The faster the draft, the less
+          skew it takes — during an autopick cascade picks land
+          seconds apart.
+
+          currentPickIndex is already a monotonic counter: every pick
+          advances it by exactly one, on every device, with no clock
+          involved. So during a draft, trust THAT. The timestamp rule
+          still governs everything else (settings, scoring, roster
+          edits), where it is adequate and where no counter exists. */
+      const remoteIdx = typeof data.currentPickIndex === 'number' ? data.currentPickIndex : -1;
+      const localIdx = typeof state.currentPickIndex === 'number' ? state.currentPickIndex : -1;
+      const draftMovedOn = remoteIdx > localIdx;
+
+      if (draftMovedOn || remoteTs > localTs + 1000) { // 1s buffer to avoid echo
         _applyLeagueState(data);
         state.managers = merged;       // keep anyone the remote doc lacked
         try { localStorage.setItem('mmfantasy-league-' + state.leagueId, JSON.stringify(state)); } catch (e) { }
         render();
-        toast('League updated.', 'info');
+        //  A pick landing is not "League updated" — it is the draft
+        //  moving, which the board already shows.
+        if (!draftMovedOn) toast('League updated.', 'info');
         return;
       }
 
@@ -3103,6 +3133,14 @@ function openDraftConfirm(playerId) {
   }
 
   pendingPickPlayerId = playerId;
+  /*  Which pick this modal belongs to. The turn is checked above, at
+      selection — but confirmDraftPick() runs later, recomputes
+      currentPick() fresh, and never re-checked. So if the turn moved
+      while the modal was open (an autopick fired, or another manager
+      picked) the confirm still went through and was recorded against
+      whoever was on the clock BY THEN. You drafted a player onto
+      somebody else's roster. */
+  pendingPickNumber = pick ? pick.pickNumber : null;
   const modal = document.getElementById('draftConfirmModal');
   const logoEl = document.getElementById('confirmLogo');
   const nameEl = document.getElementById('confirmPlayerName');
@@ -3392,11 +3430,38 @@ function confirmDraftPick() {
       : 'The draft has not started yet. The commissioner starts it.', 'error');
     const m = document.getElementById('draftConfirmModal');
     if (m) m.style.display = 'none';
-    pendingPickPlayerId = null;
+    //  Both, always. Leaving pendingPickNumber set would make the
+    //  NEXT modal compare against a stale pick and refuse wrongly.
+    pendingPickPlayerId = null; pendingPickNumber = null;
     return;
   }
+  /*  ── Is this still the pick we opened the modal for? ──────
+      currentPick() is recomputed here, so without this the confirm
+      silently retargets whoever is on the clock now. The season
+      module refuses an out-of-turn pick inside makePick for exactly
+      this reason; this is the tournament equivalent. */
+  if (pendingPickNumber != null && pick.pickNumber !== pendingPickNumber) {
+    toast('That pick has already gone \u2014 it is ' + pick.manager + '\u2019s turn now.', 'error');
+    const m2 = document.getElementById('draftConfirmModal');
+    if (m2) m2.style.display = 'none';
+    pendingPickPlayerId = null; pendingPickNumber = null;
+    try { track('pick_refused_out_of_turn', {}); } catch (e) { }
+    render();
+    return;
+  }
+
   const p = (state.players || []).find(x => x.id === pendingPickPlayerId);
-  if (!p || state.drafted[pendingPickPlayerId]) { toast('Player already drafted', 'error'); return; }
+  if (!p || state.drafted[pendingPickPlayerId]) {
+    /*  This returned with the modal still open, leaving the manager
+        staring at a Confirm button for a player who is already gone
+        and no way forward but to close it by hand. */
+    toast('Player already drafted', 'error');
+    const m3 = document.getElementById('draftConfirmModal');
+    if (m3) m3.style.display = 'none';
+    pendingPickPlayerId = null; pendingPickNumber = null;
+    render();
+    return;
+  }
 
   // Roster rule. Checked here as well as in the UI, because the UI can
   // be stale by a pick or two when several managers act at once.
@@ -3404,7 +3469,7 @@ function confirmDraftPick() {
   if (!rule.ok) {
     toast(rule.reason, 'error');
     document.getElementById('draftConfirmModal').style.display = 'none';
-    pendingPickPlayerId = null;
+    pendingPickPlayerId = null; pendingPickNumber = null;
     return;
   }
 
@@ -3435,7 +3500,7 @@ function confirmDraftPick() {
 
     if (btn) { btn.classList.remove('draft-go--charging'); btn.textContent = 'Confirm Pick ›'; }
     document.getElementById('draftConfirmModal').style.display = 'none';
-    pendingPickPlayerId = null;
+    pendingPickPlayerId = null; pendingPickNumber = null;
 
     // Flash row
     const row = document.querySelector('.pool-row[data-pid="' + p.id + '"]');
