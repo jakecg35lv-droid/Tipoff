@@ -419,12 +419,49 @@ function removeManagerRemote(name) {
   }).catch(e => console.warn('[Firestore] removeManager failed:', e.message));
 }
 
+/*  Tear down a league that no longer exists, then say so. Order
+    matters: drop the listener first so nothing re-applies, clear the
+    local copies so a reload cannot resurrect it, then show the
+    notice and land on the splash. */
+function _onLeagueDeleted(code) {
+  if (_onLeagueDeleted._seen === code) return;      // one notice per league
+  _onLeagueDeleted._seen = code;
+
+  const name = (state && state.leagueName) || 'That league';
+  if (_leagueUnsubscribe) { try { _leagueUnsubscribe(); } catch (e) { } _leagueUnsubscribe = null; }
+  try { clearInterval(timerInterval); } catch (e) { }
+
+  try {
+    const id = localStorage.getItem('mmfantasy-code-' + code);
+    if (id) localStorage.removeItem('mmfantasy-league-' + id);
+    localStorage.removeItem('mmfantasy-code-' + code);
+  } catch (e) { }
+  //  Drop it from the account list too, or it keeps appearing on
+  //  every device with a code that no longer resolves.
+  try { forgetLeagueMembership(code); } catch (e) { }
+  try { window.TipoffView && window.TipoffView.clear(); } catch (e) { }
+
+  state = freshState();
+  state.players = poolForCurrentTournament();
+  try { track('league_deleted_remote', {}); } catch (e) { }
+  window.TipoffLeagueGone(name, function () { showSplash(); });
+}
+
 function _subscribeLeague(code) {
   if (_leagueUnsubscribe) { _leagueUnsubscribe(); _leagueUnsubscribe = null; }
   if (!window._db || !code) return;
   _leagueUnsubscribe = window._db.collection('leagues').doc(code)
-    .onSnapshot(doc => {
-      if (!doc.exists) return;
+    .onSnapshot({ includeMetadataChanges: true }, doc => {
+      if (!doc.exists) {
+        /*  Deleted. Only act on a SERVER answer — Firestore serves a
+            cached snapshot first and an empty cache is not evidence
+            of anything — and only for the league we are actually
+            sitting in, so a stale listener cannot evict someone from
+            a different one. */
+        const fromCache = !!(doc.metadata && doc.metadata.fromCache);
+        if (!fromCache && state && state.leagueCode === code) _onLeagueDeleted(code);
+        return;
+      }
       const data = doc.data();
 
       // ── Managers are merged, never compared ──────────────
@@ -1788,6 +1825,56 @@ window.TipoffNews = {
     try { renderNews(!!force, { feed: feedEl, teams: teamNames || null, refreshBtn: null }); }
     catch (e) { console.warn('[News] season render', e); }
   }
+};
+
+/*  ── Telling everyone else the league is gone ──────────────
+    A commissioner deleting a league removes the Firestore document.
+    Every other manager's onSnapshot then fired with doc.exists ===
+    false, and BOTH modes did the same thing with it:
+
+        if (!doc.exists) return;
+
+    So nothing happened. They carried on in a league that no longer
+    existed, kept writing picks and lineups to a dead document, and
+    only found out when they reloaded and the league had vanished
+    with no explanation.
+
+    This is the notice both modes raise. Deliberately a blocking
+    overlay rather than a toast: the league ending is not something
+    to glance at and miss, and whatever is behind it is now stale.  */
+window.TipoffLeagueGone = function (name, onDismiss) {
+  //  One at a time. Both the season module and the tournament page
+  //  can detect the same deletion within a frame of each other.
+  if (document.getElementById('leagueGoneBackdrop')) return;
+
+  const back = document.createElement('div');
+  back.id = 'leagueGoneBackdrop';
+  back.className = 'lg-gone-backdrop';
+  const safe = String(name || 'That league').replace(/[&<>"]/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  back.innerHTML =
+    '<div class="lg-gone" role="alertdialog" aria-labelledby="lgGoneTitle">' +
+      '<div class="lg-gone-icon" aria-hidden="true">' +
+        '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/>' +
+        '<path d="M12 7v6"/><path d="M12 16.5v.01"/></svg>' +
+      '</div>' +
+      '<h3 id="lgGoneTitle">This league has been closed</h3>' +
+      '<p>“' + safe + '” was deleted by its commissioner, so it has ended for ' +
+      'everyone. It cannot be restored.</p>' +
+      '<p class="lg-gone-sub">Your other leagues are unaffected.</p>' +
+      '<button class="btn-primary" id="lgGoneOk">Back to my leagues</button>' +
+    '</div>';
+  document.body.appendChild(back);
+
+  const done = function () {
+    try { back.remove(); } catch (e) { }
+    try { onDismiss && onDismiss(); } catch (e) { }
+  };
+  back.querySelector('#lgGoneOk').addEventListener('click', done);
+  //  No backdrop-click dismissal: this needs an acknowledgement, and
+  //  a stray tap behind the card should not count as one.
+  setTimeout(function () { try { back.querySelector('#lgGoneOk').focus(); } catch (e) { } }, 30);
 };
 
 window.TipoffLeagues = { syncEmpty: _syncLeagueEmptyState };

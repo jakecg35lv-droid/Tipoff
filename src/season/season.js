@@ -533,7 +533,19 @@
         if (SYNC.pendingPush) { SYNC.pendingPush = false; schedulePush(); }
       }
 
-      if (!doc.exists) return;
+      /*  ── The league was deleted ────────────────────────────
+          This was `if (!doc.exists) return;` — a deleted league was
+          indistinguishable from a quiet one, so every other manager
+          carried on drafting and setting lineups against a document
+          that no longer existed.
+
+          Gated on a SERVER answer and on having synced at least
+          once. An empty cached snapshot proves nothing, and a code
+          that never existed must not look like a deletion.       */
+      if (!doc.exists) {
+        if (!fromCache && SYNC.synced) onLeagueDeleted();
+        return;
+      }
       var d = doc.data() || {};
       if (typeof d.rev !== 'number') return;
       if (!d.state) return;
@@ -968,6 +980,35 @@
     return !!t.isUser;
   }
   function myTurn() { return seatIsMine(team(onClock())); }
+
+  /*  Pull the league down and tell the manager why. Mirrors
+      leaveLeague()'s teardown, with the notice on the end.      */
+  var LEAGUE_GONE = null;
+  function onLeagueDeleted() {
+    var code = state && state.league && state.league.code;
+    if (!code || LEAGUE_GONE === code) return;      // one notice per league
+    LEAGUE_GONE = code;
+
+    var name = (state.league && state.league.name) || 'That league';
+    unsubscribeSeason();
+    if (SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; }
+    //  Stop the draft clock and the stats poll before anything else
+    //  gets a chance to write back to a document that is gone.
+    try { clearInterval(open._tick); } catch (e) { }
+    try { clearInterval(open._statsTick); } catch (e) { }
+    try { track('season_league_deleted_remote', { phase: state.phase }); } catch (e) { }
+
+    state = null;
+    forgetLeagueLocal(code);
+    try { window.TipoffView && window.TipoffView.clear(); } catch (e) { }
+    //  Remove it from the account list too, so it stops showing on
+    //  every device with a code that resolves to nothing.
+    try { forgetSeasonLeague(code); } catch (e) { }
+
+    try { close(); } catch (e) { }
+    try { renderSplashCard(); } catch (e) { }
+    if (window.TipoffLeagueGone) window.TipoffLeagueGone(name, null);
+  }
 
   function unsubscribeSeason() {
     if (SYNC.unsub) { try { SYNC.unsub(); } catch (e) { } SYNC.unsub = null; }

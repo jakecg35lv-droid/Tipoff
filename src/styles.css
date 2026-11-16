@@ -13397,3 +13397,90 @@ select:focus {
   .pf-tile { padding: 15px 16px; }
   .pf-tile b { font-size: 22px; }
 }
+
+/*  ── "This league has been closed" ─────────────────────────
+    Raised on every other manager's screen the moment a commissioner
+    deletes a league. A blocking overlay on purpose: the league
+    ending is not a thing to glance at and miss, and everything
+    behind it is now stale. */
+.lg-gone-backdrop {
+  position: fixed;
+  inset: 0;
+  /*  Above everything, including .leo (a full-screen inset:0 overlay)
+      and the toast container, both of which sit at 9999. A toast
+      disappearing behind this is correct — you should not be reading
+      incidental notices while being told your league has ended. */
+  z-index: 10000;
+  background: rgba(4, 8, 16, 0.82);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  animation: lg-gone-in 0.22s ease both;
+}
+
+@keyframes lg-gone-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.lg-gone {
+  width: 100%;
+  max-width: 400px;
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 28px 26px 24px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  animation: lg-gone-rise 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes lg-gone-rise {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.lg-gone-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(216, 69, 61, 0.14);
+  border: 1px solid rgba(216, 69, 61, 0.34);
+  color: #d8453d;
+}
+
+.lg-gone h3 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.lg-gone p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.lg-gone .lg-gone-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+
+.lg-gone .btn-primary { width: 100%; }
+
+@media (max-width: 480px) {
+  .lg-gone { padding: 24px 20px 20px; }
+  .lg-gone h3 { font-size: 23px; }
+}
