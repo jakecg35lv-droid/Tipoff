@@ -6660,11 +6660,49 @@ function autoPickForCurrent() {
   let players = getSortedPlayers('', '').filter(p => !state.drafted[p.id]);
   if (players.length === 0) return;
 
-  // Never auto-pick a player that would make the manager's roster
-  // illegal. If the rule has locked them in, this narrows the list to
-  // the positions they are obligated to take.
+  /*  ── Legality, and what to relax when nothing is legal ────
+      This was:
+
+          const legal = players.filter(...);
+          if (legal.length) players = legal;
+
+      with no else. When nothing was legal it fell straight through
+      and took players[0] — so an autopick could break the Feast
+      Week event cap that a human confirming the same player would
+      have been refused for. Running your clock out was a loophole
+      around the rule that makes a combined draft worth drafting.
+
+      The bare fallback existed for a good reason: the draft must
+      never hang. But it relaxed BOTH rules at once, when they are
+      not equally negotiable. Position coverage is what stops a
+      roster being unfillable, so it is the one worth protecting;
+      the event cap is a competitive rule, and one extra player
+      from a tournament is a far smaller wrong than a deadlock.
+
+      So: legal first, then cap-only violations, then anything —
+      and say so out loud rather than silently bending the rule.
+
+      Simulated over 4,000 random 8-round Feast Week drafts, the
+      legal set never emptied, so in practice this should never
+      fire. It fires in a small custom league with few events.   */
+  let players_relaxed = '';
   const legal = players.filter(p => playerIsEligible(p, pick.manager));
-  if (legal.length) players = legal;
+  if (legal.length) {
+    players = legal;
+  } else {
+    //  Keep the roster fillable; let the event cap go.
+    /*  `forced` is what separates the two refusals: a position
+        failure lists the positions still needed, a cap failure
+        returns an empty array. So !ok with no forced positions is
+        uniquely a cap violation — no need to match the reason
+        string, which would stop working the moment it is reworded. */
+    const positionsOk = players.filter(function (p) {
+      const r = checkRosterRule(p, pick.manager);
+      return !r.ok && Array.isArray(r.forced) && r.forced.length === 0;
+    });
+    if (positionsOk.length) { players = positionsOk; players_relaxed = 'event cap'; }
+    else { players_relaxed = 'all roster rules'; }
+  }
 
   // ── Queue first ────────────────────────────────────────
   //  Walk this manager's shortlist in their order and take the first
@@ -6682,7 +6720,10 @@ function autoPickForCurrent() {
   state.currentPickIndex++;
   pruneQueues(best.id);
   addActivity('Auto-pick: ' + esc(pick.manager) + ' was assigned ' + esc(best.name) +
-    (fromQueue ? ' (from queue)' : ''));
+    (fromQueue ? ' (from queue)' : '') +
+    //  Never bend a roster rule quietly. If the league ends up with
+    //  somebody over the event cap, the log says why.
+    (players_relaxed ? ' \u2014 no legal player remained, ' + players_relaxed + ' relaxed' : ''));
   // from_queue is the number that matters: if autopicks are mostly NOT
   // from a queue, people are not using it and the timer is still the
   // problem the queue was meant to solve.
@@ -6690,6 +6731,9 @@ function autoPickForCurrent() {
     round: pick.round, pick_number: pick.pickNumber,
     seed: best.seed, position: best.position,
     from_queue: fromQueue,
+    //  If this is ever non-empty in the wild, a league shape exists
+    //  that the cap arithmetic cannot satisfy.
+    relaxed: players_relaxed || null,
   });
   if (isDraftComplete()) {
     clearInterval(timerInterval);

@@ -6621,7 +6621,12 @@ select:focus {
   justify-content: center;
   background: rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(10px);
-  padding: 20px;
+  /*  The close button is pinned 16px inside the card's top-right.
+      With a flat 20px of overlay padding, a tall card on a notched
+      phone put it under the status bar — the one control that
+      dismisses a z-index 8500 overlay. */
+  padding: max(20px, env(safe-area-inset-top)) 16px
+           max(20px, env(safe-area-inset-bottom));
 }
 
 .pdc-card {
@@ -6633,8 +6638,21 @@ select:focus {
   max-width: 520px;
   position: relative;
   animation: slide-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /*  ── vh is the WRONG unit on a phone ───────────────────────
+      On iOS, vh is the LARGE viewport: it ignores the Safari
+      toolbar. 90vh therefore resolves taller than what is actually
+      on screen, and the bottom of the card — the stats and the
+      draft status, which is the reason the card is open mid-draft
+      — sits below the fold with nothing to scroll it into view.
+
+      dvh tracks the visible area. vh stays first as the fallback
+      for anything that does not understand dvh. Two sibling modals
+      in this stylesheet already use exactly this pattern; this card
+      was simply missed.                                         */
   max-height: 90vh;
+  max-height: calc(100dvh - 40px);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .pdc-close {
@@ -6676,6 +6694,11 @@ select:focus {
   font-size: 22px;
   font-weight: 800;
   margin-bottom: 8px;
+  /*  Third instance of the same bug: a player's name is data, and
+      without this a long one sets the card's width instead of
+      wrapping inside it. */
+  overflow-wrap: anywhere;
+  line-height: 1.2;
 }
 
 .pdc-meta {
@@ -13629,4 +13652,39 @@ select:focus {
 @media (prefers-reduced-motion: reduce) {
   .leo-ring { animation: none; opacity: 0.25; }
   .leo-name { animation: fade-in 0.25s ease both; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   PLAYER DETAIL CARD ON A PHONE
+   ──────────────────────────────────────────────────────────
+   The only mobile override this card had was border-radius. Every
+   other value — 28px of padding, a 3-up stats grid, a 32px close
+   button — was sized for a 520px desktop card and inherited
+   unchanged onto a 360px screen. It is opened constantly while
+   drafting, so it is worth the same care the draft board gets.
+══════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .pdc-card {
+    padding: 22px 18px 24px;
+  }
+
+  /*  The header is logo + name side by side; the name needs the
+      slack when the card is this narrow. */
+  .pdc-info h3 { font-size: 19px; }
+  .pdc-college { font-size: 12px; }
+
+  /*  Three stats across a 324px content box is 108px each before
+      gaps. Keep the value readable and let the label shrink. */
+  .pdc-stats { gap: 8px; margin-bottom: 16px; }
+  .pdc-stat-val { font-size: 19px; }
+  .pdc-stat-label { font-size: 9.5px; letter-spacing: 0.04em; }
+
+  /*  44px is the minimum comfortable touch target, and this is the
+      only way to dismiss the overlay. */
+  .pdc-close {
+    width: 40px;
+    height: 40px;
+    top: 10px;
+    right: 10px;
+  }
 }

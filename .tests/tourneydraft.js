@@ -328,6 +328,113 @@ ok('undo refuses at the start of the draft', /if \(state\.currentPickIndex <= 0\
 ok('undo gives the reinstated manager a fresh clock',
   /if \(state\.timerRunning\) state\.pickTimerStartedAt = Date\.now\(\);/.test(code));
 
+
+// ══ 11. Autopick cannot quietly break a roster rule ══════
+/*  This was:
+        const legal = players.filter(...);
+        if (legal.length) players = legal;
+    with no else. Nothing legal meant falling through to players[0],
+    so an autopick could break the Feast Week event cap that a human
+    confirming the same player would be refused for. Running the
+    clock out was a loophole around the rule that makes a combined
+    draft worth drafting.                                          */
+ok('the fallback is no longer a bare fall-through',
+  /if \(legal\.length\) \{\s*players = legal;\s*\} else \{/.test(code),
+  'nothing legal used to mean no rule at all');
+ok('position coverage is protected first',
+  /const positionsOk = players\.filter/.test(code),
+  'an unfillable roster is worse than one extra player from an event');
+ok('the cap is what gets relaxed', /players_relaxed = 'event cap';/.test(code));
+ok('relaxing everything is the last resort',
+  /else \{ players_relaxed = 'all roster rules'; \}/.test(code));
+ok('a relaxed pick is written to the activity feed',
+  /no legal player remained, ' \+ players_relaxed \+ ' relaxed'/.test(code),
+  'a bent rule must never be silent');
+ok('it is tracked so it can be seen in the wild',
+  /relaxed: players_relaxed \|\| null,/.test(code));
+
+/*  The two refusals are told apart by `forced`, not by the reason
+    text — a string match would stop working the moment the copy is
+    reworded. */
+ok('cap and position failures are told apart structurally',
+  /r\.forced\.length === 0;/.test(code) && !/players from.*test\(r\.reason/.test(code));
+(function () {
+  const isCapOnly = r => !r.ok && Array.isArray(r.forced) && r.forced.length === 0;
+  ok('a cap failure is relaxable',
+    isCapOnly({ ok: false, forced: [], reason: 'You already have 3 players from Maui' }) === true);
+  ok('a position failure is NOT relaxable',
+    isCapOnly({ ok: false, forced: ['C'], reason: 'You need Center' }) === false,
+    'relaxing this makes a roster unfillable');
+  ok('a legal pick is not treated as a violation',
+    isCapOnly({ ok: true, forced: [] }) === false);
+})();
+
+/*  And the headline result: in Feast Week's actual shape this path
+    should never run at all. 8 events, cap 3, 8 rounds, G/F/C. */
+(function () {
+  const EVENTS = 8, CAP = 3, ROUNDS = 8, POS = ['G', 'F', 'C'];
+  const cover = (sets) => {
+    let best = 0;
+    const perm = (i, used) => {
+      if (i === sets.length) { best = Math.max(best, used.size); return; }
+      let any = false;
+      for (const p of sets[i]) if (!used.has(p)) { used.add(p); perm(i + 1, used); used.delete(p); any = true; }
+      if (!any) perm(i + 1, used);
+    };
+    perm(0, new Set());
+    return best;
+  };
+  const legalFor = (roster, c) => {
+    if (roster.filter(r => r.ev === c.ev).length >= CAP) return false;
+    const sets = roster.map(r => new Set([r.pos])).concat([new Set([c.pos])]);
+    return POS.length - cover(sets) <= ROUNDS - sets.length;
+  };
+  let emptied = false;
+  for (let t = 0; t < 600 && !emptied; t++) {
+    const roster = [];
+    for (let r = 0; r < ROUNDS; r++) {
+      const pool = [];
+      for (let e = 0; e < EVENTS; e++) for (const p of POS) pool.push({ ev: e, pos: p });
+      const legal = pool.filter(c => legalFor(roster, c));
+      if (!legal.length) { emptied = true; break; }
+      roster.push(legal[Math.floor(Math.random() * legal.length)]);
+    }
+  }
+  ok('Feast Week never runs out of legal picks', !emptied,
+    'if this fails the cap arithmetic cannot satisfy the league shape');
+})();
+
+// ══ 12. The player detail card on a phone ════════════════
+const pcss = fs.readFileSync(path.join(ROOT, 'src/styles.css'), 'utf8');
+function prule(sel) {
+  const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(?:^|\\n)\\s*' + esc + '\\s*\\{([^}]*)\\}', 'g');
+  let m, out = '';
+  while ((m = re.exec(pcss))) out += m[1] + '\n';
+  return out;
+}
+/*  vh is the LARGE viewport on iOS — it ignores the Safari toolbar —
+    so 90vh resolved taller than the visible area and the bottom of
+    the card was unreachable. Nine other places in this stylesheet
+    already use dvh; this card was missed. */
+ok('the card is sized to the VISIBLE viewport', /max-height:\s*calc\(100dvh/.test(prule('.pdc-card')));
+ok('vh remains as the fallback', /max-height:\s*90vh/.test(prule('.pdc-card')),
+  'order matters: vh first, dvh second');
+ok('the overlay honours the safe area',
+  /env\(safe-area-inset-top\)/.test(prule('.pdc-overlay')),
+  'the close button sat under the notch');
+ok('a long player name wraps', /overflow-wrap:\s*anywhere/.test(prule('.pdc-info h3')));
+ok('the card has real phone rules now',
+  /PLAYER DETAIL CARD ON A PHONE/.test(pcss));
+(function () {
+  const i = pcss.indexOf('PLAYER DETAIL CARD ON A PHONE');
+  const blk = i > 0 ? pcss.slice(i) : '';
+  const m = blk.match(/\.pdc-close \{[^}]*width:\s*(\d+)px/);
+  ok('the only dismiss control is a comfortable target',
+    m && +m[1] >= 40, m ? m[1] + 'px' : 'not found');
+  ok('the stats grid is tightened', /\.pdc-stats \{[^}]*gap:\s*8px/.test(blk));
+})();
+
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const build = (sw.match(/BUILD = '(\d+)'/) || [])[1];
