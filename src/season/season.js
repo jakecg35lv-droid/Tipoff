@@ -3453,7 +3453,34 @@
   //  waiting is worse than losing it: a postponed game that never
   //  turns final would otherwise freeze the season forever, so after
   //  STALE_DAY_MS the clock moves on regardless.
-  var STALE_DAY_MS = 36 * 3600e3;   // a day and a half past its 6am boundary
+  /*  ── Two escape hatches, because there are two situations ──
+      A day will not advance until every rostered player's game that
+      day is final. The fallback for a game that never turns final
+      used to be a single 36-hour wait, which conflated two very
+      different things:
+
+        · a game that is STILL BEING PLAYED and running long
+        · a game that is never going to finish at all — postponed,
+          cancelled, or a status the feed simply never flipped
+
+      The second case is common and the 36 hours was pure dead time.
+      A real league hit it: Sunday had 13 relevant games, 12 final,
+      ZERO live, and the one orphan held the whole league on Sunday
+      through all of Monday. Eight managers watched a frozen week,
+      0-0 records and an unfinalised matchup, waiting on a game that
+      had already not happened.
+
+      The feed already tells these apart. `live` is set from ESPN
+      state 'in', so an unfinished game with live:false is not being
+      played. Combined with the boundary — 6am the morning AFTER the
+      game day, which already covers a 11:30pm Pacific tip ending
+      around 2am Eastern — four more hours is a generous allowance
+      for sync lag, and anything still unresolved by then is dead.
+
+      Something genuinely live keeps the full 36 hours.          */
+  var STALE_DAY_MS = 36 * 3600e3;   // something is still being played
+  var DEAD_DAY_MS = 4 * 3600e3;     // nothing is live; it is not coming
+
   function dayIsComplete(d) {
     if (d > 6) return true;
     var games = [];
@@ -3461,15 +3488,21 @@
       (gamesFor(pid) || []).forEach(function (g) { if (g && g.day === d) games.push(g); });
     });
     if (!games.length) return true;                       // nobody plays
-    if (games.every(gameIsFinal)) return true;            // all done
 
-    //  Escape hatch: how long ago did this day end (6am the next day)?
+    var unfinished = games.filter(function (g) { return !gameIsFinal(g); });
+    if (!unfinished.length) return true;                  // all done
+
     try {
       var r = weekRange(state.week);
+      //  6am the morning after this day.
       var dayEnd = r.start.getTime() + (d + 1) * 864e5 + 6 * 3600e3;
-      if (nowSynced() - dayEnd > STALE_DAY_MS) {
-        console.warn('[Season] day ' + d + ' still has unfinished games but is ' +
-          'well past; advancing so the season cannot stall.');
+      var past = nowSynced() - dayEnd;
+      var anyLive = unfinished.some(function (g) { return !!g.live; });
+      var allowance = anyLive ? STALE_DAY_MS : DEAD_DAY_MS;
+      if (past > allowance) {
+        console.warn('[Season] day ' + d + ' has ' + unfinished.length +
+          ' unfinished game(s), none live, ' + Math.round(past / 3600e3) +
+          'h past its boundary; advancing so the season cannot stall.');
         return true;
       }
     } catch (e) { }
