@@ -1248,9 +1248,28 @@ function enterLeague() {
     if (leoEl) {
       if (leoName) leoName.textContent = state.leagueName || 'My League';
       leoEl.style.display = 'flex';
-      setTimeout(() => {
-        leoEl.style.display = 'none';
-        showMainApp();
+
+      /*  ── This overlay must ALWAYS come down ───────────────
+          .leo is position:fixed, inset:0, z-index:9999. While it
+          is up the app is completely unreachable — and the only
+          thing that removed it was a bare setTimeout.
+
+          Two ways that failed. Entering twice in quick succession
+          (a double-tapped league card, or a snapshot re-triggering
+          entry) started a second chain while the first was still
+          armed, so one timer hid the overlay the other had just
+          raised. And if anything between show and hide threw, the
+          timer still fired but showMainApp never ran, leaving a
+          black screen behind a blurred overlay with no way out.
+
+          One timer, cancelled before re-arming, and the hide
+          happens in a finally so a throw in showMainApp cannot
+          strand it.                                           */
+      if (enterLeague._leoT) clearTimeout(enterLeague._leoT);
+      enterLeague._leoT = setTimeout(function () {
+        enterLeague._leoT = null;
+        try { showMainApp(); }
+        finally { leoEl.style.display = 'none'; }
       }, 1150);
     } else {
       showMainApp();
@@ -3599,7 +3618,21 @@ function showPickAnnounce(p, manager) {
   // reset animation
   const card = document.getElementById('paCard');
   if (card) { card.style.animation = 'none'; card.offsetHeight; card.style.animation = ''; }
-  setTimeout(() => { overlay.style.display = 'none'; }, 1600);
+
+  /*  ── One timer, not one per announcement ──────────────────
+      This was a bare setTimeout. Two picks landing inside 1.6s —
+      routine during an autopick run, and now that any device can
+      cover an expired clock it happens more — left the FIRST
+      announcement's timer still armed. It fired mid-way through the
+      second card and yanked it off screen after a few hundred
+      milliseconds, so a cascade of picks flashed past unreadably.
+
+      Cancel the outgoing timer before arming a new one.        */
+  if (showPickAnnounce._t) clearTimeout(showPickAnnounce._t);
+  showPickAnnounce._t = setTimeout(function () {
+    overlay.style.display = 'none';
+    showPickAnnounce._t = null;
+  }, 1600);
 }
 
 // ── PLAYER POOL ───────────────────────────────────────────

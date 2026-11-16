@@ -13507,3 +13507,126 @@ select:focus {
   .lg-gone { padding: 24px 20px 20px; }
   .lg-gone h3 { font-size: 23px; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   PICK ANNOUNCEMENT ON A PHONE
+   ──────────────────────────────────────────────────────────
+   The draft's one full-screen moment had NO mobile rules at all —
+   every .pa-* value was sized for a desktop card and inherited
+   unchanged onto a 360px screen.
+
+   .pa-card is max-width:360px with 36px of side padding, inside an
+   overlay that adds 20px either side. On a 360px phone that leaves
+   a 248px content box for .pa-player at 36px in the display face,
+   with no wrapping control at all. A two-part surname overflowed
+   the card it was supposed to be announced in.
+══════════════════════════════════════════════════════════ */
+.pick-announce {
+  /*  Centred, so the notch is not usually in play — but a short
+      viewport with the keyboard up can push the card under it. */
+  padding: max(20px, env(safe-area-inset-top)) 16px
+           max(20px, env(safe-area-inset-bottom));
+}
+
+/*  A player's name is data, not layout. Let it break rather than
+    let it set the card's width. */
+.pa-player {
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+@media (max-width: 480px) {
+  .pa-card {
+    padding: 28px 20px;
+    max-width: none;
+  }
+
+  /*  Scales with the viewport instead of sitting at a fixed 36px:
+      big enough to feel like an announcement on a large phone,
+      small enough that a long name still fits on a small one. */
+  .pa-player {
+    font-size: clamp(24px, 7.5vw, 34px);
+    letter-spacing: -0.3px;
+  }
+
+  .pa-logo { margin-bottom: 12px; }
+  .pa-college { font-size: 13px; }
+  .pa-by { font-size: 12px; }
+}
+
+/*  A short landscape phone: the card must not run off the top and
+    bottom of the screen. */
+@media (max-height: 480px) {
+  .pa-card { padding: 18px 20px; }
+  .pa-player { font-size: 24px; margin-bottom: 4px; }
+  .pa-logo { margin-bottom: 8px; }
+}
+
+/*  The spring is the whole point of the announcement, but it is a
+    sudden full-screen movement — honour a reduced-motion request. */
+@media (prefers-reduced-motion: reduce) {
+  .pa-card { animation: fade-in 0.2s ease both; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   LEAGUE ENTRY OVERLAY ON A PHONE
+   ──────────────────────────────────────────────────────────
+   .leo-name was 52px, dropping to 36px under the mobile query,
+   with padding: 0 32px and no wrapping control of any kind. On a
+   360px screen that is a 296px box — roughly sixteen characters of
+   900-weight Inter. A league called "HomeFantasyLeague" is
+   seventeen, with no space to break at, so the name ran straight
+   off both sides of the screen it was announcing.
+══════════════════════════════════════════════════════════ */
+.leo {
+  /*  Corners are pinned 24px in; on a notched phone the top pair
+      sat under the status bar. */
+  padding: max(24px, env(safe-area-inset-top)) 16px
+           max(24px, env(safe-area-inset-bottom));
+}
+
+.leo-name {
+  /*  A league name is user input. Break it rather than let it set
+      the width of a full-screen overlay. */
+  overflow-wrap: anywhere;
+  line-height: 1.08;
+  max-width: 100%;
+}
+
+/*  background-clip:text with a transparent fill renders NOTHING
+    where it is unsupported — an overlay announcing a league with no
+    league name on it. Same fallback the intro wordmark carries. */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .leo-name {
+    background: none;
+    -webkit-text-fill-color: var(--text);
+    color: var(--text);
+  }
+}
+
+@media (max-width: 480px) {
+  /*  Scales with the viewport rather than sitting at a fixed 36px,
+      so a long name shrinks instead of overflowing and a short one
+      still lands like a title card. */
+  .leo-name {
+    font-size: clamp(26px, 9vw, 38px);
+    letter-spacing: -0.8px;
+    padding: 0 18px;
+  }
+
+  /*  The widest ring is 260px, which crowds the name's descenders
+      on a narrow screen. */
+  .leo-ring--3 { width: 200px; height: 200px; }
+  .leo-corner { width: 26px; height: 26px; }
+  .leo-corner--tl, .leo-corner--tr { top: 16px; }
+  .leo-corner--bl, .leo-corner--br { bottom: 16px; }
+  .leo-corner--tl, .leo-corner--bl { left: 16px; }
+  .leo-corner--tr, .leo-corner--br { right: 16px; }
+}
+
+/*  Expanding rings and a scaling title are exactly the sort of
+    motion this setting asks us to drop. */
+@media (prefers-reduced-motion: reduce) {
+  .leo-ring { animation: none; opacity: 0.25; }
+  .leo-name { animation: fade-in 0.25s ease both; }
+}
