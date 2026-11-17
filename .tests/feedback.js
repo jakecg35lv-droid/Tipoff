@@ -153,6 +153,24 @@ ok('and does it before showing', openFn.indexOf('wireFeedback()') < openFn.index
   'wiring after the paint leaves a visible dead form');
 ok('wiring is still idempotent', /modal\.dataset\.wired === '1'\) return/.test(A),
   'open() calls it every time, so a second wire would double every listener');
+/*  The open button must NOT depend on wireFeedback having run.
+    Binding it there was a circular dependency: the listener that
+    opens the dialog was attached by the function that runs when the
+    dialog opens. It worked only because the button sits on the one
+    page whose wiring attaches it — a coincidence, not a design. */
+ok('the open button is delegated at the document',
+  /document\.addEventListener\('click', function \(e\) \{[\s\S]{0,400}openFeedbackBtn/.test(A),
+  'a direct listener only exists after some other code path has run');
+ok('it is NOT bound inside wireFeedback',
+  !/getElementById\('openFeedbackBtn'\)\?\.addEventListener/.test(A),
+  'that binding is the circular dependency');
+ok('the delegate also accepts a data attribute',
+  /\[data-tipoff-feedback\]/.test(A),
+  'so a future entry point anywhere in either mode works with no JS');
+ok('the delegate is at module scope, not inside a function',
+  /^document\.addEventListener\('click'/m.test(A),
+  'indented means it is inside something that has to be called first');
+
 ok('the send handler is part of that wiring', /getElementById\('fbSendBtn'\)\?\.addEventListener/.test(A));
 ok('so is cancel', /getElementById\('fbCancelBtn'\)\?\.addEventListener/.test(A));
 ok('so is the character counter', /txt\.addEventListener\('input'/.test(A));

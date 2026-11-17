@@ -2161,8 +2161,32 @@ function wireFeedback() {
   //  Backdrop click closes, but only on the backdrop itself — not on
   //  a stray click inside the card, which would discard typing.
   modal.addEventListener('click', function (e) { if (e.target === modal) closeFeedback(); });
-  document.getElementById('openFeedbackBtn')?.addEventListener('click', openFeedback);
 }
+
+/*  ── The open button is wired at the DOCUMENT, once, forever ──
+    It used to be bound inside wireFeedback(), which produced a quiet
+    circular dependency: wireFeedback ran when you opened the dialog
+    or visited tournament Settings, and the button that opens the
+    dialog was itself only live after one of those had happened. It
+    worked, but only because the button happens to sit on the page
+    whose wiring attaches it — change that and it silently stops.
+
+    Delegation removes the ordering question entirely. The listener
+    exists from the moment this file is parsed, survives any re-render
+    that replaces the button's markup, and picks up every future entry
+    point for free: put data-tipoff-feedback on anything, anywhere, in
+    either mode, and it opens the report form.
+
+    This is the third fix to the same feature in one day. The first two
+    were both ordering bugs. This one stops there being an order.    */
+document.addEventListener('click', function (e) {
+  const t = e.target;
+  if (!t || !t.closest) return;
+  const hit = t.closest('#openFeedbackBtn, [data-tipoff-feedback]');
+  if (!hit) return;
+  e.preventDefault();
+  openFeedback();
+});
 
 //  The season module shares this one dialog rather than building a
 //  second: one form, one collection, one place to read reports.
