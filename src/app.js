@@ -2047,6 +2047,20 @@ function _feedbackContextText(ctx) {
 function openFeedback() {
   const modal = document.getElementById('feedbackModal');
   if (!modal) return;
+
+  /*  Wire on the way in, every time. This used to be called only from
+      wireSettingsExtras(), which runs when somebody visits the
+      TOURNAMENT settings page — so a report opened from season mode
+      got a dialog whose Cancel, Send, kind chips and character
+      counter were all dead. It looked fully rendered and did nothing.
+
+      wireFeedback() is guarded by modal.dataset.wired, so calling it
+      here is free after the first time. Opening the dialog is the
+      only moment the handlers are actually needed, which makes this
+      the one place that cannot be skipped by a navigation path
+      nobody thought of.                                            */
+  wireFeedback();
+
   const txt = document.getElementById('fbText');
   const err = document.getElementById('fbError');
   const diag = document.getElementById('fbDiag');

@@ -133,6 +133,30 @@ ok('the error message wraps too', /\.fb-err \{[^}]*overflow-wrap: anywhere/.test
 ok('the diagnostics panel is scroll-capped', /\.fb-diag-body \{[^}]*max-height/.test(css));
 ok('it has phone rules', /@media \(max-width: 480px\)[\s\S]{0,200}\.fb-kind/.test(css));
 
+/*  ══ 6b. The dialog wires itself on open ══════════════════
+
+    Second half of the same shipped bug. Once season mode could
+    finally SHOW the dialog, nothing inside it worked: wireFeedback()
+    was called from wireSettingsExtras(), which only runs when
+    somebody visits the TOURNAMENT settings page. Season opens the
+    shared dialog directly through TipoffFeedback.open(), so Cancel,
+    Send report, the kind chips and the character counter were all
+    inert — a form that rendered perfectly and swallowed everything.
+
+    The giveaway was the counter reading 0/1500 with text in the box.
+
+    So: open must wire. Any future entry point gets it for free.     */
+const openFn = A.slice(A.indexOf('function openFeedback'), A.indexOf('function closeFeedback'));
+ok('openFeedback wires the dialog itself', /wireFeedback\(\)/.test(openFn),
+  'otherwise the handlers depend on which page you visited first');
+ok('and does it before showing', openFn.indexOf('wireFeedback()') < openFn.indexOf("display = 'flex'"),
+  'wiring after the paint leaves a visible dead form');
+ok('wiring is still idempotent', /modal\.dataset\.wired === '1'\) return/.test(A),
+  'open() calls it every time, so a second wire would double every listener');
+ok('the send handler is part of that wiring', /getElementById\('fbSendBtn'\)\?\.addEventListener/.test(A));
+ok('so is cancel', /getElementById\('fbCancelBtn'\)\?\.addEventListener/.test(A));
+ok('so is the character counter', /txt\.addEventListener\('input'/.test(A));
+
 /*  ══ 7. Season mode must not hide the dialog ══════════════
 
     This is the bug that shipped: the Report button in season mode
