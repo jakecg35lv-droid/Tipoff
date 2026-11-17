@@ -413,7 +413,14 @@ exports.syncTournamentStats = onSchedule(
       return;
     }
 
-    await runSyncESPN({ window: win });
+    const report = await runSyncESPN({ window: win });
+    /*  The tournament sync re-reads every game on every poll, so a
+        single failed box score heals itself five minutes later — for
+        as long as the window is open. The danger is the last poll
+        before the window closes: whatever was unread then stays
+        unread, with the bracket already advanced past it and nobody
+        told. This is the shout that makes that visible. */
+    warnOnUnread('[Tipoff]', report);
   }
 );
 
@@ -726,6 +733,13 @@ async function runSyncESPN(opts) {
     playersWritten: 0, gamesWritten: 0,
     finalGames: 0, liveGames: 0,
     unmatchedSample: [], apiCalls: 0,
+    //  Same three as the season sync, for the same reason — see the
+    //  note on runSeasonSyncESPN's report. This side re-fetches every
+    //  poll so it self-heals WHILE the sync window is open, which is
+    //  precisely why its version of the bug is harder to notice: the
+    //  window closes, and whatever was unread stays unread with the
+    //  bracket already advanced past it.
+    summaryFailures: [], emptyBoxScores: [], unrecordedFinals: [],
   };
 
   const now = new Date();
@@ -799,40 +813,57 @@ async function runSyncESPN(opts) {
       const away = competitors.find(c => c.homeAway === 'away') || competitors[1] || {};
       const winner = competitors.find(c => c.winner);
 
-      if (!options.dryRun) {
+      /*  Built now, written by flushGame() after the box score —
+          the same inversion as the season sync. Note what does NOT
+          wait: winnerSchool. Bracket advancement is decided by the
+          scoreboard, which is reliable and cheap, and holding the
+          bracket hostage to a box score would mean one bad summary
+          call freezes everybody's bracket. Stats and advancement are
+          separate facts and now fail separately.                   */
+      const gameDoc = {
+        eventId: String(ev.id),
+        shortName: ev.shortName || ev.name || '',
+        startsAt: ev.date || null,
+        state: gameState,
+        completed: completed,
+        period: st.period || 0,
+        clock: st.displayClock || '',
+        statusDetail: stType.shortDetail || stType.description || '',
+        home: { school: home.school, abbr: home.abbr, score: home.score },
+        away: { school: away.school, abbr: away.abbr, score: away.score },
+        // The app advances its bracket off this field. Null until
+        // ESPN itself calls it, so a blowout at halftime cannot
+        // eliminate somebody's roster early.
+        winnerSchool: (completed && winner) ? winner.school : null,
+      };
+
+      let linesFound = 0;
+      const flushGame = function (statsRecorded) {
+        if (completed && !statsRecorded) report.unrecordedFinals.push(String(ev.id));
+        if (options.dryRun) return;
         gameBatch.set(
           db.collection('tournamentStats').doc(tournId).collection('games').doc(String(ev.id)),
-          {
-            eventId: String(ev.id),
-            shortName: ev.shortName || ev.name || '',
-            startsAt: ev.date || null,
-            state: gameState,
-            completed: completed,
-            period: st.period || 0,
-            clock: st.displayClock || '',
-            statusDetail: stType.shortDetail || stType.description || '',
-            home: { school: home.school, abbr: home.abbr, score: home.score },
-            away: { school: away.school, abbr: away.abbr, score: away.score },
-            // The app advances its bracket off this field. Null until
-            // ESPN itself calls it, so a blowout at halftime cannot
-            // eliminate somebody's roster early.
-            winnerSchool: (completed && winner) ? winner.school : null,
+          Object.assign({}, gameDoc, {
+            statsRecorded: !!statsRecorded,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
+          }),
           { merge: true }
         );
         report.gamesWritten++;
-      }
+      };
 
       // 4. Box score — only worth fetching once the ball is up
-      if (gameState === 'pre') continue;
+      if (gameState === 'pre') { flushGame(false); continue; }
 
-      let summary;
+      let summary = null;
       try {
         const sumRes = await client.apiFetch(`${ESPN}/summary?event=${ev.id}`, 'summary');
-        if (!sumRes.ok) continue;
-        summary = await sumRes.json();
-      } catch (e) { continue; }
+        if (sumRes.ok) summary = await sumRes.json();
+        else report.summaryFailures.push(`${ev.id} HTTP ${sumRes.status}`);
+      } catch (e) {
+        report.summaryFailures.push(`${ev.id} ${e.message}`);
+      }
+      if (!summary) { flushGame(false); continue; }
 
       const teamBlocks = ((summary.boxscore || {}).players) || [];
       for (const tb of teamBlocks) {
@@ -883,8 +914,12 @@ async function runSyncESPN(opts) {
             }
             report.playersWritten++;
           }
+          linesFound++;
         }
       }
+
+      if (completed && !linesFound) report.emptyBoxScores.push(String(ev.id));
+      flushGame(linesFound > 0);
     }
 
     if (!options.dryRun) {
@@ -1709,20 +1744,61 @@ function groupByTournament(players) {
 //  This asks, for one Firestore read, whether the previous date still
 //  has unfinished business. On a clean day the answer is no and the
 //  catch-up costs zero API calls.
-async function dateHasUnfinished(espnDate) {
+/*  Does this date still have work outstanding?
+
+    Two kinds of outstanding, and the second one is new. A game that
+    has not finished obviously needs another look. So does a game that
+    HAS finished but carries no box score — which the old version of
+    this function could not see, because it asked only for
+    `completed == false`. On 16 Nov 2026 every game was completed:true
+    with no stats behind it, so the overnight sweep looked at the day,
+    saw nothing unfinished, and went back to sleep. Twelve games, zero
+    points, and the one mechanism built to catch exactly this agreed
+    that everything was fine.
+
+    Filtered in code rather than with a second equality clause because
+    documents written before statsRecorded existed have no such field,
+    and `where('statsRecorded','==',false)` does not match a missing
+    field — the stale documents that most need re-reading would be the
+    only ones the query could not see.                               */
+/*  One place that decides whether a sync result deserves a shout.
+
+    console.error rather than log on purpose: Cloud Logging severity
+    is the only thing that separates "ran fine" from "a slate of games
+    scored zero for everybody" when nobody is reading the logs. These
+    reports used to be identical.                                    */
+function warnOnUnread(tag, report) {
+  if (!report) return;
+  const unread = (report.unrecordedFinals || []).length;
+  const failed = (report.summaryFailures || []).length;
+  const empty = (report.emptyBoxScores || []).length;
+  if (!unread && !failed && !empty) return;
+  console.error(tag + ' BOX SCORES MISSING', JSON.stringify({
+    date: report.date,
+    unrecordedFinals: report.unrecordedFinals,
+    summaryFailures: report.summaryFailures,
+    emptyBoxScores: report.emptyBoxScores,
+  }));
+}
+
+async function dateNeedsWork(espnDate) {
   try {
     const snap = await db.collection('seasonStats').doc(SEASON_ID)
       .collection('games')
       .where('date', '==', isoFromEspnDate(espnDate))
-      .where('completed', '==', false)
-      .limit(1)
+      .limit(200)
       .get();
-    return !snap.empty;
+    let needs = false;
+    snap.forEach(function (d) {
+      const g = d.data() || {};
+      if (g.completed !== true) { needs = true; return; }
+      if (g.statsRecorded !== true) needs = true;
+    });
+    return needs;
   } catch (e) {
-    //  Same (date ==, completed ==) shape the alreadyFinal lookup uses,
-    //  so the index exists. If it somehow fails, do NOT sweep: a broken
-    //  query must not turn into an API call every ten minutes.
-    console.warn('[Tipoff season] unfinished lookup failed:', e.message);
+    //  If the query fails, do NOT sweep: a broken query must not turn
+    //  into an API call every ten minutes.
+    console.warn('[Tipoff season] outstanding-work lookup failed:', e.message);
     return false;
   }
 }
@@ -1731,9 +1807,23 @@ async function runSeasonSyncESPN(opts) {
   const options = opts || {};
   const report = {
     ok: true, season: SEASON_ID, dryRun: !!options.dryRun,
+    force: !!options.force,
     date: null, gamesOnDate: 0, relevantGames: 0,
     finalGames: 0, liveGames: 0,
     gamesWritten: 0, playersWritten: 0, apiCalls: 0,
+    /*  ── The three fields that make a silent failure audible ──
+        A box score that never arrives used to produce exactly the
+        same report as one that did: the game was already written
+        completed:true, the fetch failure hit a bare `continue`, and
+        nothing anywhere said so. Twelve games can go to zero and the
+        log reads like a clean run.
+
+        summaryFailures  — ESPN returned an error or threw
+        emptyBoxScores   — ESPN answered, but with no usable lines
+        unrecordedFinals — final games still carrying no stats after
+                           this pass. If this is ever non-empty after
+                           a sweep hour, something needs a human.     */
+    summaryFailures: [], emptyBoxScores: [], unrecordedFinals: [],
   };
 
   const now = new Date();
@@ -1759,17 +1849,46 @@ async function runSeasonSyncESPN(opts) {
     const playerBatch = db.batch();
     const seasonRef = db.collection('seasonStats').doc(SEASON_ID);
 
-    //  One Firestore read replaces dozens of ESPN summary calls: any
-    //  game already recorded as completed on this date is finished
-    //  business and is skipped below.
+    /*  One Firestore read replaces dozens of ESPN summary calls: a
+        game whose box score we already HAVE is finished business.
+
+        ── WHY THIS IS NOT `completed == true` ──────────────────
+        It used to be, and that is how twelve games went to zero on
+        16 Nov 2026 and stayed there. The game document was written
+        completed:true BEFORE the box score was fetched, so a summary
+        call that failed left a document saying "this game is over"
+        with no stats attached. Every later run found it in this set,
+        skipped the box score, and moved on. Forever. One transient
+        ESPN error at 10:40pm silently zeroed a whole slate, and
+        nothing retried because the flag that meant "we are done"
+        had been set by the step BEFORE the one that does the work.
+
+        `completed` and `statsRecorded` are now two different facts:
+        the game ended, and we read it. Only the second one earns a
+        skip, and only flushGame() below can set it, after lines
+        have actually been found.
+
+        Existing documents have no statsRecorded field, so they fail
+        this test and get re-read exactly once. That is the backfill:
+        it costs one summary call per already-final game, once, and
+        then settles.                                              */
     const alreadyFinal = new Set();
     try {
       const prior = await seasonRef.collection('games')
         .where('date', '==', isoFromEspnDate(dateStr))
         .where('completed', '==', true)
         .get();
-      prior.forEach(d => alreadyFinal.add(d.id));
+      //  Filtered here rather than in the query on purpose: a third
+      //  equality filter is fine for Firestore, but doing it in code
+      //  keeps the old documents visible so they can be counted and
+      //  reported rather than silently dropping out of the result.
+      let staleFinals = 0;
+      prior.forEach(function (d) {
+        if ((d.data() || {}).statsRecorded === true) alreadyFinal.add(d.id);
+        else staleFinals++;
+      });
       report.skippedFinal = alreadyFinal.size;
+      report.finalsNeedingStats = staleFinals;
     } catch (e) {
       console.warn('[Tipoff season] prior-final lookup failed:', e.message);
     }
@@ -1801,43 +1920,69 @@ async function runSeasonSyncESPN(opts) {
       const home = competitors.find(c => c.homeAway === 'home') || competitors[0] || {};
       const away = competitors.find(c => c.homeAway === 'away') || competitors[1] || {};
 
-      if (!options.dryRun) {
-        gameBatch.set(seasonRef.collection('games').doc(String(ev.id)), {
-          eventId: String(ev.id),
-          date: isoFromEspnDate(dateStr),   // ET day, matches the query above
-          startsAt: ev.date || null,
-          shortName: ev.shortName || ev.name || '',
-          state: gameState,
-          completed: completed,
-          statusDetail: stType.shortDetail || stType.detail || '',
-          home: { school: home.school, abbr: home.abbr, score: home.score },
-          away: { school: away.school, abbr: away.abbr, score: away.score },
-          winnerSchool: completed ? ((competitors.find(c => c.winner) || {}).school || null) : null,
-          //  Normalised participants, so a client can ask for "games
-          //  involving MY schools" instead of pulling an entire week.
-          //  With groups=50 a week is ~700 games; a league rosters
-          //  about 30 schools and needs maybe 30 of those games.
-          //  Without this field the only filter available is the date
-          //  range, and every client would read all 700.
-          schools: [normName(home.school), normName(away.school)].filter(Boolean),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+      /*  ── The game document is no longer written here ─────────
+          It is built here and committed by flushGame() below, AFTER
+          the box score has been attempted. The old order wrote
+          completed:true first and then went looking for stats, so a
+          failure left behind a document that claimed the work was
+          finished when it had not started. Nothing downstream could
+          tell the difference, and the skip set above believed it.
+
+          Every path out of this iteration now goes through
+          flushGame(), which is the only writer. If you add an early
+          exit below, it must call it too — otherwise the game simply
+          vanishes from the collection, which is a worse failure than
+          the one this replaces.                                   */
+      const gameDoc = {
+        eventId: String(ev.id),
+        date: isoFromEspnDate(dateStr),   // ET day, matches the query above
+        startsAt: ev.date || null,
+        shortName: ev.shortName || ev.name || '',
+        state: gameState,
+        completed: completed,
+        statusDetail: stType.shortDetail || stType.detail || '',
+        home: { school: home.school, abbr: home.abbr, score: home.score },
+        away: { school: away.school, abbr: away.abbr, score: away.score },
+        winnerSchool: completed ? ((competitors.find(c => c.winner) || {}).school || null) : null,
+        //  Normalised participants, so a client can ask for "games
+        //  involving MY schools" instead of pulling an entire week.
+        //  With groups=50 a week is ~700 games; a league rosters
+        //  about 30 schools and needs maybe 30 of those games.
+        //  Without this field the only filter available is the date
+        //  range, and every client would read all 700.
+        schools: [normName(home.school), normName(away.school)].filter(Boolean),
+      };
+
+      let linesFound = 0;
+      const flushGame = function (statsRecorded) {
+        //  A final game we could not read is reported, every pass,
+        //  until somebody or something fixes it. Silence was the
+        //  whole problem.
+        if (completed && !statsRecorded) report.unrecordedFinals.push(String(ev.id));
+        if (options.dryRun) return;
+        gameBatch.set(seasonRef.collection('games').doc(String(ev.id)),
+          Object.assign({}, gameDoc, {
+            statsRecorded: !!statsRecorded,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }), { merge: true });
         report.gamesWritten++;
-      }
+      };
 
-      // Box score. Skipped before tip — there is nothing to read yet,
-      // and skipped for games already stored as final, because a
-      // finished box score does not change. Without this the sync
-      // re-fetches every completed game on every poll, 96 times a day.
-      if (gameState === 'pre') continue;
-      if (completed && alreadyFinal.has(String(ev.id))) continue;
+      // Box score. Nothing to read before tip. A game already stored
+      // WITH its stats is finished business — see the long note above
+      // on why that is not the same as "completed".
+      if (gameState === 'pre') { flushGame(false); continue; }
+      if (completed && alreadyFinal.has(String(ev.id)) && !options.force) continue;
 
-      let summary;
+      let summary = null;
       try {
         const sumRes = await client.apiFetch(`${ESPN}/summary?event=${ev.id}`, 'season-summary');
-        if (!sumRes.ok) continue;
-        summary = await sumRes.json();
-      } catch (e) { continue; }
+        if (sumRes.ok) summary = await sumRes.json();
+        else report.summaryFailures.push(`${ev.id} HTTP ${sumRes.status}`);
+      } catch (e) {
+        report.summaryFailures.push(`${ev.id} ${e.message}`);
+      }
+      if (!summary) { flushGame(false); continue; }
 
       const teamBlocks = ((summary.boxscore || {}).players) || [];
       for (const tb of teamBlocks) {
@@ -1883,8 +2028,19 @@ async function runSeasonSyncESPN(opts) {
             }
             report.playersWritten++;
           }
+          //  Counted OUTSIDE the dryRun guard on purpose: a dry run
+          //  that reported zero lines for a game it had actually read
+          //  fine would send you hunting for a bug that is not there.
+          linesFound++;
         }
       }
+
+      /*  statsRecorded is earned here and nowhere else. ESPN
+          answering with an empty or unparseable box score is a
+          different failure from ESPN not answering, and it is the
+          one that looks most like success, so it gets its own list. */
+      if (completed && !linesFound) report.emptyBoxScores.push(String(ev.id));
+      flushGame(linesFound > 0);
     }
 
     if (!options.dryRun) {
@@ -2131,7 +2287,7 @@ exports.syncSeasonStats = onSchedule(
     }
 
     //  ── Catch up on yesterday's late tips ───────────────────
-    //  See dateHasUnfinished. A game that tipped at 9pm or 11:30pm ET
+    //  See dateNeedsWork. A game that tipped at 9pm or 11:30pm ET
     //  is still live when the ET date flips, and this sync only ever
     //  looks at today — so the game stayed completed:false and its
     //  roster kept a mid-game box score. Managers could not lock it and
@@ -2147,14 +2303,20 @@ exports.syncSeasonStats = onSchedule(
     const sweepHour = hourET <= ACTIVE_HOUR_END || hourET === ACTIVE_HOUR_START;
     if (sweepHour) {
       const yest = espnDateParam(new Date(now.getTime() - 864e5));
-      if (await dateHasUnfinished(yest)) {
-        const catchUp = await runSeasonSyncESPN({ dateOverride: yest });
+      if (await dateNeedsWork(yest)) {
+        //  force: a final game with no stats is skipped by the
+        //  already-recorded set unless the sweep overrides it, which
+        //  would make the sweep a no-op for the exact case it exists
+        //  to repair.
+        const catchUp = await runSeasonSyncESPN({ dateOverride: yest, force: true });
         console.log('[Tipoff season] catch-up', yest, JSON.stringify(catchUp));
+        warnOnUnread('[Tipoff season] catch-up', catchUp);
       }
     }
 
     const report = await runSeasonSyncESPN({});
     console.log('[Tipoff season]', JSON.stringify(report));
+    warnOnUnread('[Tipoff season]', report);
   }
 );
 
@@ -2168,6 +2330,13 @@ exports.seasonSyncNow = onRequest(
       const report = await runSeasonSyncESPN({
         dateOverride: req.query.date || undefined,
         dryRun: req.query.write !== '1',
+        /*  force=1 ignores the already-recorded skip and re-reads
+            every box score on the date. This is the backfill lever:
+            without it there is NO way to repair a day whose games
+            were marked final with no stats, because the skip is
+            exactly what stops the retry. Costs one summary call per
+            relevant game, so it is opt-in rather than the default. */
+        force: req.query.force === '1',
       });
       res.status(200).json(report);
     } catch (e) {
