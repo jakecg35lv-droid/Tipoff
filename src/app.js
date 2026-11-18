@@ -5489,6 +5489,30 @@ function listenToLiveStats() {
 }
 
 function setSelectedTournament(tournament) {
+  /*  ── The guard belongs HERE, not only in the four callers ──
+      Every button that reaches this is already commissioner-only:
+      getLockHtml() renders "Choose Tournament" for commissioners and
+      a "Waiting on Commissioner" notice for everyone else, and the
+      banner's Change button is behind `isCom ?`. So in the shipped UI
+      this check never fires.
+
+      It is here because of what this function does when it is wrong.
+      Switching clears every pick in the league AND writes a season
+      history record from whichever client called it — so a
+      non-commissioner reaching it by any route voids the draft for
+      eight people and freezes the archive against their own view of
+      the stats. That is not a bug you notice and undo; the source
+      data is gone.
+
+      Four separate callers each remembering to check is exactly the
+      arrangement that produced three ordering bugs in the feedback
+      dialog this week. One guard, at the thing being guarded.     */
+  if (!isCommissioner()) {
+    toast('Only the commissioner can change the tournament.', 'error');
+    return;
+  }
+  if (!tournament || !tournament.id) return;
+
   const previous = state.selectedTournament;
   const changing = previous && previous.id !== tournament.id;
   const picksMade = Object.keys(state.drafted || {}).length;
@@ -5660,6 +5684,14 @@ function getLockHtml(page) {
 }
 
 function openTournamentSelector() {
+  //  Same reasoning as setSelectedTournament. Opening a picker a
+  //  manager cannot act on is worse than not opening it: every
+  //  option looks live, and the refusal only arrives after they have
+  //  chosen one.
+  if (!isCommissioner()) {
+    toast('Only the commissioner can choose the tournament.', 'error');
+    return;
+  }
   const modal = document.getElementById('tournamentSelectModal');
   if (!modal) return;
   const body = document.getElementById('tsmBody');
