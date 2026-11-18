@@ -2378,6 +2378,294 @@ exports.syncSeasonStats = onSchedule(
 // On-demand, for testing a specific date before the season opens:
 //   /seasonSyncNow?date=20261102       (dry run by default)
 //   /seasonSyncNow?date=20261102&write=1
+/* ═══════════════════════════════════════════════════════════════
+   📈 PROJECTIONS
+   ═══════════════════════════════════════════════════════════════
+   The app has always priced every player at last season's per-game
+   average, frozen in data/conference-players.js on 2026-10-27. A
+   junior who has taken a leap, a freshman who won the job in week
+   one, a senior who lost it — all three stay at last year's number
+   until somebody regenerates that file by hand. A quarter of the
+   pool (260 of 1027) has no prior line at all and is currently given
+   a RANDOM one, seeded off the player id, which is worse than it
+   sounds: a five-star and a walk-on draw from the same distribution.
+
+   The arithmetic lives in projection.js, which is pure and has no
+   Firebase in it, so .tests/projection.js backtests the exact code
+   that ships rather than a copy of it.
+
+   ── COSTS NOTHING ─────────────────────────────────────────
+   Zero ESPN calls. This is a pure recomputation of box scores
+   already in Firestore, which is why it can run nightly instead of
+   weekly. A weekly refresh is not cheaper — it just leaves a player
+   who broke out on Monday mispriced until Sunday, while managers set
+   lineups midweek.
+
+   ── WHY STAT LINES AND NOT FANTASY POINTS ─────────────────
+   Scoring weights are a league setting. A league that scores blocks
+   at 3 and one that ignores them read the same document and must
+   reach different, correct answers. Storing a single fpts number
+   would bake one league's rules into everybody's projection.
+═══════════════════════════════════════════════════════════════ */
+const PROJ = require('./projection.js');
+const PRIORS = require('./priors.json');
+
+async function runProjections(opts) {
+  const options = opts || {};
+  const report = {
+    ok: true, season: SEASON_ID, dryRun: !!options.dryRun,
+    poolPlayers: Object.keys(PRIORS.priors || {}).length,
+    withSeasonData: 0, written: 0,
+    byMethod: {}, sample: [],
+  };
+
+  try {
+    const seasonRef = db.collection('seasonStats').doc(SEASON_ID);
+
+    //  Everything the stat sync has recorded this season, keyed by
+    //  espnId (which is the document id).
+    const played = {};
+    const snap = await seasonRef.collection('players').get();
+    snap.forEach(function (d) {
+      const data = d.data() || {};
+      const games = Object.keys(data.games || {}).map(function (gid) {
+        return data.games[gid];
+      });
+      played[d.id] = { games: games, name: data.name || '', school: data.school || '' };
+    });
+    report.withSeasonData = Object.keys(played).length;
+
+    const batch = chunkedBatch();
+    const packed = {};
+
+    /*  Iterate the POOL, not the players who happen to have played.
+        A player who has not appeared yet still needs a projection —
+        he is on the draft board, and leaving him out would make him
+        invisible rather than merely unproven.                      */
+    Object.keys(PRIORS.priors).forEach(function (espnId) {
+      const prior = PRIORS.priors[espnId];
+      const seen = played[espnId] || { games: [], name: '', school: '' };
+
+      const p = PROJ.project({
+        prior: prior,
+        games: seen.games,
+        pos: prior.pos,
+        replacement: PRIORS.replacement,
+      });
+
+      report.byMethod[p.method] = (report.byMethod[p.method] || 0) + 1;
+
+      if (report.sample.length < 5 && p.n >= 2) {
+        report.sample.push({
+          name: seen.name || espnId, n: p.n, method: p.method,
+          line: p.line, wMin: p.weightMinutes, wRate: p.weightRate,
+        });
+      }
+
+      /*  ── Packed, not one document per player ─────────────────
+          A document each would be 1027 reads every time a client
+          builds its draft board. Ten managers opening the app twice
+          a day is 20,000 reads against a 50,000/day free tier, for
+          data that changes once a night and is identical for
+          everyone. Packing them into shards makes it 3 reads.
+
+          The array is positional and ugly on purpose — keys repeated
+          1027 times are most of the payload. Order is fixed and
+          documented here and in the client's unpack:
+
+            [ min, pts, reb, ast, stl, blk, gamesPlayed, methodCode ]
+
+          methodCode: 0 blend · 1 prior-only · 2 blend-replacement
+                      3 replacement-only                            */
+      packed[espnId] = [
+        p.line.min, p.line.pts, p.line.reb, p.line.ast, p.line.stl, p.line.blk,
+        p.n,
+        p.method === 'blend' ? 0 : p.method === 'prior-only' ? 1
+          : p.method === 'blend-replacement' ? 2 : 3,
+      ];
+      report.written++;
+    });
+
+    if (!options.dryRun) {
+      /*  Shards of 400. A Firestore document caps at 1MB; 1027
+          packed lines is roughly 60KB so one would fit today — but
+          the pool grows when conferences are added, and a feed that
+          silently stops writing the day it crosses 1MB is exactly
+          the kind of cliff this codebase has been bitten by twice
+          this week. Shard now, while it costs nothing.            */
+      const ids = Object.keys(packed);
+      const SHARD = 400;
+      const shards = Math.max(1, Math.ceil(ids.length / SHARD));
+      for (let i = 0; i < shards; i++) {
+        const slice = {};
+        ids.slice(i * SHARD, (i + 1) * SHARD).forEach(function (id) { slice[id] = packed[id]; });
+        batch.set(seasonRef.collection('feeds').doc('projections_' + i), {
+          shard: i, count: Object.keys(slice).length,
+          format: 'min,pts,reb,ast,stl,blk,games,method',
+          k: PROJ.K,
+          players: slice,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      report.shards = shards;
+
+      /*  Stale shards from a previous, larger pool would otherwise
+          linger and the client would merge ghosts into its board. */
+      const old = await seasonRef.collection('feeds').get();
+      old.forEach(function (d) {
+        const m = /^projections_(\d+)$/.exec(d.id);
+        if (m && +m[1] >= shards) batch.set(d.ref, { players: {}, count: 0, retired: true });
+      });
+
+      await batch.commit();
+      //  Same heartbeat pattern the stat feed uses: one tiny document
+      //  so a client can ask "are the projections newer than what I
+      //  am holding?" for a single read.
+      await seasonRef.set({
+        projRev: admin.firestore.FieldValue.increment(1),
+        projUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        projCount: report.written,
+        projShards: report.shards,
+      }, { merge: true });
+    }
+  } catch (e) {
+    report.ok = false;
+    report.error = e.message;
+    console.error('[Tipoff proj]', e);
+  }
+  return report;
+}
+
+/*  THE REAL BACKTEST.
+
+    .tests/projection.js measures the estimator on SIMULATED seasons,
+    which proves the arithmetic behaves and nothing about real
+    players. This measures it on actual box scores: walk each player's
+    games in order, predict game g from games 0..g-1 only, and compare
+    against what he actually did. Same three contenders as the test
+    suite — the model, last season's average, and season-to-date.
+
+    Read-only. Needs a handful of games per player before it says
+    anything; with three it is measuring noise and reports as much.  */
+async function runProjectionBacktest(opts) {
+  const o = opts || {};
+  const minGames = Math.max(2, +o.minGames || 4);
+  const W = o.weights || { pts: 1, reb: 1.2, ast: 1.5, stl: 2, blk: 2 };
+
+  const seasonRef = db.collection('seasonStats').doc(SEASON_ID);
+  const snap = await seasonRef.collection('players').get();
+
+  const err = { model: 0, prior: 0, std: 0 };
+  let n = 0, players = 0, skipped = 0;
+  const byN = {};
+
+  snap.forEach(function (d) {
+    const data = d.data() || {};
+    const prior = PRIORS.priors[d.id];
+    //  Games in date order. Out-of-order would let the model see the
+    //  future, which is the classic way a backtest flatters itself.
+    const games = Object.keys(data.games || {})
+      .map(function (g) { return data.games[g]; })
+      .filter(function (g) { return g && +g.min > 0; })
+      .sort(function (a, b) { return String(a.date || '').localeCompare(String(b.date || '')); });
+
+    if (games.length < minGames) { skipped++; return; }
+    players++;
+
+    for (let g = 1; g < games.length; g++) {
+      const hist = games.slice(0, g);
+      const actual = games[g];
+      const a = PROJ.fptsOf(actual, W);
+
+      const model = PROJ.fptsOf(PROJ.project({
+        prior: prior, games: hist, pos: (prior || {}).pos,
+        replacement: PRIORS.replacement,
+      }).line, W);
+      const bp = PROJ.fptsOf(PROJ.baselinePrior(prior || {}), W);
+      const bs = PROJ.fptsOf(PROJ.baselineSeasonToDate(hist), W);
+
+      err.model += Math.abs(model - a);
+      err.prior += Math.abs(bp - a);
+      err.std += Math.abs(bs - a);
+      n++;
+
+      const b = byN[g] = byN[g] || { model: 0, prior: 0, std: 0, n: 0 };
+      b.model += Math.abs(model - a); b.prior += Math.abs(bp - a);
+      b.std += Math.abs(bs - a); b.n++;
+    }
+  });
+
+  if (!n) {
+    return {
+      ok: true, season: SEASON_ID, predictions: 0, playersUsed: 0, skipped: skipped,
+      note: 'not enough games yet — every player has fewer than ' + minGames +
+            '. Run this again once the season has a few weeks in it.',
+    };
+  }
+
+  const mae = { model: err.model / n, prior: err.prior / n, std: err.std / n };
+  return {
+    ok: true, season: SEASON_ID, k: PROJ.K,
+    playersUsed: players, skippedTooFewGames: skipped, predictions: n,
+    maeFantasyPoints: {
+      model: +mae.model.toFixed(3),
+      lastSeasonAverage: +mae.prior.toFixed(3),
+      seasonToDateAverage: +mae.std.toFixed(3),
+    },
+    beatsLastSeason: mae.model < mae.prior,
+    beatsSeasonToDate: mae.model < mae.std,
+    //  Honest framing. A thin sample is a thin sample however nice
+    //  the number looks.
+    verdict: n < 400
+      ? 'SAMPLE TOO SMALL to conclude anything — treat as a smoke test'
+      : (mae.model < mae.prior && mae.model < mae.std)
+        ? 'model beats both baselines'
+        : 'MODEL DOES NOT BEAT BOTH BASELINES — do not ship it as-is',
+    byGameIndex: Object.keys(byN).sort(function (a, b) { return a - b; }).slice(0, 12)
+      .reduce(function (acc, key) {
+        const b = byN[key];
+        acc['after_' + key + '_games'] = {
+          model: +(b.model / b.n).toFixed(2),
+          prior: +(b.prior / b.n).toFixed(2),
+          s2d: +(b.std / b.n).toFixed(2),
+          n: b.n,
+        };
+        return acc;
+      }, {}),
+  };
+}
+
+/*  Nightly, after the last game has finished and the stat sync's
+    overnight sweep has had its chance to repair anything. 3:30am ET
+    is deliberately AFTER ACTIVE_HOUR_END (2:59am), so projections are
+    never computed from a slate that is still being written.         */
+exports.syncProjections = onSchedule(
+  { schedule: '30 3 * * *', timeZone: 'America/New_York', timeoutSeconds: 300, memory: '512MiB' },
+  async () => {
+    const report = await runProjections({});
+    console.log('[Tipoff proj]', JSON.stringify(report));
+    if (!report.ok) console.error('[Tipoff proj] FAILED', report.error);
+  }
+);
+
+//  On demand. Dry by default, like every other tool in this file.
+//    /projectionsNow                → preview, writes nothing
+//    /projectionsNow?write=1        → recompute and store
+//    /projectionsNow?backtest=1     → measure against real box scores
+exports.projectionsNow = onRequest(
+  { timeoutSeconds: 540, memory: '512MiB' },
+  async (req, res) => {
+    try {
+      if (req.query.backtest === '1') {
+        return res.status(200).json(await runProjectionBacktest({ minGames: +req.query.minGames || 4 }));
+      }
+      res.status(200).json(await runProjections({ dryRun: req.query.write !== '1' }));
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+);
+
 exports.seasonSyncNow = onRequest(
   { timeoutSeconds: 300, memory: '512MiB' },
   async (req, res) => {

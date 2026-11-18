@@ -91,6 +91,11 @@ service cloud.firestore {
     //  Written by the syncSeasonStats function with the Admin SDK,
     //  which bypasses these rules. Clients read only — otherwise a
     //  manager could invent his own stat line.
+    //  Covers games/, players/ and projections/. All three are
+    //  written by Cloud Functions on the Admin SDK, which bypasses
+    //  these rules; clients read only. A client that could write
+    //  projections could inflate its own draft board, and one that
+    //  could write players/ could invent its own stat line.
     match /seasonStats/{season} {
       allow read: if request.auth != null;
       allow write: if false;

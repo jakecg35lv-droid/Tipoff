@@ -1154,14 +1154,54 @@
     };
     // True freshmen with no prior line: give a modest prior so a top
     // recruit isn't treated as a permanent zero. Deterministic per id.
+    //
+    //  Deterministic, but still RANDOM: a five-star and a walk-on draw
+    //  from the same distribution, and the only thing separating them
+    //  is a hash of their id. It is a placeholder, and 260 of the 1027
+    //  players in the pool are sitting on it. The projections feed
+    //  below replaces this with a real positional replacement level
+    //  the moment it has loaded; this stays as the offline fallback.
     if (p.hasStats === false) {
       var r = mulberry32(hashStr(p.id));
       avg = { points: 4 + r() * 6, rebounds: 1.5 + r() * 3, assists: 0.5 + r() * 1.5, steals: 0.4 + r() * 0.5, blocks: 0.2 + r() * 0.5 };
     }
+
+    /*  ── Live projection, when the feed has one ──────────────
+        PROJ is filled by loadProjections() from the nightly
+        projections feed: a shrinkage blend of this season's box
+        scores toward last season, recomputed every night.
+
+        It replaces `avg` rather than sitting beside it on purpose.
+        Everything downstream — the draft board sort, autoLineup,
+        matchup projections, the bot drafters — already reads
+        `p.proj`, so one substitution here improves all of them at
+        once and none of them need to know this happened.
+
+        `priorAvg` is kept so the player card can show both, and so
+        "why did this number move" has an answer.                  */
+    var pj = PROJ[String(p.espnId || '').trim()];
+    var usedProjection = false;
+    if (pj && pj.line) {
+      var L = pj.line;
+      avg = {
+        points: +L.pts || 0, rebounds: +L.reb || 0, assists: +L.ast || 0,
+        steals: +L.stl || 0, blocks: +L.blk || 0
+      };
+      usedProjection = true;
+    }
     var raw = String(p.position || p.pos || 'G').toUpperCase();
     var pos = raw === 'C' ? 'C' : raw.indexOf('F') >= 0 ? 'F' : raw.indexOf('C') >= 0 ? 'C' : 'G';
     return { id: p.id, name: p.name, college: p.college, conf: conf || 'Other', pos: pos, cls: p.cls, mins: +p.minutes || 0, gp: +p.games || 0, jersey: p.jersey || '', height: p.height || '',
-      fresh: p.hasStats === false, avg: avg, proj: fpts(avg), injury: p.injury || null, injuryNote: p.injuryNote || null };
+      fresh: p.hasStats === false, avg: avg, proj: fpts(avg),
+      //  Where this number came from, for the player card and for
+      //  anyone asking why it changed overnight.
+      projected: usedProjection,
+      projMeta: usedProjection ? { n: pj.games, method: pj.method, min: pj.line.min } : null,
+      priorAvg: {
+        points: +st.points || 0, rebounds: +st.rebounds || 0, assists: +st.assists || 0,
+        steals: +st.steals || 0, blocks: +st.blocks || 0
+      },
+      injury: p.injury || null, injuryNote: p.injuryNote || null };
   }
   function allPlayers() {
     if (ALL) return ALL;
@@ -2470,6 +2510,74 @@
   //  Shared across ticks so an unchanged feed costs one read, not 159.
   var REAL = { rev: -1, live: 0, week: 0, checkedAt: 0 };
 
+  /*  ── Projections feed ────────────────────────────────────
+      espnId -> packed array, written nightly by syncProjections:
+
+        [ min, pts, reb, ast, stl, blk, gamesPlayed, methodCode ]
+
+      Positional because keys repeated a thousand times would be most
+      of the payload. The order is defined in functions/index.js and
+      must change in both places or not at all.
+
+      Empty until loaded, and toPlayer() falls back to last season's
+      averages when a player is missing from it — so a failed read,
+      an offline start, or a player the feed has never heard of all
+      degrade to exactly the behaviour that shipped before this
+      existed, rather than to a zero.                              */
+  var PROJ = {};
+  var PROJ_REV = -1;
+
+  function loadProjections(force) {
+    var db = syncDb();
+    if (!db) return Promise.resolve(false);
+    var ref = db.collection('seasonStats').doc(SEASON_STATS_ID);
+
+    return ref.get().then(function (doc) {
+      var d = doc.exists ? (doc.data() || {}) : {};
+      var rev = typeof d.projRev === 'number' ? d.projRev : 0;
+      var shards = Math.max(1, +d.projShards || 1);
+      //  The gate that makes this affordable: one read to learn
+      //  nothing has changed, instead of three to re-read the pool.
+      if (!force && rev === PROJ_REV && Object.keys(PROJ).length) return false;
+
+      var reads = [];
+      for (var i = 0; i < shards; i++) reads.push(ref.collection('feeds').doc('projections_' + i).get());
+
+      return Promise.all(reads).then(function (snaps) {
+        var next = {};
+        snaps.forEach(function (s) {
+          if (!s.exists) return;
+          var players = (s.data() || {}).players || {};
+          Object.keys(players).forEach(function (id) {
+            var a = players[id];
+            if (!a || a.length < 6) return;
+            next[id] = {
+              line: { min: a[0], pts: a[1], reb: a[2], ast: a[3], stl: a[4], blk: a[5] },
+              games: a[6] || 0,
+              method: ['blend', 'prior-only', 'blend-replacement', 'replacement-only'][a[7] || 0],
+            };
+          });
+        });
+        //  An empty feed is treated as no feed. Replacing a working
+        //  pool with nothing because a deploy half-finished would
+        //  zero every projection in the app.
+        if (!Object.keys(next).length) return false;
+
+        PROJ = next;
+        PROJ_REV = rev;
+        //  The pool is memoised, and toPlayer() reads PROJ while
+        //  building it. Without this the new numbers sit in memory
+        //  and nothing in the UI ever shows them.
+        resetPool();
+        try { render(); } catch (e) { }
+        return true;
+      });
+    }).catch(function (e) {
+      console.warn('[Season] projections read failed:', e && e.code, e && e.message);
+      return false;
+    });
+  }
+
   //  One read. Answers "has the feed changed since last time?" so the
   //  full week read below only runs when it actually would return
   //  something new. Resolves { changed, live }.
@@ -2856,6 +2964,12 @@
         upgradeWeekToReal(state.week).then(function () {
           if (refreshLiveDay()) { try { render(); } catch (e) { } }
         }).catch(function () { });
+        //  Projections change once a night, so this is gated on a
+        //  revision counter and almost always costs a single read.
+        //  Riding the existing tick rather than adding a timer of its
+        //  own keeps a device left open overnight from waking up on
+        //  yesterday's numbers.
+        loadProjections(false);
       }
       //  Also here, not just on open: a device left open overnight has
       //  to cross the 6am boundary on its own.
@@ -7178,6 +7292,11 @@
     //  force on open: the cached revision is from a previous session
     //  and must not suppress the first read.
     if (state && state.week) upgradeWeekToReal(state.week, true);
+    //  force on open for the same reason: PROJ_REV resets to -1 with
+    //  the module, but a device that was open yesterday is holding a
+    //  pool built from yesterday's numbers, and the draft board is
+    //  the first thing most people look at.
+    loadProjections(true);
     //  Advance the calendar before anything renders, so a manager
     //  opening the app on Tuesday sees Tuesday's week rather than
     //  whatever week it was when somebody last had the app open.
