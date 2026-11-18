@@ -216,6 +216,9 @@ service cloud.firestore {
     match /stripeCustomers/{customerId} {
       allow read, write: if false;
     }
+    match /stripePayments/{paymentIntentId} {
+      allow read, write: if false;
+    }
 
     // Anything not matched above is denied.
   }

@@ -9,6 +9,8 @@
 //    3. Stripe calls this function. We verify the signature, then
 //       write entitlements/{uid}.triviaUnlimited = true.
 //    4. The trivia site listens to that doc and unlocks instantly.
+//    5. Full refund or an opened dispute → access revoked.
+//       Dispute won → access restored.
 //
 //  entitlements/{uid} is read-only to its owner and write-denied to
 //  every client (see firestore rules) — only this function can grant.
@@ -16,12 +18,20 @@
 //  SECRETS (set once, never commit them):
 //    firebase functions:secrets:set STRIPE_SECRET_KEY
 //    firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
+//      ↳ may hold ONE signing secret, or several separated by commas
+//        (e.g. the test endpoint's whsec and the live endpoint's whsec)
+//        so test and live webhooks can both hit this function.
 //
 //  Stripe events to send to this endpoint:
 //    checkout.session.completed
 //    checkout.session.async_payment_succeeded
-//    customer.subscription.updated
-//    customer.subscription.deleted
+//    charge.refunded
+//    charge.dispute.created
+//    charge.dispute.closed
+//
+//  Test-mode purchases are stored with test:true. The site only honors
+//  them when opened with ?paytest=1, so a Stripe test card can never
+//  unlock the real game for normal visitors.
 // ═══════════════════════════════════════════════════════════════
 const { onRequest }    = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
@@ -40,13 +50,18 @@ exports.stripeWebhook = onRequest(
     if (req.method !== 'POST') return res.status(405).send('Method not allowed');
 
     const stripe = require('stripe')(STRIPE_SECRET_KEY.value());
-    let event;
-    try {
-      // req.rawBody is the exact bytes Stripe signed — required for verification.
-      event = stripe.webhooks.constructEvent(req.rawBody, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET.value());
-    } catch (err) {
-      console.warn('[stripe] signature check failed:', err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
+    const secrets = STRIPE_WEBHOOK_SECRET.value().split(',').map(s => s.trim()).filter(Boolean);
+    let event = null, lastErr = null;
+    for (const whsec of secrets) {
+      try {
+        // req.rawBody is the exact bytes Stripe signed — required for verification.
+        event = stripe.webhooks.constructEvent(req.rawBody, req.headers['stripe-signature'], whsec);
+        break;
+      } catch (err) { lastErr = err; }
+    }
+    if (!event) {
+      console.warn('[stripe] signature check failed:', lastErr && lastErr.message);
+      return res.status(400).send(`Webhook Error: ${lastErr ? lastErr.message : 'no signing secret configured'}`);
     }
 
     const db = admin.firestore();
@@ -55,28 +70,26 @@ exports.stripeWebhook = onRequest(
         case 'checkout.session.completed': {
           const s = event.data.object;
           // Delayed methods (e.g. bank debits) complete later via async_payment_succeeded.
-          if (s.payment_status === 'paid' || s.payment_status === 'no_payment_required') await grant(db, s);
+          if (s.payment_status === 'paid' || s.payment_status === 'no_payment_required') await grant(db, s, event.livemode);
           break;
         }
         case 'checkout.session.async_payment_succeeded':
-          await grant(db, event.data.object);
+          await grant(db, event.data.object, event.livemode);
           break;
 
-        case 'customer.subscription.updated':
-        case 'customer.subscription.deleted': {
-          const sub = event.data.object;
-          const link = await db.collection('stripeCustomers').doc(String(sub.customer)).get();
-          if (!link.exists) { console.warn('[stripe] unknown customer', sub.customer); break; }
-          const ent = await db.collection('entitlements').doc(link.data().uid).get();
-          // Lifetime (one-time) unlocks are never revoked by subscription changes.
-          if (ent.exists && ent.data().lifetime === true) { console.log(`[stripe] ${link.data().uid} is lifetime; ignoring ${event.type}`); break; }
-          const active = event.type !== 'customer.subscription.deleted' && ['active', 'trialing', 'past_due'].includes(sub.status);
-          await db.collection('entitlements').doc(link.data().uid).set({
-            triviaUnlimited: active,
-            subscriptionStatus: sub.status,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
-          console.log(`[stripe] ${link.data().uid} subscription ${sub.status} → unlimited=${active}`);
+        case 'charge.refunded': {
+          const ch = event.data.object;
+          // Only a FULL refund removes access; partial refunds (goodwill credits) don't.
+          if (ch.refunded === true) await setAccess(db, ch.payment_intent, false, 'refunded');
+          break;
+        }
+        case 'charge.dispute.created':
+          await setAccess(db, event.data.object.payment_intent, false, 'disputed');
+          break;
+        case 'charge.dispute.closed': {
+          const d = event.data.object;
+          if (d.status === 'won') await setAccess(db, d.payment_intent, true, 'dispute_won');
+          else if (d.status === 'lost') await setAccess(db, d.payment_intent, false, 'dispute_lost');
           break;
         }
         default:
@@ -90,20 +103,46 @@ exports.stripeWebhook = onRequest(
   }
 );
 
-async function grant(db, s) {
+async function grant(db, s, livemode) {
   const uid = s.client_reference_id;
   if (!uid || !UID_RE.test(uid)) { console.warn('[stripe] session without valid client_reference_id', s.id); return; }
+  const ref = db.collection('entitlements').doc(uid);
+  if (!livemode) {
+    // Never let a test purchase overwrite or masquerade as a real one.
+    const cur = await ref.get();
+    if (cur.exists && cur.data().triviaUnlimited === true && cur.data().test !== true) {
+      console.log(`[stripe] ${uid} already has a live unlock; ignoring test purchase ${s.id}`); return;
+    }
+  }
   const batch = db.batch();
-  batch.set(db.collection('entitlements').doc(uid), {
+  batch.set(ref, {
     triviaUnlimited: true,
+    test: !livemode,
     mode: s.mode,                                   // 'payment' (one-time) or 'subscription'
     ...(s.mode === 'payment' ? { lifetime: true } : {}),
     stripeCustomer: s.customer || null,
     stripeSession: s.id,
+    stripePaymentIntent: s.payment_intent || null,
+    amount: s.amount_total ?? null,
     email: (s.customer_details && s.customer_details.email) || null,
+    revokedReason: admin.firestore.FieldValue.delete(),
     grantedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
+  if (s.payment_intent) batch.set(db.collection('stripePayments').doc(String(s.payment_intent)), { uid, livemode: !!livemode, session: s.id }, { merge: true });
   if (s.customer) batch.set(db.collection('stripeCustomers').doc(String(s.customer)), { uid }, { merge: true });
   await batch.commit();
-  console.log(`[stripe] granted Tipoff Trivia Unlimited to ${uid} (${s.mode})`);
+  console.log(`[stripe] granted Tipoff Trivia Unlimited to ${uid} (${s.mode}, ${livemode ? 'live' : 'TEST'})`);
+}
+
+async function setAccess(db, paymentIntent, on, reason) {
+  if (!paymentIntent) { console.warn(`[stripe] ${reason}: no payment_intent on event`); return; }
+  const link = await db.collection('stripePayments').doc(String(paymentIntent)).get();
+  if (!link.exists) { console.warn(`[stripe] ${reason}: unknown payment ${paymentIntent}`); return; }
+  const uid = link.data().uid;
+  await db.collection('entitlements').doc(uid).set({
+    triviaUnlimited: on,
+    ...(on ? { revokedReason: admin.firestore.FieldValue.delete() } : { revokedReason: reason }),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  console.log(`[stripe] ${uid} → unlimited=${on} (${reason})`);
 }
