@@ -8101,6 +8101,86 @@
     },
     // exposed for testing in the lab
     _debug: function () { return state; },
+
+    /*  ── "Why does this player show zero?" ───────────────────
+        Walks the exact chain the scoring path walks and reports where
+        it stops. Read-only; it re-reads the feed but changes nothing.
+
+        This exists because answering that question has twice now cost
+        an evening of guessing across text messages, while the answer
+        was always one of six specific things. The feed being healthy
+        and the player showing zero are perfectly compatible — the
+        player can be off every roster, his school can be idle this
+        week, the game can fall outside the league's week window, the
+        box score can be missing, or the game can have tipped before
+        the draft ended. Those look identical in the UI and completely
+        different here.
+
+        Usage, in the browser console with the league open:
+            await TipoffSeason._whyZero('Aiden Sherrell')              */
+    _whyZero: function (who) {
+      if (!state) return Promise.resolve({ stop: 'no season league on this device' });
+      var q = String(who || '').toLowerCase();
+      var pid = null, p = null;
+      (rosteredPlayers() || []).forEach(function (id) {
+        var cand = P(id);
+        if (!cand || pid) return;
+        if (String(id).toLowerCase() === q ||
+            String(cand.espnId || '') === q ||
+            String(cand.name || '').toLowerCase().indexOf(q) === 0) { pid = id; p = cand; }
+      });
+      if (!p) {
+        return Promise.resolve({
+          stop: 'NOT ON ANY ROSTER IN THIS LEAGUE',
+          note: 'a player nobody drafted scores nothing, which is correct',
+          searched: who
+        });
+      }
+
+      var wk = state.week;
+      var r = weekRange(wk);
+      var out = {
+        player: p.name, pid: pid, espnId: p.espnId || null, school: p.college,
+        leagueWeek: wk, weekWindow: r.startISO + ' .. ' + r.endISO,
+        draftCompletedAt: (state.draft && state.draft.completedAt)
+          ? new Date(state.draft.completedAt).toLocaleString() : null
+      };
+
+      return loadRealWeek(wk).then(function (real) {
+        if (!real) { out.stop = 'FEED RETURNED NOTHING FOR THIS WEEK WINDOW'; return out; }
+        var sched = real.bySchool[normSchool(p.college)] || [];
+        out.gamesForHisSchoolThisWeek = sched.map(function (g) {
+          return { gameId: g.gameId, day: g.day, opp: g.opp, completed: g.completed, live: g.live, date: g.time };
+        });
+        if (!sched.length) {
+          out.stop = 'HIS SCHOOL HAS NO GAME INSIDE THIS LEAGUE WEEK';
+          out.note = 'either the school is idle, or the game is real but falls outside ' +
+                     out.weekWindow + ' — check leagueWeek above against the game date';
+          return out;
+        }
+        var rec = real.lines[pid] || {};
+        out.feedDocFound = !!real.lines[pid];
+        out.finishedGameIds = Object.keys(rec.games || {});
+        out.liveLine = rec.live || null;
+        out.resolved = sched.filter(function (g) { return g.day >= 0; }).map(function (g) {
+          var raw = (rec.games || {})[g.gameId] ||
+            ((rec.live && rec.live.gameId === g.gameId) ? rec.live : null);
+          var pre = isPreDraftGame(g);
+          return {
+            gameId: g.gameId, matched: !!raw, source: raw ? ((rec.games || {})[g.gameId] ? 'final' : 'live') : null,
+            stats: raw ? { pts: raw.pts, reb: raw.reb, ast: raw.ast, stl: raw.stl, blk: raw.blk, min: raw.min } : null,
+            preDraft: pre,
+            scoredZeroBecause: !raw ? 'NO LINE IN THE FEED FOR THIS GAME (DNP, or the box score never landed)'
+                             : pre ? 'GAME TIPPED BEFORE THE DRAFT FINISHED — counts as zero by design'
+                             : null
+          };
+        });
+        var anyScoring = out.resolved.some(function (x) { return x.matched && !x.preDraft; });
+        out.stop = anyScoring ? 'NOTHING WRONG — he has a real line that should be scoring'
+                              : 'see scoredZeroBecause on each game above';
+        return out;
+      }).catch(function (e) { out.stop = 'ERROR: ' + (e && e.message); return out; });
+    },
     //  Read-only snapshot of what the real-time clock thinks. Exists so
     //  "did the new build load, and is the calendar right?" is one line
     //  in the console instead of an inference from the UI. Changes

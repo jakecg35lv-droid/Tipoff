@@ -40,6 +40,61 @@ const fetch          = require('node-fetch');
 admin.initializeApp();
 const db = admin.firestore();
 
+/*  ── A batch that cannot blow up on a big slate ──────────────
+    A Firestore WriteBatch takes at most 500 operations. Past that,
+    commit() rejects with INVALID_ARGUMENT and NOTHING in the batch is
+    applied — it is all-or-nothing by design.
+
+    Every sync in this file built one batch for the whole night's
+    games and one for every player line in them. Measured on 17 Nov
+    2026: 24 games and 209 player writes, comfortably under. But that
+    was a Tuesday. A full Saturday slate, or Maui week with three
+    tournaments running, is 40-plus relevant games at ~17 lines each —
+    700 writes, one rejected commit, and not a single stat recorded
+    for the entire evening. Every player on every roster reads zero,
+    the report says ok:false with a message nobody is reading, and it
+    happens on the busiest night of the season rather than a quiet one.
+
+    Same surface as db.batch() for the two methods this file actually
+    uses, so it is a drop-in. Chunks are committed in order, 450 at a
+    time, leaving headroom under the 500 ceiling.
+
+    Note what this gives up: atomicity across chunks. That is the
+    right trade here. These writes are idempotent — a game document
+    keyed by event id, a player line keyed by game id — so a partial
+    commit followed by a retry converges on the same answer. An
+    all-or-nothing batch that is guaranteed to fail is not atomic, it
+    is just empty.                                                   */
+const BATCH_LIMIT = 450;
+function chunkedBatch() {
+  const ops = [];
+  return {
+    set(ref, data, opts) { ops.push({ ref, data, opts }); },
+    get size() { return ops.length; },
+    async commit() {
+      let committed = 0;
+      for (let i = 0; i < ops.length; i += BATCH_LIMIT) {
+        const slice = ops.slice(i, i + BATCH_LIMIT);
+        //  A REAL Firestore batch. This is the one place in the file
+        //  that may call db.batch() directly; everywhere else goes
+        //  through chunkedBatch(). (A careless find-and-replace made
+        //  this line call itself, which is an infinite loop that
+        //  type-checks and parses perfectly.)
+        const b = db.batch();
+        slice.forEach(o => { o.opts ? b.set(o.ref, o.data, o.opts) : b.set(o.ref, o.data); });
+        await b.commit();
+        committed += slice.length;
+      }
+      if (ops.length > BATCH_LIMIT) {
+        console.log('[Tipoff] chunked commit:', committed, 'writes in',
+          Math.ceil(ops.length / BATCH_LIMIT), 'batches');
+      }
+      ops.length = 0;
+      return committed;
+    },
+  };
+}
+
 // ── SportsDataIO Config ────────────────────────────────────────
 //  API key removed. It was a deactivated SportsDataIO trial key
 //  published in a public repo. The live pipeline is ESPN and needs
@@ -777,8 +832,8 @@ async function runSyncESPN(opts) {
     const events = sb.events || [];
     report.gamesOnDate = events.length;
 
-    const gameBatch = db.batch();
-    const playerBatch = db.batch();
+    const gameBatch = chunkedBatch();
+    const playerBatch = chunkedBatch();
 
     for (const ev of events) {
       const comp = (ev.competitions || [])[0];
@@ -1612,7 +1667,7 @@ async function writeLiveStats(players) {
 
   for (const [tournId, rows] of Object.entries(byTourn)) {
     const tournRef = db.collection('tournamentStats').doc(tournId);
-    const batch    = db.batch();
+    const batch    = chunkedBatch();
 
     for (const p of rows) {
       if (!p.PlayerID) continue;
@@ -1661,7 +1716,7 @@ async function writeCompletedStats(players) {
       continue;
     }
 
-    const batch = db.batch();
+    const batch = chunkedBatch();
 
     for (const p of newRows) {
       if (!p.PlayerID) continue;
@@ -1845,8 +1900,8 @@ async function runSeasonSyncESPN(opts) {
     const events = sb.events || [];
     report.gamesOnDate = events.length;
 
-    const gameBatch = db.batch();
-    const playerBatch = db.batch();
+    const gameBatch = chunkedBatch();
+    const playerBatch = chunkedBatch();
     const seasonRef = db.collection('seasonStats').doc(SEASON_ID);
 
     /*  One Firestore read replaces dozens of ESPN summary calls: a
@@ -2139,7 +2194,7 @@ async function runSeasonFixtures(opts) {
   try {
     const start = options.startDate ? new Date(options.startDate + 'T12:00:00Z') : now;
     const seasonRef = db.collection('seasonStats').doc(SEASON_ID);
-    const batch = db.batch();
+    const batch = chunkedBatch();
 
     for (let i = 0; i < days; i++) {
       const d = new Date(start.getTime() + i * 864e5);
