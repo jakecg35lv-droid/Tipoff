@@ -205,6 +205,24 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── Tipoff Trivia: one HS Daily per signed-in player (same rules as dailyPlays) ──
+    match /hsDailyPlays/{playId} {
+      allow read: if request.auth != null && playId.matches(request.auth.uid + '_.*');
+      allow create: if request.auth != null
+        && playId == request.auth.uid + '_' + request.resource.data.date
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.finished == false
+        && request.resource.data.keys().hasOnly(['uid', 'date', 'finished', 'startedAt']);
+      allow update: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && resource.data.finished == false
+        && request.resource.data.finished == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['finished', 'score', 'tiers'])
+        && request.resource.data.score is int
+        && request.resource.data.score >= 0 && request.resource.data.score <= 700;
+      allow delete: if false;
+    }
+
     // ── Tipoff Trivia: paid entitlements ─────────────────────
     //  Written ONLY by the stripeWebhook Cloud Function (admin SDK
     //  bypasses rules). Owners can read their own; nobody can write.
