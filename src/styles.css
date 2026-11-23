@@ -13817,3 +13817,81 @@ select:focus {
   .fb-kind { font-size: 12px; padding: 8px 9px; }
   .fb-diag-body { font-size: 10.5px; max-height: 120px; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   MY TEAM — the Draft tab after the draft is over
+   Built as a three-column row (who / stat line / totals) that
+   collapses to two lines on a phone, because the five stat
+   columns cannot survive 360px next to a name and a total.
+══════════════════════════════════════════════════════════ */
+.mt-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 18px 20px; margin-bottom: 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+}
+.mt-head-l h3 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+.mt-head-sub { display: block; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+.mt-head-r { text-align: right; line-height: 1.1; }
+.mt-total { display: block; font-size: 30px; font-weight: 800; color: var(--accent, #f0883e); font-variant-numeric: tabular-nums; }
+.mt-total-l { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+
+.mt-colhead,
+.mt-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto 104px;
+  align-items: center; gap: 12px;
+}
+.mt-colhead {
+  padding: 0 16px 8px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--muted);
+}
+.mt-ch-r { text-align: right; }
+
+.mt-row {
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+  /*  A row that is mid-game earns a tint rather than an icon: it is
+      scannable down a list of eight without reading anything. */
+  transition: background .2s ease;
+}
+.mt-row.is-live { background: rgba(240, 136, 62, .07); }
+.mt-row:last-child { border-bottom: 0; }
+
+.mt-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.mt-id { display: flex; flex-direction: column; min-width: 0; }
+/*  Names are the one field that can be arbitrarily long and are not
+    ours to shorten. Truncate rather than let the stat columns move. */
+.mt-name { font-weight: 650; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-sub { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.mt-line { display: flex; gap: 4px; }
+.mt-stat {
+  width: 34px; text-align: center; font-size: 13.5px;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.mt-colhead .mt-stat { font-size: 11px; color: var(--muted); }
+
+.mt-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.mt-fpts { font-size: 17px; font-weight: 750; font-variant-numeric: tabular-nums; }
+/*  The season average sits next to the earned total on purpose, and
+    is deliberately quiet. It is context for a pick, not a score, and
+    the whole reason this page exists is that those two numbers were
+    once the same field. */
+.mt-proj { font-size: 10.5px; color: var(--muted); }
+.mt-live { font-size: 10px; font-weight: 800; letter-spacing: .5px; color: #ff6b4a; }
+.mt-games, .mt-soon, .mt-none { font-size: 10.5px; color: var(--muted); }
+
+.mt-empty { padding: 44px 20px; text-align: center; color: var(--muted); }
+.mt-empty h4 { margin: 0 0 6px; color: var(--text); font-size: 16px; }
+
+@media (max-width: 560px) {
+  /*  Two rows on a phone: identity on top, numbers underneath. The
+      three-column grid cannot hold five stat cells plus a name at
+      360px without the name collapsing to nothing. */
+  .mt-colhead { display: none; }
+  .mt-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; }
+  .mt-who { grid-column: 1; }
+  .mt-right { grid-column: 2; }
+  .mt-line { grid-column: 1 / -1; justify-content: space-between; }
+  .mt-stat { width: auto; flex: 1; font-size: 13px; }
+  .mt-head { padding: 14px 16px; }
+  .mt-total { font-size: 25px; }
+}

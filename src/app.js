@@ -895,6 +895,10 @@ function navigateTo(page) {
   //  So a reload comes back here instead of the home page.
   try { rememberView('tournament', state && state.leagueCode, page); } catch (e) { }
   if (page === 'players') {
+    //  Before anything else: once the draft is done this page is a
+    //  team sheet, not a draft board.
+    try { syncDraftTabMode(); } catch (e) { console.error('syncDraftTabMode', e); }
+    try { renderMyTeam(); } catch (e) { console.error('renderMyTeam', e); }
     try { renderDraftGrid(); } catch (e) { console.error('renderDraftGrid', e); }
     try { renderDraftFeed(); } catch (e) { console.error('renderDraftFeed', e); }
     try { renderDraftOrderStrip(); } catch (e) { console.error('renderDraftOrderStrip', e); }
@@ -3201,6 +3205,141 @@ function updateDraftTabLock() {
   document.querySelectorAll('.dit-btn').forEach(function (btn) {
     btn.classList.toggle('locked', locked);
   });
+}
+
+/* ══════════════════════════════════════════════════════════
+   MY TEAM  —  what the Draft tab becomes once the draft is done
+   ══════════════════════════════════════════════════════════
+   Reported after the first live tournament draft: "the Draft tab
+   needs to disappear or change after the draft is done", and "then
+   you can see who your players are and how they played via stats".
+
+   Both halves matter. A finished draft board is dead weight in the
+   primary nav slot, and until now there was nowhere to see a
+   player's actual tournament line — the Teams page shows totals for
+   everyone, which answers who is winning, not how your guys played.
+
+   Deliberately a third inner tab rather than a replacement for the
+   Draft Room. People do go back to read the pick history, and
+   destroying it to make room would trade one complaint for another.
+══════════════════════════════════════════════════════════ */
+
+//  Flip the page, and the nav label, between draft mode and team
+//  mode. Idempotent: safe to call on every navigation.
+function syncDraftTabMode() {
+  const done = isDraftComplete();
+  const btn = document.getElementById('ditMyTeamBtn');
+  if (btn) btn.style.display = done ? '' : 'none';
+
+  /*  The nav label follows the page. Leaving it reading "Draft"
+      after the draft is the specific thing that was called out, and
+      the icon stays as it is: a silhouette reads fine for both. */
+  document.querySelectorAll('.nav-btn[data-page="players"]').forEach(function (nb) {
+    const txt = Array.from(nb.childNodes).find(function (n) {
+      return n.nodeType === 3 && n.textContent.trim();
+    });
+    if (txt) txt.textContent = done ? ' My Team ' : ' Draft ';
+  });
+
+  if (!done) return;
+
+  /*  Default to My Team the first time the page is opened after the
+      draft ends — but only once. Flipping the pane under somebody
+      who deliberately clicked Draft Room would be worse than the
+      problem being solved, so a one-shot flag guards it.          */
+  if (syncDraftTabMode._landed) return;
+  syncDraftTabMode._landed = true;
+  const mtBtn = document.getElementById('ditMyTeamBtn');
+  if (mtBtn) mtBtn.click();
+}
+
+/*  One player's row: his actual tournament production, plus what he
+    was drafted on, so a manager can see the pick play out.
+
+    `p.stats` is tournament-earned and starts at zero (see calcFPTS).
+    `p.seasonAvg` is last season's per-game rate — shown greyed as
+    context, never added to anything.                              */
+function _myTeamRow(p, d) {
+  const st = p.stats || {};
+  const avg = p.seasonAvg || {};
+  const games = p._gamesPlayed || 0;
+  const earned = calcFPTS(p);
+  const live = !!p._liveUpdated;
+  const game = (typeof liveGameForSchool === 'function') ? liveGameForSchool(p.college) : null;
+
+  //  Status line answers "is he still playing?" without a manager
+  //  having to cross-reference the bracket.
+  let status = '';
+  if (live) status = '<span class="mt-live">LIVE</span>';
+  else if (games) status = '<span class="mt-games">' + games + ' game' + (games === 1 ? '' : 's') + '</span>';
+  else if (game && game.state === 'pre') status = '<span class="mt-soon">Yet to play</span>';
+  else status = '<span class="mt-none">No games yet</span>';
+
+  const cell = function (v) { return '<span class="mt-stat">' + (v || 0) + '</span>'; };
+
+  return '<div class="mt-row' + (live ? ' is-live' : '') + '">' +
+    '<div class="mt-who">' +
+      getSchoolLogoHTML(p.college, 26) +
+      '<div class="mt-id">' +
+        '<span class="mt-name">' + esc(p.name) + '</span>' +
+        '<span class="mt-sub">' + esc(p.position || '') + ' · ' + esc(p.college || '') +
+          (d && d.label ? ' · ' + esc(d.label) : '') + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="mt-line">' +
+      cell(st.points) + cell(st.rebounds) + cell(st.assists) + cell(st.steals) + cell(st.blocks) +
+    '</div>' +
+    '<div class="mt-right">' +
+      '<span class="mt-fpts">' + earned.toFixed(1) + '</span>' +
+      '<span class="mt-proj" title="Last season per-game average, for context">' +
+        (seasonFPTS(p) || 0).toFixed(1) + ' avg</span>' +
+      status +
+    '</div>' +
+  '</div>';
+}
+
+function renderMyTeam() {
+  const body = document.getElementById('myTeamBody');
+  if (!body) return;
+
+  const session = getSession();
+  const me = session && session.name;
+  if (!me) { body.innerHTML = '<div class="mt-empty">Sign in to see your team.</div>'; return; }
+
+  //  Draft order, not alphabetical: the first name on the list should
+  //  be your first-round pick.
+  const mine = Object.keys(state.drafted || {})
+    .map(function (pid) { return { pid: pid, d: state.drafted[pid] }; })
+    .filter(function (x) { return x.d && x.d.manager === me; })
+    .sort(function (a, b) { return (a.d.pickNumber || 0) - (b.d.pickNumber || 0); })
+    .map(function (x) {
+      return { p: (state.players || []).find(function (q) { return q.id === x.pid; }), d: x.d };
+    })
+    .filter(function (x) { return x.p; });
+
+  if (!mine.length) {
+    body.innerHTML = '<div class="mt-empty">' +
+      '<h4>No players yet</h4><p>Your roster appears here as you draft.</p></div>';
+    return;
+  }
+
+  const total = mine.reduce(function (sum, x) { return sum + calcFPTS(x.p); }, 0);
+  const played = mine.filter(function (x) { return (x.p._gamesPlayed || 0) > 0; }).length;
+
+  body.innerHTML =
+    '<div class="mt-head">' +
+      '<div class="mt-head-l"><h3>' + esc(me) + '</h3>' +
+        '<span class="mt-head-sub">' + mine.length + ' players · ' + played + ' with games played</span></div>' +
+      '<div class="mt-head-r"><span class="mt-total">' + (Math.round(total * 10) / 10).toFixed(1) + '</span>' +
+        '<span class="mt-total-l">Fantasy Points</span></div>' +
+    '</div>' +
+    '<div class="mt-colhead">' +
+      '<span class="mt-ch-who">Player</span>' +
+      '<div class="mt-line"><span class="mt-stat">PTS</span><span class="mt-stat">REB</span>' +
+        '<span class="mt-stat">AST</span><span class="mt-stat">STL</span><span class="mt-stat">BLK</span></div>' +
+      '<span class="mt-ch-r">FPTS</span>' +
+    '</div>' +
+    mine.map(function (x) { return _myTeamRow(x.p, x.d); }).join('');
 }
 
 function renderDraft() {
@@ -10572,7 +10711,11 @@ function initDraftInnerTabs() {
       btn.classList.add('active');
       document.getElementById('draftRoomTab').style.display = tab === 'room' ? '' : 'none';
       document.getElementById('playerPoolTab').style.display = tab === 'pool' ? '' : 'none';
-      if (tab === 'pool') {
+      const mt = document.getElementById('myTeamTab');
+      if (mt) mt.style.display = tab === 'myteam' ? '' : 'none';
+      if (tab === 'myteam') {
+        try { renderMyTeam(); } catch (e) { console.error('renderMyTeam', e); }
+      } else if (tab === 'pool') {
         try { renderPlayerPool(); } catch (e) { }
       } else {
         try { renderDraftGrid(); } catch (e) { }
