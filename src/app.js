@@ -5647,7 +5647,22 @@ function listenToLiveStats() {
       // can't overwrite real numbers.
 
       snapshot.docChanges().forEach(change => {
-        if (change.type === 'removed') return;
+        /*  A removed document means the stats behind this player were
+            withdrawn — a purge of wrongly-attributed games, most
+            likely. Returning early left the old numbers on screen
+            until somebody happened to reload, so the correction was
+            invisible to exactly the people who had seen the wrong
+            figure. Zero him instead.                              */
+        if (change.type === 'removed') {
+          const gone = (change.doc.data() || {}).espnId || change.doc.id;
+          const pl = (state.players || []).find(p => p.espnId === String(gone));
+          if (pl) {
+            pl.stats = { points: 0, rebounds: 0, assists: 0, steals: 0, blocks: 0 };
+            pl._gamesPlayed = 0;
+            pl._liveUpdated = false;
+          }
+          return;
+        }
         const data = change.doc.data();
 
         // ── Match by ESPN id, not by name ────────────────────

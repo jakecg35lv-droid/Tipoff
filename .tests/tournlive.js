@@ -111,6 +111,32 @@ ok('and says so rather than freezing silently',
 ok('a finished draft still stops the clock', /\} else if \(isDraftComplete\(\)\) \{/.test(tick));
 ok('progress is measured, not assumed', /const idxBefore = state\.currentPickIndex;/.test(tick));
 
+
+// ══ 5. Purge: unwriting what the old rule wrote ══════════
+/*  Fixing the sync stops new bad writes. It cannot unwrite the old
+    ones — player docs accumulate a `games` map and the sync only
+    ever merges, so a wrongly-attributed game sits there forever.
+    That is why rosters showed points for players whose event had
+    not tipped even after the rule was corrected.                  */
+ok('a purge endpoint exists', /exports\.tournamentPurge = onRequest/.test(F));
+ok('it is dry by default', /dryRun: !o\.write/.test(F) && /const write = req\.query\.write === '1';/.test(F));
+ok('it clears players AND games', /root\.collection\('players'\)\.get\(\)/.test(F) && /root\.collection\('games'\)\.get\(\)/.test(F));
+ok('deletes are chunked like writes', /delete\(ref\) \{ ops\.push\(\{ ref, del: true \}\); \}/.test(F),
+  'a few hundred deletes is exactly the size that rejects a plain batch');
+ok('the batch honours the delete flag', /o\.del \? b\.delete\(o\.ref\)/.test(F));
+ok('rebuild happens AFTER the wipe, not before',
+  F.indexOf('await purgeTournament(tid') < F.indexOf('runSyncESPN({ dateOverride: d })'),
+  'rebuilding first and deleting second throws away the work');
+ok('a dry run refuses to rebuild', /rebuild ignored on a dry run/.test(F));
+ok('it requires a tournament id', /tid is required/.test(F));
+ok('the rebuild reports what the new rule skipped', /skippedNonTournament: r\.skippedNonTournament/.test(F));
+
+// ══ 6. A withdrawn stat line reaches the screen ══════════
+ok('the client handles a removed stats doc',
+  /if \(change\.type === 'removed'\) \{/.test(A) && /pl\.stats = \{ points: 0, rebounds: 0/.test(A),
+  'returning early left the wrong number on screen until a reload');
+ok('and clears the live flag too', /pl\._liveUpdated = false;/.test(A));
+
 // ══ 4. Build hygiene ═════════════════════════════════════
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const build = (sw.match(/BUILD = '(\d+)'/) || [])[1];

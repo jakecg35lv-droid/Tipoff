@@ -70,6 +70,10 @@ function chunkedBatch() {
   const ops = [];
   return {
     set(ref, data, opts) { ops.push({ ref, data, opts }); },
+    //  Deletes go through the same chunking as writes. A purge of a
+    //  tournament's player documents is in the hundreds, which is
+    //  exactly the size that silently rejects a plain batch.
+    delete(ref) { ops.push({ ref, del: true }); },
     get size() { return ops.length; },
     async commit() {
       let committed = 0;
@@ -81,7 +85,7 @@ function chunkedBatch() {
         //  this line call itself, which is an infinite loop that
         //  type-checks and parses perfectly.)
         const b = db.batch();
-        slice.forEach(o => { o.opts ? b.set(o.ref, o.data, o.opts) : b.set(o.ref, o.data); });
+        slice.forEach(o => { o.del ? b.delete(o.ref) : (o.opts ? b.set(o.ref, o.data, o.opts) : b.set(o.ref, o.data)); });
         await b.commit();
         committed += slice.length;
       }
@@ -476,6 +480,91 @@ exports.syncTournamentStats = onSchedule(
         unread, with the bracket already advanced past it and nobody
         told. This is the shout that makes that visible. */
     warnOnUnread('[Tipoff]', report);
+  }
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   🧹 TOURNAMENT PURGE AND REBUILD
+   ═══════════════════════════════════════════════════════════════
+   The tournament sync used to count any game involving a school in
+   an active field. Those schools play ordinary November games, so
+   `tournamentStats/{tid}/players` is now carrying box scores from
+   fixtures that have nothing to do with the tournament — which is
+   why a roster showed points for players whose event had not tipped.
+
+   Fixing the sync stops NEW bad writes. It cannot unwrite the old
+   ones: the player documents are keyed by athlete and accumulate a
+   `games` map, so a wrong entry sits there until something removes
+   it. Nothing in the normal flow ever does, because the sync only
+   ever merges.
+
+   This wipes a tournament's accumulated stats and, optionally,
+   rebuilds them from ESPN for the dates given — under the corrected
+   both-teams-in-the-field rule.
+
+     /tournamentPurge?tid=feast-2026
+         dry run: counts what would go, deletes nothing
+     /tournamentPurge?tid=feast-2026&write=1
+         wipe players + games for that tournament
+     /tournamentPurge?tid=feast-2026&write=1&rebuild=20261123,20261124
+         wipe, then re-sync those ET dates
+
+   Destructive on purpose and dry by default. The data it deletes is
+   derived — every figure can be rebuilt from ESPN — so losing it is
+   recoverable in a way that keeping it wrong is not.
+═══════════════════════════════════════════════════════════════ */
+async function purgeTournament(tid, opts) {
+  const o = opts || {};
+  const report = { ok: true, tournament: tid, dryRun: !o.write, playersDeleted: 0, gamesDeleted: 0 };
+  if (!tid) { report.ok = false; report.error = 'tid is required'; return report; }
+
+  const root = db.collection('tournamentStats').doc(tid);
+  const batch = chunkedBatch();
+
+  const [players, games] = await Promise.all([
+    root.collection('players').get(),
+    root.collection('games').get(),
+  ]);
+  players.forEach(function (d) { report.playersDeleted++; if (o.write) batch.delete(d.ref); });
+  games.forEach(function (d) { report.gamesDeleted++; if (o.write) batch.delete(d.ref); });
+
+  if (o.write) await batch.commit();
+  return report;
+}
+
+exports.tournamentPurge = onRequest(
+  { timeoutSeconds: 540, memory: '512MiB' },
+  async (req, res) => {
+    try {
+      const tid = String(req.query.tid || '').trim();
+      const write = req.query.write === '1';
+      const out = await purgeTournament(tid, { write: write });
+      if (!out.ok) return res.status(400).json(out);
+
+      /*  Rebuild AFTER the wipe, never before: re-syncing first and
+          then deleting would throw away the work that was just done.
+          Each date is a separate scoreboard call, so this is kept to
+          an explicit list rather than a range. */
+      const dates = String(req.query.rebuild || '').split(',').map(x => x.trim()).filter(Boolean);
+      out.rebuilt = [];
+      if (write && dates.length) {
+        for (const d of dates) {
+          const r = await runSyncESPN({ dateOverride: d });
+          out.rebuilt.push({
+            date: d,
+            relevantGames: r.relevantGames,
+            skippedNonTournament: r.skippedNonTournament,
+            playersWritten: r.playersWritten,
+            gamesWritten: r.gamesWritten,
+          });
+        }
+      } else if (dates.length) {
+        out.note = 'rebuild ignored on a dry run; add write=1';
+      }
+      res.status(200).json(out);
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
   }
 );
 
