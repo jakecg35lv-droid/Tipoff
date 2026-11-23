@@ -788,6 +788,10 @@ async function runSyncESPN(opts) {
     playersWritten: 0, gamesWritten: 0,
     finalGames: 0, liveGames: 0,
     unmatchedSample: [], apiCalls: 0,
+    //  Games involving a watched school that are NOT between two
+    //  teams in the same field — i.e. ordinary season games this feed
+    //  must not score. Reported so the separation is visible.
+    skippedNonTournament: 0,
     //  Same three as the season sync, for the same reason — see the
     //  note on runSeasonSyncESPN's report. This side re-fetches every
     //  poll so it self-heals WHILE the sync window is open, which is
@@ -812,11 +816,38 @@ async function runSyncESPN(opts) {
     const metaDoc = await db.collection('meta').doc('activeTournaments').get();
     if (!metaDoc.exists) { report.ok = false; report.reason = 'no meta/activeTournaments'; return report; }
 
-    const schoolToTourn = {};
+    /*  school -> EVERY active tournament containing it.
+
+        This used to be school -> one tournament id, assigned by a
+        plain overwrite as the loop went. Two consequences, both
+        silent:
+
+        1. Overlapping fields stole from each other. Georgia is in
+           both the ESPN Events Invitational and the Jimmy V Classic;
+           whichever was iterated last won the key, and every league
+           on the other event scored zero for its Georgia players
+           with nothing anywhere saying why.
+
+        2. Feast Week makes this the normal case, not the edge case.
+           It is a combined event over eight sub-tournaments, so if
+           one league drafts Feast Week and another drafts Maui, all
+           eight Maui schools are claimed by both — and one of those
+           two leagues gets nothing.
+
+        A game now writes to every tournament that claims it, which
+        is correct: the same box score legitimately counts for a Maui
+        league and a Feast Week league at the same time.           */
+    const schoolToTourns = {};
     Object.entries(metaDoc.data()).forEach(([tournId, data]) => {
       if (!data || !data.active || !Array.isArray(data.teams)) return;
-      data.teams.forEach(t => { schoolToTourn[normName(t)] = tournId; });
+      data.teams.forEach(t => {
+        const k = normName(t);
+        (schoolToTourns[k] = schoolToTourns[k] || []).push(tournId);
+      });
     });
+    //  Kept for the reporting below, which only needs the school set.
+    const schoolToTourn = {};
+    Object.keys(schoolToTourns).forEach(k => { schoolToTourn[k] = schoolToTourns[k][0]; });
     if (!Object.keys(schoolToTourn).length) {
       report.ok = false; report.reason = 'no active teams'; return report;
     }
@@ -848,13 +879,35 @@ async function runSyncESPN(opts) {
         winner: c.winner === true,
       }));
 
-      // Is either side in an active tournament?
-      const tournIds = competitors
-        .map(c => schoolToTourn[normName(c.school)])
-        .filter(Boolean);
-      if (!tournIds.length) continue;
-      const tournId = tournIds[0];
+      /*  ── BOTH sides, or it is not a tournament game ──────────
+          This asked "is EITHER side in an active tournament?", which
+          is true of every regular-season game those schools play.
+          Gonzaga hosting a non-conference opponent in Feast Week
+          week counted toward Feast Week scoring, because Gonzaga is
+          in the field. Tournament scoring was quietly absorbing the
+          regular season.
+
+          A tournament game is one between two teams in the SAME
+          field. That is exactly what separates this feed from the
+          season feed, which is deliberately the opposite: it wants
+          every game its schools play.                             */
+      const sideA = schoolToTourns[normName(competitors[0] && competitors[0].school)] || [];
+      const sideB = schoolToTourns[normName(competitors[1] && competitors[1].school)] || [];
+      const shared = sideA.filter(id => sideB.indexOf(id) !== -1);
+
+      if (!shared.length) {
+        //  Counted so "why did this game not score" is answerable
+        //  from the report instead of from a guess.
+        if (sideA.length || sideB.length) report.skippedNonTournament++;
+        continue;
+      }
       report.relevantGames++;
+
+      /*  A game can belong to more than one active event at once —
+          a Maui game is also a Feast Week game. It is written to all
+          of them. `tournId` remains the first for the log line and
+          the legacy single-value paths below.                     */
+      const tournId = shared[0];
 
       const st = (comp.status || {});
       const stType = st.type || {};
@@ -896,15 +949,20 @@ async function runSyncESPN(opts) {
       const flushGame = function (statsRecorded) {
         if (completed && !statsRecorded) report.unrecordedFinals.push(String(ev.id));
         if (options.dryRun) return;
-        gameBatch.set(
-          db.collection('tournamentStats').doc(tournId).collection('games').doc(String(ev.id)),
-          Object.assign({}, gameDoc, {
-            statsRecorded: !!statsRecorded,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }),
-          { merge: true }
-        );
-        report.gamesWritten++;
+        //  Every event that claims this game gets its own copy. A
+        //  Maui game is also a Feast Week game, and both leagues are
+        //  entitled to score it.
+        shared.forEach(function (tid) {
+          gameBatch.set(
+            db.collection('tournamentStats').doc(tid).collection('games').doc(String(ev.id)),
+            Object.assign({}, gameDoc, {
+              statsRecorded: !!statsRecorded,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }),
+            { merge: true }
+          );
+          report.gamesWritten++;
+        });
       };
 
       // 4. Box score — only worth fetching once the ball is up
@@ -923,8 +981,14 @@ async function runSyncESPN(opts) {
       const teamBlocks = ((summary.boxscore || {}).players) || [];
       for (const tb of teamBlocks) {
         const school = ((tb.team || {}).location) || '';
-        const tId = schoolToTourn[normName(school)];
-        if (!tId) continue;                      // opponent not in our pool
+        /*  Only the events that claim BOTH teams in this game — the
+            `shared` list — and only if this school is in them. An
+            opponent outside the field contributes nothing.        */
+        const tIds = (schoolToTourns[normName(school)] || []).filter(function (id) {
+          return shared.indexOf(id) !== -1;
+        });
+        if (!tIds.length) continue;
+        const tId = tIds[0];
 
         const block = (tb.statistics || [])[0] || {};
         const keyIndex = {};
@@ -938,36 +1002,43 @@ async function runSyncESPN(opts) {
           const s = statsFromRow(row, keyIndex);
           if (!s.min && !s.pts && !s.reb && !s.ast) continue;  // never checked in
 
-          const ref = db.collection('tournamentStats').doc(tId)
-            .collection('players').doc(String(ath.id));
-
           // Finished games are stored per game id; in-progress games sit
           // in `live` and are overwritten on each poll. The app sums the
           // finished games and adds `live`, so re-running the sync can
           // never inflate a total and ESPN correcting a stat mid-game
           // revises the number down rather than stacking on top.
-          if (!options.dryRun) {
-            if (completed) {
-              // Idempotent: record this game's line under its own id so
-              // re-running the sync cannot inflate a total.
-              playerBatch.set(ref, {
+          //
+          // Idempotent either way: keyed by game id, so re-running the
+          // sync cannot inflate a total.
+          const line = { pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, min: s.min };
+          const payload = completed
+            ? {
                 espnId: String(ath.id),
                 name: ath.displayName || ath.fullName || '',
                 school: school,
-                games: { [String(ev.id)]: { pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, min: s.min } },
+                games: { [String(ev.id)]: line },
                 live: admin.firestore.FieldValue.delete(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              }, { merge: true });
-            } else {
-              playerBatch.set(ref, {
+              }
+            : {
                 espnId: String(ath.id),
                 name: ath.displayName || ath.fullName || '',
                 school: school,
-                live: { gameId: String(ev.id), pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, min: s.min },
+                live: Object.assign({ gameId: String(ev.id) }, line),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              }, { merge: true });
-            }
-            report.playersWritten++;
+              };
+
+          if (!options.dryRun) {
+            //  One copy per claiming event. Each tournament keeps its
+            //  own totals, so a Feast Week league and a Maui league
+            //  reading the same game never share a document and can
+            //  never overwrite one another.
+            tIds.forEach(function (id) {
+              playerBatch.set(
+                db.collection('tournamentStats').doc(id).collection('players').doc(String(ath.id)),
+                payload, { merge: true });
+              report.playersWritten++;
+            });
           }
           linesFound++;
         }

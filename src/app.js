@@ -610,6 +610,22 @@ function isCommissioner() {
 }
 
 // ── FPTS ─────────────────────────────────────────────────
+/*  ── EARNED points. Zero until a ball goes up. ───────────────
+    `player.stats` means ONE thing: cumulative fantasy production in
+    THIS tournament. It starts at zero and is only ever written by
+    the live stat feed.
+
+    It did not used to. The pool was seeded straight from
+    data/players.js, whose `stats` are LAST SEASON'S PER-GAME
+    AVERAGES, and this function summed them as though they had been
+    scored. On 23 Nov 2026, before a single Feast Week game had
+    tipped, Teams & Rosters showed "166.2 Fantasy Points" for a roster
+    that had earned nothing. Not a crash, not a blank — a confident,
+    completely wrong number, of exactly the kind a league believes.
+
+    The rate still exists, on `player.seasonAvg`, and the draft board
+    reads it through seasonFPTS() below. Two meanings, two fields,
+    two function names. Do not merge them again.                   */
 function calcFPTS(player) {
   const w = state.scoring.weights;
   const active = state.scoring.active || [];
@@ -622,6 +638,30 @@ function calcFPTS(player) {
   if (active.includes('blocks')) total += (s.blocks || 0) * (w.blocks || 1);
   return Math.round(total * 10) / 10;
 }
+
+/*  ── RATE. What he averaged last season, per game. ───────────
+    This is the draft board's number: who is worth picking. It is a
+    forecast, never a score, and it must never be added to a team
+    total or shown anywhere that says "Fantasy Points" without the
+    word projected next to it.
+
+    Falls back to `stats` only for a player with no seasonAvg at all,
+    which can only happen for a pool built before seasonAvg existed.
+    On a current pool that fallback is unreachable, and it reads zero
+    rather than a tournament total because the two are now disjoint. */
+function seasonFPTS(player) {
+  const w = state.scoring.weights;
+  const active = state.scoring.active || [];
+  const s = (player && (player.seasonAvg || player._legacyStats)) || {};
+  let total = 0;
+  if (active.includes('points')) total += (s.points || 0) * (w.points || 1);
+  if (active.includes('rebounds')) total += (s.rebounds || 0) * (w.rebounds || 1);
+  if (active.includes('assists')) total += (s.assists || 0) * (w.assists || 1);
+  if (active.includes('steals')) total += (s.steals || 0) * (w.steals || 1);
+  if (active.includes('blocks')) total += (s.blocks || 0) * (w.blocks || 1);
+  return Math.round(total * 10) / 10;
+}
+
 // ── A manager's total fantasy points ─────────────────────
 //  This function was called in eleven places — the home hero leader,
 //  the right panel, the standings table, the season archive — and
@@ -1714,6 +1754,22 @@ function rehydratePlayerPool(savedVersion) {
         steals: p.stats.steals, blocks: p.stats.blocks,
       };
     }
+
+    /*  ── Then ZERO the earned column ─────────────────────────
+        The rate has been copied to seasonAvg above; `stats` now
+        means tournament-earned and nothing else, so it starts
+        empty. Without this it starts at last season's averages and
+        every roster shows a full score before tip-off — which is
+        exactly what shipped into the first Feast Week draft.
+
+        The live feed overwrites these five keys wholesale on its
+        first snapshot, so zeroing costs nothing once games begin;
+        it only changes what is true BEFORE they do.
+
+        `_gamesPlayed` is set here too so "0 games" is a fact the UI
+        can state rather than an absence it has to infer.         */
+    p.stats = { points: 0, rebounds: 0, assists: 0, steals: 0, blocks: 0 };
+    p._gamesPlayed = 0;
   });
 
   const valid = {};
@@ -3335,7 +3391,7 @@ function renderDraftGrid() {
     const isDrafted = !!state.drafted[p.id];
     const isLocked  = !isDrafted && _onClock && !playerIsEligible(p, _onClock);
     const qPos = queuePosition(p.id);
-    const fpts = calcFPTS(p);
+    const fpts = seasonFPTS(p);   // draft board shows the RATE, not earned
     const seedCls = p.seed <= 4 ? ' seed-' + p.seed : '';
     return '<div class="pool-row' + (isDrafted ? ' drafted' : '') + (isLocked ? ' pool-row--locked' : '') + '" data-pid="' + p.id + '">' +
       '<span class="pool-rank">' + (i + 1) + '</span>' +
@@ -3450,13 +3506,19 @@ function openDraftConfirm(playerId) {
   if (detailEl) detailEl.textContent = p.position + ' · ' + p.college +
       (p.seed ? ' · Seed ' + p.seed : '') + ' · ' + p.region;
   if (statsEl) {
-    const fpts = calcFPTS(p);
+    /*  Season rate, not tournament-earned. `p.stats` is now zero for
+        everybody until games are played, so a draft dialog reading it
+        would show a wall of noughts next to every name on the board
+        and give a manager nothing to choose on. seasonAvg is the
+        scouting line, which is what this dialog is for.          */
+    const avg = p.seasonAvg || {};
+    const fpts = seasonFPTS(p);
     statsEl.innerHTML = [
-      { val: p.stats.points, label: 'PTS' },
-      { val: p.stats.rebounds, label: 'REB' },
-      { val: p.stats.assists, label: 'AST' },
-      { val: p.stats.steals, label: 'STL' },
-      { val: p.stats.blocks, label: 'BLK' },
+      { val: avg.points, label: 'PTS' },
+      { val: avg.rebounds, label: 'REB' },
+      { val: avg.assists, label: 'AST' },
+      { val: avg.steals, label: 'STL' },
+      { val: avg.blocks, label: 'BLK' },
       { val: fpts, label: 'FPTS' }
     ].map(s => '<div class="cs-item"><div class="cs-val">' + s.val + '</div><div class="cs-label">' + s.label + '</div></div>').join('');
   }
@@ -3869,7 +3931,7 @@ function getSortedPlayers(search, pos) {
   if (pos) players = players.filter(p => p.position === pos);
   players.sort((a, b) => {
     let va, vb;
-    if (poolSortCol === 'fpts') { va = calcFPTS(a); vb = calcFPTS(b); }
+    if (poolSortCol === 'fpts') { va = seasonFPTS(a); vb = seasonFPTS(b); }
     else { va = a.stats[poolSortCol] || 0; vb = b.stats[poolSortCol] || 0; }
     return poolSortDir === 'desc' ? vb - va : va - vb;
   });
@@ -3895,7 +3957,7 @@ function renderPlayerPool() {
   const effectiveDir = playerPoolSortDir || 'desc';
   players.sort((a, b) => {
     let va, vb;
-    if (effectiveCol === 'fpts') { va = calcFPTS(a); vb = calcFPTS(b); }
+    if (effectiveCol === 'fpts') { va = seasonFPTS(a); vb = seasonFPTS(b); }
     else { va = a.stats[effectiveCol] || 0; vb = b.stats[effectiveCol] || 0; }
     return effectiveDir === 'desc' ? vb - va : va - vb;
   });
@@ -3906,7 +3968,7 @@ function renderPlayerPool() {
 
   grid.innerHTML = players.map((p, i) => {
     const isDrafted = !!state.drafted[p.id];
-    const fpts = calcFPTS(p);
+    const fpts = seasonFPTS(p);   // draft aid, not a score
     const dInfo = state.drafted[p.id];
     const seedCls = p.seed <= 4 ? ' seed-' + p.seed : '';
     let actionHTML = isDrafted
@@ -3958,13 +4020,19 @@ function showPlayerDetail(playerId, rowEl) {
   if (regEl) regEl.innerHTML = '<span class="region-badge">' + p.region + '</span>';
   if (colEl) colEl.textContent = p.college;
   if (statsEl) {
-    const fpts = calcFPTS(p);
+    /*  Season rate, not tournament-earned. `p.stats` is now zero for
+        everybody until games are played, so a draft dialog reading it
+        would show a wall of noughts next to every name on the board
+        and give a manager nothing to choose on. seasonAvg is the
+        scouting line, which is what this dialog is for.          */
+    const avg = p.seasonAvg || {};
+    const fpts = seasonFPTS(p);
     statsEl.innerHTML = [
-      { val: p.stats.points, label: 'PTS' },
-      { val: p.stats.rebounds, label: 'REB' },
-      { val: p.stats.assists, label: 'AST' },
-      { val: p.stats.steals, label: 'STL' },
-      { val: p.stats.blocks, label: 'BLK' },
+      { val: avg.points, label: 'PTS' },
+      { val: avg.rebounds, label: 'REB' },
+      { val: avg.assists, label: 'AST' },
+      { val: avg.steals, label: 'STL' },
+      { val: avg.blocks, label: 'BLK' },
       { val: fpts, label: 'FPTS' }
     ].map(s => '<div class="pdc-stat"><div class="pdc-stat-val">' + s.val + '</div><div class="pdc-stat-label">' + s.label + '</div></div>').join('');
   }
@@ -6697,11 +6765,54 @@ function tickTimer() {
   }
   if (Date.now() - _timerExpiredAt < _autopickDelayMs()) return;   // keep ticking
 
-  clearInterval(timerInterval);
-  state.timerRunning = false;
+  /*  ── The clock must survive its own expiry ───────────────
+      This used to read:
+
+          clearInterval(timerInterval);
+          state.timerRunning = false;
+          _timerExpiredAt = 0;
+          updateTimerBtnState();
+          autoPickForCurrent();
+
+      and autoPickForCurrent ends with:
+
+          } else if (state.timerRunning) {
+              state.pickTimerStartedAt = Date.now();
+          }
+
+      which could never be true, because the three lines above had
+      just set it false. So every auto-pick stopped the draft dead:
+      the clock showed 0:00 or a frozen 1:00, the next manager could
+      not be put on the clock, and the commissioner had to press
+      Start by hand to begin each round. Reported from the first live
+      tournament draft as "needs to continuously run after each
+      round" and "sometimes 1:00, sometimes 0:00 and drafts auto" —
+      one bug, two faces.
+
+      The clock now stays armed across the pick. autoPickForCurrent
+      re-stamps pickTimerStartedAt for whoever is next, and the only
+      thing that stops the interval is the draft actually ending, or
+      the safety net below.                                        */
+  const idxBefore = state.currentPickIndex;
   _timerExpiredAt = 0;
-  updateTimerBtnState();
   autoPickForCurrent();
+
+  /*  Safety net. If the auto-pick could not advance the draft — no
+      eligible player, a bad roster state — leaving the clock armed
+      would call it again on every tick, four times a second, which
+      is the 20-second lock-up this app has already shipped once.
+      Expiry with no progress stops the clock and says so.        */
+  if (state.currentPickIndex === idxBefore) {
+    clearInterval(timerInterval);
+    state.timerRunning = false;
+    state.pickTimerStartedAt = null;
+    toast('Auto-pick could not complete. Commissioner: restart the clock.', 'error');
+  } else if (isDraftComplete()) {
+    clearInterval(timerInterval);
+    state.timerRunning = false;
+    state.pickTimerStartedAt = null;
+  }
+  updateTimerBtnState();
 }
 
 function updateTimerDisplay() {
@@ -10523,13 +10634,13 @@ function renderPlayerCardGrid() {
   // apply sort
   const sortMap = { points: 'points', rebounds: 'rebounds', assists: 'assists' };
   const col = sortMap[sort];
-  if (col) players.sort((a, b) => (b.stats[col] || 0) - (a.stats[col] || 0));
-  else players.sort((a, b) => calcFPTS(b) - calcFPTS(a));
+  if (col) players.sort((a, b) => ((b.seasonAvg || {})[col] || 0) - ((a.seasonAvg || {})[col] || 0));
+  else players.sort((a, b) => seasonFPTS(b) - seasonFPTS(a));
 
   cardGrid.innerHTML = players.map(p => {
     const drafted = !!state.drafted[p.id];
     const draftInfo = drafted ? state.drafted[p.id] : null;
-    const fpts = calcFPTS(p).toFixed(1);
+    const fpts = seasonFPTS(p).toFixed(1);
     const logoHtml = getSchoolLogoHTML(p.college, 36);
     const schoolColor = SCHOOL_COLORS[normalizeName(p.college)] || SCHOOL_COLORS[p.college] || '#1e2235';
 
